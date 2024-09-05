@@ -85,10 +85,10 @@ Ensure that the Score is a single number between 0 and 10, and the Explanation i
             try:
                 score = float(score_match.group(1))
                 scores.append(score)
-                logger.info(f"Solution {i+1} score: {score}")
+                logger.debug(f"Solution {i+1} score: {score}")
                 if explanation_match:
                     explanation = explanation_match.group(1).strip()
-                    logger.info(f"Explanation: {explanation}")
+                    logger.debug(f"Explanation: {explanation}")
                 else:
                     logger.warning(f"No explanation found for solution {i+1}")
             except ValueError:
@@ -101,7 +101,7 @@ Ensure that the Score is a single number between 0 and 10, and the Explanation i
     return scores
 
 def extract_answer(final_state: str) -> Tuple[str, float]:
-    logger.info(f"Extracting answer from state: {final_state}")
+    logger.debug(f"Extracting answer from state: {final_state}")
     patterns = [
         r"The answer is (\d+)",
         r"The final answer is (\d+)",
@@ -116,14 +116,14 @@ def extract_answer(final_state: str) -> Tuple[str, float]:
         if match:
             answer = match.group(1)
             confidence = 1.0
-            logger.info(f"Answer found using pattern '{pattern}': {answer}")
+            logger.debug(f"Answer found using pattern '{pattern}': {answer}")
             return answer, confidence
     
     numbers = re.findall(r'\d+', final_state)
     if numbers:
         answer = numbers[-1]
         confidence = 0.5
-        logger.info(f"No pattern found. Using last number as answer: {answer}")
+        logger.debug(f"No pattern found. Using last number as answer: {answer}")
         return answer, confidence
     
     logger.warning("No answer found in the state.")
@@ -153,10 +153,10 @@ def inference_time_pv_game(system_prompt: str, initial_query: str, client, model
             best_score = round_best_solution[1]
             logger.info(f"New best solution found in round {round + 1} with score {best_score}")
         else:
-            logger.info(f"No improvement in round {round + 1}. Best score remains {best_score}")
+            logger.debug(f"No improvement in round {round + 1}. Best score remains {best_score}")
             
         if round < num_rounds - 1:
-            logger.info("Refining query for next round")
+            logger.debug("Refining query for next round")
             refine_prompt = f"""
             Based on the original query and the best solution so far, suggest a refined query that might lead to an even better solution.
             Focus on aspects of the problem that were challenging or not fully addressed in the best solution.
@@ -179,7 +179,7 @@ def inference_time_pv_game(system_prompt: str, initial_query: str, client, model
                 temperature=0.5,
             )
             initial_query = response.choices[0].message.content
-            logger.info(f"Refined query: {initial_query}")
+            logger.debug(f"Refined query: {initial_query}")
 
     logger.info(f"Inference-time PV game completed. Best solution score: {best_score}")
 

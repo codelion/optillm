@@ -21,7 +21,7 @@ class Node:
         self.value = 0.0
 
 class RStar:
-    def __init__(self, system: str, client, model: str, max_depth: int = 5, num_rollouts: int = 32, c: float = 1.0):
+    def __init__(self, system: str, client, model: str, max_depth: int = 3, num_rollouts: int = 5, c: float = 1.4):
         self.client = client
         self.model_name = model
         self.max_depth = max_depth
@@ -30,7 +30,7 @@ class RStar:
         self.actions = ["A1", "A2", "A3", "A4", "A5"]
         self.original_question = None 
         self.system = system
-        logger.info(f"Initialized RStar with model: {model}, max_depth: {max_depth}, num_rollouts: {num_rollouts}")
+        logger.debug(f"Initialized RStar with model: {model}, max_depth: {max_depth}, num_rollouts: {num_rollouts}")
 
     async def generate_response_async(self, prompt: str) -> str:
         async with aiohttp.ClientSession() as session:
@@ -97,10 +97,9 @@ class RStar:
             logger.warning("No trajectories found. Unable to solve the question.")
             return "Unable to solve the question due to insufficient reasoning paths."
         final_trajectory = self.select_final_trajectory(trajectories)
-        logger.info(f"Final trajectory: {[node.state for node in final_trajectory]}")
+        logger.debug(f"Final trajectory: {[node.state for node in final_trajectory]}")
         answers = [self.extract_answer(node.state) for node in final_trajectory]
         final_answer = self.select_best_answer(answers)
-        logger.info(f"Extracted answers: {answers}")
         logger.info(f"Selected final answer: {final_answer}")
         return final_answer
 
@@ -170,9 +169,9 @@ class RStar:
 
     def mcts(self, root_state: str) -> List[Node]:
         root = Node(root_state, None)
-        logger.info(f"Starting MCTS with {self.num_rollouts} rollouts")
+        logger.debug(f"Starting MCTS with {self.num_rollouts} rollouts")
         for i in range(self.num_rollouts):
-            logger.info(f"Rollout {i+1}/{self.num_rollouts}")
+            logger.debug(f"Rollout {i+1}/{self.num_rollouts}")
             node = root
             while node.children:
                 node, _ = self.select_action(node)
@@ -181,11 +180,11 @@ class RStar:
                 node = self.expand(node, action)
             value = self.simulate(node)
             self.backpropagate(node, value)
-        logger.info("MCTS complete")
+        logger.debug("MCTS complete")
         return self.extract_trajectories(root)
 
     def extract_trajectories(self, root: Node) -> List[List[Node]]:
-        logger.info("Extracting trajectories")
+        logger.debug("Extracting trajectories")
         trajectories = []
         stack = [(root, [])]
         while stack:
@@ -195,7 +194,7 @@ class RStar:
             else:
                 for child in node.children:
                     stack.append((child, path + [node]))
-        logger.info(f"Extracted {len(trajectories)} trajectories")
+        logger.debug(f"Extracted {len(trajectories)} trajectories")
         return trajectories
 
     def mutual_consistency(self, trajectory: List[Node]) -> bool:
@@ -208,9 +207,9 @@ class RStar:
         return is_consistent
 
     def select_final_trajectory(self, trajectories: List[List[Node]]) -> List[Node]:
-        logger.info("Selecting final trajectory")
+        logger.debug("Selecting final trajectory")
         valid_trajectories = [t for t in trajectories if self.mutual_consistency(t)]
-        logger.info(f"Found {len(valid_trajectories)} valid trajectories")
+        logger.debug(f"Found {len(valid_trajectories)} valid trajectories")
         if not valid_trajectories:
             logger.warning("No valid trajectories found. Selecting based on value/visits.")
             return max(trajectories, key=lambda t: self.trajectory_score(t))
@@ -240,7 +239,7 @@ class RStar:
         sorted_answers = sorted(answer_counts.items(), key=lambda x: (-x[1][1], -x[1][0]))
         best_answer, (count, conf) = sorted_answers[0]
         
-        logger.info(f"Selected best answer: {best_answer} (count: {count}, confidence: {conf})")
+        logger.debug(f"Selected best answer: {best_answer} (count: {count}, confidence: {conf})")
         return best_answer
 
     def create_prompt(self, state: str, action: str) -> str:
@@ -310,7 +309,7 @@ This rephrasing should help clarify the problem and guide the solution process."
             return 0.0  # If it's not a valid number, return a low score
 
     def extract_answer(self, final_state: str) -> Tuple[str, float]:
-        logger.info(f"Extracting answer from state: {final_state}")
+        logger.debug(f"Extracting answer from state: {final_state}")
         patterns = [
             r"The answer is (\d+)",
             r"The final answer is (\d+)",
@@ -325,7 +324,7 @@ This rephrasing should help clarify the problem and guide the solution process."
             if match:
                 answer = match.group(1)
                 confidence = 1.0
-                logger.info(f"Answer found using pattern '{pattern}': {answer}")
+                logger.debug(f"Answer found using pattern '{pattern}': {answer}")
                 return answer, confidence
         
         # If no pattern is found, try to extract any number
@@ -333,7 +332,7 @@ This rephrasing should help clarify the problem and guide the solution process."
         if numbers:
             answer = numbers[-1]  # Take the last number found
             confidence = 0.5  # Lower confidence as it's not in the expected format
-            logger.info(f"No pattern found. Using last number as answer: {answer}")
+            logger.debug(f"No pattern found. Using last number as answer: {answer}")
             return answer, confidence
         
         logger.warning("No answer found in the state.")
@@ -344,3 +343,4 @@ This rephrasing should help clarify the problem and guide the solution process."
         Synchronous wrapper for solve_async method.
         """
         return asyncio.run(self.solve_async(question))
+    
