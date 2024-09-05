@@ -3,5 +3,20 @@
     "name": "Arena Bench Hard",
     "system_prompt": "",
     "query": "Write a Python program to build an RL model to recite text from any position that the user provides, using only numpy."
-    }
+  },
+  {
+    "name": "Big Code Bench",
+    "system_prompt": "",
+    "query": "Calculates the average of the sums of absolute differences between each pair of consecutive numbers for all permutations of a given list. Each permutation is shuffled before calculating the differences. Args: - numbers (list): A list of numbers. Default is numbers from 1 to 10. The function should output with: float: The average of the sums of absolute differences for each shuffled permutation of the list. You should write self-contained code starting with: ``` import itertools from random import shuffle def task_func(numbers=list(range(1, 3))): ```"
+  },
+  {
+    "name": "Maths Problem",
+    "system_prompt": "You are a helpful AI assistant with expertise in mathematical and logical problem-solving.",
+    "query": "Maximize x + y subject to: x + 2y <= 10, x >= 0, y >= 0"
+  },
+  {
+    "name": "GSM8K",
+    "system_prompt": "",
+    "query": "If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?"
+  }
 ]

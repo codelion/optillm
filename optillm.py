@@ -9,7 +9,7 @@ from mcts import chat_with_mcts
 from bon import best_of_n_sampling
 from moa import mixture_of_agents
 from rto import round_trip_optimization
-from z3 import Z3SolverSystem
+from z3_solver import Z3SolverSystem
 from advanced_self_consistency import advanced_self_consistency
 from pva import inference_time_pv_game
 from rstar import RStar
@@ -62,20 +62,20 @@ def proxy():
             final_response = chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
                                             server_config['mcts_exploration'], server_config['mcts_depth'])
         elif approach == 'bon':
-            final_response = best_of_n_sampling(system_prompt, initial_query, client, server_config['best_of_n'])
+            final_response = best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
         elif approach == 'moa':
-            final_response = mixture_of_agents(system_prompt, initial_query, client)
+            final_response = mixture_of_agents(system_prompt, initial_query, client, model)
         elif approach == 'rto':
-            final_response = round_trip_optimization(system_prompt, initial_query, client)
+            final_response = round_trip_optimization(system_prompt, initial_query, client, model)
         elif approach == 'z3':
-            z3_solver = Z3SolverSystem(system_prompt, client)
+            z3_solver = Z3SolverSystem(system_prompt, client, model)
             final_response = z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
-            final_response = advanced_self_consistency(system_prompt, initial_query, client)
+            final_response = advanced_self_consistency(system_prompt, initial_query, client, model)
         elif approach == "pva":
-            final_response = inference_time_pv_game(system_prompt, initial_query, client)
+            final_response = inference_time_pv_game(system_prompt, initial_query, client, model)
         elif approach == "rstar":
-            rstar = RStar(system_prompt, client,
+            rstar = RStar(system_prompt, client, model,
                           max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
                           c=server_config['rstar_c'])
             final_response = rstar.solve(initial_query)
@@ -103,7 +103,7 @@ def proxy():
 
 def main():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
-    parser.add_argument("--approach", type=str, choices=["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pva", "rstar"], default="auto", help="Inference approach to use")
+    parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pva", "rstar"], default="auto", help="Inference approach to use")
     parser.add_argument("--simulations", type=int, default=2, help="Number of MCTS simulations")
     parser.add_argument("--exploration", type=float, default=0.2, help="Exploration weight for MCTS")
     parser.add_argument("--depth", type=int, default=1, help="Simulation depth for MCTS")

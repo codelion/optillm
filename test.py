@@ -8,6 +8,13 @@ import logging
 from openai import OpenAI
 
 from mcts import chat_with_mcts
+from bon import best_of_n_sampling
+from moa import mixture_of_agents
+from rto import round_trip_optimization
+from self_consistency import advanced_self_consistency_approach
+from pva import inference_time_pv_game
+from z3_solver import Z3SolverSystem
+from rstar import RStar
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -27,7 +34,14 @@ class MockOpenAIClient:
 
 # Configuration for approaches
 APPROACHES = {
-    'mcts': chat_with_mcts
+    'mcts': chat_with_mcts,
+    'bon': best_of_n_sampling,
+    'moa': mixture_of_agents,
+    'rto': round_trip_optimization,
+    'self_consistency': advanced_self_consistency_approach,
+    'pva': inference_time_pv_game,
+    'z3': lambda s, q, c, m: Z3SolverSystem(s, c, m).process_query(q),
+    'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q)
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
