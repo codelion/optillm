@@ -79,10 +79,10 @@ def advanced_self_consistency_approach(system_prompt: str, initial_query: str, c
     logger.info(f"Total responses: {result['aggregated_result']['total_responses']}")
     logger.info(f"Number of unique clusters: {result['aggregated_result']['num_unique_clusters']}")
     for i, cluster in enumerate(result['aggregated_result']['clusters'], 1):
-        logger.info(f"\nCluster {i}:")
-        logger.info(f"  Representative answer: {cluster['answer']}")
-        logger.info(f"  Frequency: {cluster['frequency']}")
-        logger.info(f"  Variants: {cluster['variants']}")
+        logger.debug(f"\nCluster {i}:")
+        logger.debug(f"  Representative answer: {cluster['answer']}")
+        logger.debug(f"  Frequency: {cluster['frequency']}")
+        logger.debug(f"  Variants: {cluster['variants']}")
     
     if result['aggregated_result']['clusters']:
         return result['aggregated_result']['clusters'][0]['answer']
