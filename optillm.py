@@ -10,7 +10,7 @@ from bon import best_of_n_sampling
 from moa import mixture_of_agents
 from rto import round_trip_optimization
 from z3_solver import Z3SolverSystem
-from advanced_self_consistency import advanced_self_consistency
+from self_consistency import advanced_self_consistency_approach
 from pva import inference_time_pv_game
 from rstar import RStar
 
@@ -51,6 +51,10 @@ def proxy():
     initial_query = next((msg['content'] for msg in messages if msg['role'] == 'user'), "")
     
     approach = server_config['approach']
+    base_url = server_config['base_url']
+
+    if base_url != "":
+        client = OpenAI(api_key=API_KEY, base_url=base_url)
     
     if approach == 'auto':
         parts = model.split('-', 1)
@@ -71,7 +75,7 @@ def proxy():
             z3_solver = Z3SolverSystem(system_prompt, client, model)
             final_response = z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
-            final_response = advanced_self_consistency(system_prompt, initial_query, client, model)
+            final_response = advanced_self_consistency_approach(system_prompt, initial_query, client, model)
         elif approach == "pva":
             final_response = inference_time_pv_game(system_prompt, initial_query, client, model)
         elif approach == "rstar":
@@ -109,6 +113,7 @@ def main():
     parser.add_argument("--depth", type=int, default=1, help="Simulation depth for MCTS")
     parser.add_argument("--best_of_n", type=int, default=3, help="Number of samples for best_of_n approach")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="OpenAI model to use")
+    parser.add_argument("--base_url", type=str, default="", help="Base url for OpenAI compatible endpoint")
     parser.add_argument("--rstar-max-depth", type=int, default=3, help="Maximum depth for rStar algorithm")
     parser.add_argument("--rstar-num-rollouts", type=int, default=5, help="Number of rollouts for rStar algorithm")
     parser.add_argument("--rstar-c", type=float, default=1.4, help="Exploration constant for rStar algorithm")
@@ -124,6 +129,7 @@ def main():
         'rstar_max_depth': args.rstar_max_depth,
         'rstar_num_rollouts': args.rstar_num_rollouts,
         'rstar_c': args.rstar_c,
+        'base_url' : args.base_url,
     })
     
     logger.info(f"Starting server with approach: {args.approach}")

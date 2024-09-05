@@ -3,3 +3,4 @@ networkx
 openai
 z3-solver
 aiohttp
+flask
