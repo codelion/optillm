@@ -1,0 +1,7 @@
+[
+  {
+    "name": "Arena Bench Hard",
+    "system_prompt": "",
+    "query": "Write a Python program to build an RL model to recite text from any position that the user provides, using only numpy."
+    }
+]
