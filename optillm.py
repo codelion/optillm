@@ -138,7 +138,7 @@ def main():
         'rstar_num_rollouts': args.rstar_num_rollouts,
         'rstar_c': args.rstar_c,
         'base_url' : args.base_url,
-        'return_full_response': args.return_full_reponse,
+        'return_full_response': args.return_full_response,
     })
     
     logger.info(f"Starting server with approach: {args.approach}")
