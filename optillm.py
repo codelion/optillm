@@ -13,6 +13,7 @@ from z3_solver import Z3SolverSystem
 from self_consistency import advanced_self_consistency_approach
 from pva import inference_time_pv_game
 from rstar import RStar
+from cot_reflection import cot_reflection
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -87,6 +88,8 @@ def proxy():
                           max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
                           c=server_config['rstar_c'])
             final_response = rstar.solve(initial_query)
+        elif approach == "cot_reflection":
+            final_response = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
@@ -111,7 +114,7 @@ def proxy():
 
 def main():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
-    parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pva", "rstar"], default="auto", help="Inference approach to use")
+    parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pva", "rstar", "cot_reflection"], default="auto", help="Inference approach to use")
     parser.add_argument("--simulations", type=int, default=2, help="Number of MCTS simulations")
     parser.add_argument("--exploration", type=float, default=0.2, help="Exploration weight for MCTS")
     parser.add_argument("--depth", type=int, default=1, help="Simulation depth for MCTS")
@@ -121,6 +124,7 @@ def main():
     parser.add_argument("--rstar-max-depth", type=int, default=3, help="Maximum depth for rStar algorithm")
     parser.add_argument("--rstar-num-rollouts", type=int, default=5, help="Number of rollouts for rStar algorithm")
     parser.add_argument("--rstar-c", type=float, default=1.4, help="Exploration constant for rStar algorithm")
+    parser.add_argument("--return-full-response", type=bool, default=False, help="Return the full response including the CoT with <thinking> tags")
     args = parser.parse_args()
     
     server_config.update({
@@ -134,6 +138,7 @@ def main():
         'rstar_num_rollouts': args.rstar_num_rollouts,
         'rstar_c': args.rstar_c,
         'base_url' : args.base_url,
+        'return_full_response': args.return_full_reponse,
     })
     
     logger.info(f"Starting server with approach: {args.approach}")

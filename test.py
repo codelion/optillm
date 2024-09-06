@@ -15,6 +15,7 @@ from self_consistency import advanced_self_consistency_approach
 from pva import inference_time_pv_game
 from z3_solver import Z3SolverSystem
 from rstar import RStar
+from cot_reflection import cot_reflection
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,7 +42,8 @@ APPROACHES = {
     'self_consistency': advanced_self_consistency_approach,
     'pva': inference_time_pv_game,
     'z3': lambda s, q, c, m: Z3SolverSystem(s, c, m).process_query(q),
-    'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q)
+    'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q),
+    'cot_reflection': cot_reflection,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
