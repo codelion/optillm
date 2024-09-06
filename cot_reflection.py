@@ -47,14 +47,16 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
 
     # Extract the full response
     full_response = response.choices[0].message.content
-    logger.info(f"CoT with Reflection :{full_response}")
+    logger.info(f"CoT with Reflection :\n{full_response}")
 
     # Use regex to extract the content within <thinking> and <output> tags
     thinking_match = re.search(r'<thinking>(.*?)</thinking>', full_response, re.DOTALL)
     output_match = re.search(r'<output>(.*?)</output>', full_response, re.DOTALL)
 
     thinking = thinking_match.group(1).strip() if thinking_match else "No thinking process provided."
-    output = output_match.group(1).strip() if output_match else "No output provided."
+    output = output_match.group(1).strip() if output_match else full_response
+
+    logger.info(f"Final output :\n{output}")
 
     if return_full_response:
         return full_response
