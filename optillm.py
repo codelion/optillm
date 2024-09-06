@@ -23,7 +23,7 @@ app = Flask(__name__)
 
 # OpenAI API configuration
 API_KEY = os.environ.get("OPENAI_API_KEY")
-client = OpenAI(api_key=API_KEY)
+default_client = OpenAI(api_key=API_KEY)
 
 # Server configuration
 server_config = {
@@ -42,7 +42,7 @@ server_config = {
 def proxy():
     logger.info('Received request to /v1/chat/completions')
     data = request.get_json()
-    logger.info(f'Request data: {data}')
+    logger.debug(f'Request data: {data}')
     
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
@@ -55,6 +55,8 @@ def proxy():
 
     if base_url != "":
         client = OpenAI(api_key=API_KEY, base_url=base_url)
+    else:
+        client = default_client
     
     if approach == 'auto':
         parts = model.split('-', 1)
@@ -102,7 +104,7 @@ def proxy():
             }
         ],
     }
-    logger.info(f'API response: {response_data}')
+    logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200
 
 def main():

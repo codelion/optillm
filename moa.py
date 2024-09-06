@@ -3,7 +3,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str) -> str:
-    n = 3
     completions = []
 
     response = client.chat.completions.create(
