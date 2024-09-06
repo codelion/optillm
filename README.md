@@ -78,6 +78,7 @@ mixture of agents as the optimization approach. In the proxy logs you will see t
 | Self-Consistency | `self_consistency` | Implements an advanced self-consistency method |
 | PV Game | `pvg` | Applies a prover-verifier game approach at inference time |
 | R* Algorithm | `rstar` | Implements the R* algorithm for problem-solving |
+| CoT with Reflection | `cot_reflection` | Implements CoT with <thinking>, <reflection> and <output> sections | 
 
 ## References
 
