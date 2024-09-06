@@ -62,7 +62,9 @@ def proxy():
         parts = model.split('-', 1)
         approach = parts[0]
         model = parts[1]
-
+    
+    logger.info(f'Using approach {approach}, with {model}')
+    
     try:
         if approach == 'mcts':
             final_response = chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
