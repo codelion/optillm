@@ -121,10 +121,16 @@ Please implement the solution in Python."""
         
         return natural_language_solution, python_implementation
 
-def plansearch(system_prompt: str, initial_query: str, client, model: str) -> str:
+    def solve_multiple(self, problem: str, n: int, num_initial_observations: int = 3, num_derived_observations: int = 2) -> List[str]:
+        solutions = []
+        for _ in range(n):
+            _, python_implementation = self.solve(problem, num_initial_observations, num_derived_observations)
+            solutions.append(python_implementation)
+        return solutions
+
+def plansearch(system_prompt: str, initial_query: str, client, model: str, n: int = 1) -> List[str]:
     planner = PlanSearch(system_prompt, client, model)
-    _, python_implementation = planner.solve(initial_query)
-    return python_implementation
+    return planner.solve_multiple(initial_query, n)
 
 # Example usage (can be removed in the final version):
 # if __name__ == "__main__":
@@ -135,5 +141,8 @@ def plansearch(system_prompt: str, initial_query: str, client, model: str) -> st
 #     system_prompt = "You are a helpful AI assistant."
 #     problem = "Write a Python function to find the nth Fibonacci number."
 #     
-#     result = plansearch(system_prompt, problem, client, "gpt-4")
-#     print(result)
+#     results = plansearch(system_prompt, problem, client, "gpt-4", n=3)
+#     for i, result in enumerate(results, 1):
+#         print(f"Solution {i}:")
+#         print(result)
+#         print()

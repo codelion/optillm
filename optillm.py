@@ -38,6 +38,7 @@ server_config = {
     'rstar_max_depth': 3,
     'rstar_num_rollouts': 5,
     'rstar_c': 1.4,
+    'n': 1,
 }
 
 @app.route('/v1/chat/completions', methods=['POST'])
@@ -48,6 +49,7 @@ def proxy():
     
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
+    n = data.get('n', server_config['n'])
     
     system_prompt = next((msg['content'] for msg in messages if msg['role'] == 'system'), "")
     initial_query = next((msg['content'] for msg in messages if msg['role'] == 'user'), "")
@@ -92,7 +94,7 @@ def proxy():
         elif approach == "cot_reflection":
             final_response = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
         elif approach == 'plansearch':
-            final_response = plansearch(system_prompt, initial_query, client, model)
+            final_response = plansearch(system_prompt, initial_query, client, model, n=n)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
@@ -128,6 +130,7 @@ def main():
     parser.add_argument("--rstar-max-depth", type=int, default=3, help="Maximum depth for rStar algorithm")
     parser.add_argument("--rstar-num-rollouts", type=int, default=5, help="Number of rollouts for rStar algorithm")
     parser.add_argument("--rstar-c", type=float, default=1.4, help="Exploration constant for rStar algorithm")
+    parser.add_argument("--n", type=int, default=1, help="Number of final responses to be returned")
     parser.add_argument("--return-full-response", type=bool, default=False, help="Return the full response including the CoT with <thinking> tags")
     args = parser.parse_args()
     
@@ -143,6 +146,7 @@ def main():
         'rstar_c': args.rstar_c,
         'base_url' : args.base_url,
         'return_full_response': args.return_full_response,
+        'n': args.n,
     })
     
     logger.info(f"Starting server with approach: {args.approach}")
