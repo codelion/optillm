@@ -1,6 +1,9 @@
 # optillm
 
-optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time. 
+optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
+
+## SOTA results with moa-gpt-4o-mini on Arena-Hard-Auto
+![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
 
 ## Installation
 
