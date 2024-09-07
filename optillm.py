@@ -11,7 +11,7 @@ from moa import mixture_of_agents
 from rto import round_trip_optimization
 from z3_solver import Z3SolverSystem
 from self_consistency import advanced_self_consistency_approach
-from pva import inference_time_pv_game
+from pvg import inference_time_pv_game
 from rstar import RStar
 from cot_reflection import cot_reflection
 from plansearch import plansearch
@@ -82,7 +82,7 @@ def proxy():
             final_response = z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
             final_response = advanced_self_consistency_approach(system_prompt, initial_query, client, model)
-        elif approach == "pva":
+        elif approach == "pvg":
             final_response = inference_time_pv_game(system_prompt, initial_query, client, model)
         elif approach == "rstar":
             rstar = RStar(system_prompt, client, model,
@@ -117,7 +117,7 @@ def proxy():
 
 def main():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
-    parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pva", "rstar",
+    parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
                                                           "cot_reflection", "plansearch"], default="auto", help="Inference approach to use")
     parser.add_argument("--simulations", type=int, default=2, help="Number of MCTS simulations")
     parser.add_argument("--exploration", type=float, default=0.2, help="Exploration weight for MCTS")

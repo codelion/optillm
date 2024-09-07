@@ -12,7 +12,7 @@ from bon import best_of_n_sampling
 from moa import mixture_of_agents
 from rto import round_trip_optimization
 from self_consistency import advanced_self_consistency_approach
-from pva import inference_time_pv_game
+from pvg import inference_time_pv_game
 from z3_solver import Z3SolverSystem
 from rstar import RStar
 from cot_reflection import cot_reflection
@@ -41,7 +41,7 @@ APPROACHES = {
     'moa': mixture_of_agents,
     'rto': round_trip_optimization,
     'self_consistency': advanced_self_consistency_approach,
-    'pva': inference_time_pv_game,
+    'pvg': inference_time_pv_game,
     'z3': lambda s, q, c, m: Z3SolverSystem(s, c, m).process_query(q),
     'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q),
     'cot_reflection': cot_reflection,
