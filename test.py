@@ -16,6 +16,7 @@ from pva import inference_time_pv_game
 from z3_solver import Z3SolverSystem
 from rstar import RStar
 from cot_reflection import cot_reflection
+from plansearch import plansearch
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,6 +45,7 @@ APPROACHES = {
     'z3': lambda s, q, c, m: Z3SolverSystem(s, c, m).process_query(q),
     'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q),
     'cot_reflection': cot_reflection,
+    'plansearch': plansearch,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
