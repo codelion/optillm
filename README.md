@@ -82,9 +82,11 @@ mixture of agents as the optimization approach. In the proxy logs you will see t
 | PV Game | `pvg` | Applies a prover-verifier game approach at inference time |
 | R* Algorithm | `rstar` | Implements the R* algorithm for problem-solving |
 | CoT with Reflection | `cot_reflection` | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections | 
+| PlanSearch | `plansearch` | Implements a search algorithm over candidate plans for solving a problem in natural language |
 
 ## References
 
+- [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
 - [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171)
 - [Mutual Reasoning Makes Smaller LLMs Stronger Problem-Solvers](https://arxiv.org/abs/2408.06195)
 - [Mixture-of-Agents Enhances Large Language Model Capabilities](https://arxiv.org/abs/2406.04692)
