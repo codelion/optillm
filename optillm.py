@@ -100,20 +100,32 @@ def proxy():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
+    
     response_data = {
         'model': model,
-        'choices': [
-            {
-                'index': 0,
+        'choices': []
+    }
+
+    if isinstance(final_response, list):
+        for index, response in enumerate(final_response):
+            response_data['choices'].append({
+                'index': index,
                 'message': {
                     'role': 'assistant',
-                    'content': final_response,
+                    'content': response,
                 },
                 'finish_reason': 'stop'
-            }
-        ],
-    }
+            })
+    else:
+        response_data['choices'].append({
+            'index': 0,
+            'message': {
+                'role': 'assistant',
+                'content': final_response,
+            },
+            'finish_reason': 'stop'
+        })
+        
     logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200
 
