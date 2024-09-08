@@ -2,7 +2,19 @@
 
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
-## SOTA results with moa-gpt-4o-mini on Arena-Hard-Auto
+## SOTA Results with Optillm
+
+### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
+
+| Model | pass@1 | pass@5 | pass@10 |
+|-------|--------|--------|---------|
+| plansearch-gpt-4o-mini | 44.03 | 59.31 | 63.5 |
+| gpt-4o-mini | 43.9 | 50.61 | 53.25 |
+| claude-3.5-sonnet | 51.3 | | |
+| gpt-4o-2024-05-13 | 45.2 | | |
+| gpt-4-turbo-2024-04-09 | 44.2 | | |
+
+### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
 ![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
 
 ## Installation
