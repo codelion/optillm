@@ -131,18 +131,3 @@ Please implement the solution in Python."""
 def plansearch(system_prompt: str, initial_query: str, client, model: str, n: int = 1) -> List[str]:
     planner = PlanSearch(system_prompt, client, model)
     return planner.solve_multiple(initial_query, n)
-
-# Example usage (can be removed in the final version):
-# if __name__ == "__main__":
-#     from openai import OpenAI
-#     import os
-#
-#     client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-#     system_prompt = "You are a helpful AI assistant."
-#     problem = "Write a Python function to find the nth Fibonacci number."
-#     
-#     results = plansearch(system_prompt, problem, client, "gpt-4", n=3)
-#     for i, result in enumerate(results, 1):
-#         print(f"Solution {i}:")
-#         print(result)
-#         print()
