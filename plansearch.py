@@ -10,7 +10,7 @@ class PlanSearch:
         self.model = model
 
     def generate_observations(self, problem: str, num_observations: int = 3) -> List[str]:
-        prompt = f"""You are an expert Python programmer. You will be given an competitive programming question
+        prompt = f"""You are an expert Python programmer. You will be given a competitive programming question
 (problem specification). You will return several useful, non-obvious, and correct observations
 about the problem, like hints to solve the problem. You will NOT return any code. Be as
 creative as possible, going beyond what you think is intuitively correct.
@@ -32,7 +32,7 @@ Please provide {num_observations} observations."""
         return [obs.strip() for obs in observations if obs.strip()]
 
     def generate_derived_observations(self, problem: str, observations: List[str], num_new_observations: int = 2) -> List[str]:
-        prompt = f"""You are an expert Python programmer. You will be given an competitive programming question
+        prompt = f"""You are an expert Python programmer. You will be given a competitive programming question
 (problem specification) and several correct observations about the problem.
 You will brainstorm several new, useful, and correct observations about the problem, derived
 from the given observations. You will NOT return any code. Be as creative as possible, going
