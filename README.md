@@ -95,9 +95,11 @@ mixture of agents as the optimization approach. In the proxy logs you will see t
 | R* Algorithm | `rstar` | Implements the R* algorithm for problem-solving |
 | CoT with Reflection | `cot_reflection` | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections | 
 | PlanSearch | `plansearch` | Implements a search algorithm over candidate plans for solving a problem in natural language |
+| LEAP | `leap` | Learns task-specific principles from few shot examples |
 
 ## References
 
+- [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
 - [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
 - [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171)
 - [Mutual Reasoning Makes Smaller LLMs Stronger Problem-Solvers](https://arxiv.org/abs/2408.06195)
@@ -107,5 +109,3 @@ mixture of agents as the optimization approach. In the proxy logs you will see t
 - [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699)
 - [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521)
 - [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557)
-
-
