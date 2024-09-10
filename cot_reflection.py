@@ -51,7 +51,7 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
 
     # Use regex to extract the content within <thinking> and <output> tags
     thinking_match = re.search(r'<thinking>(.*?)</thinking>', full_response, re.DOTALL)
-    output_match = re.search(r'<output>(.*?)(?:</output>|$', full_response, re.DOTALL)
+    output_match = re.search(r'<output>(.*?)(?:</output>|$)', full_response, re.DOTALL)
 
     thinking = thinking_match.group(1).strip() if thinking_match else "No thinking process provided."
     output = output_match.group(1).strip() if output_match else full_response
