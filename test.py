@@ -17,6 +17,7 @@ from z3_solver import Z3SolverSystem
 from rstar import RStar
 from cot_reflection import cot_reflection
 from plansearch import plansearch
+from leap import leap
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -46,6 +47,7 @@ APPROACHES = {
     'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q),
     'cot_reflection': cot_reflection,
     'plansearch': plansearch,
+    'leap': leap,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:

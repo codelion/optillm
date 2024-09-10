@@ -15,6 +15,7 @@ from pvg import inference_time_pv_game
 from rstar import RStar
 from cot_reflection import cot_reflection
 from plansearch import plansearch
+from leap import leap
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -95,6 +96,8 @@ def proxy():
             final_response = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
         elif approach == 'plansearch':
             final_response = plansearch(system_prompt, initial_query, client, model, n=n)
+        elif approach == 'leap':
+            final_response = leap(system_prompt, initial_query, client, model)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
@@ -125,14 +128,14 @@ def proxy():
             },
             'finish_reason': 'stop'
         })
-        
+
     logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200
 
 def main():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
     parser.add_argument("--approach", type=str, choices=["auto", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
-                                                          "cot_reflection", "plansearch"], default="auto", help="Inference approach to use")
+                                                          "cot_reflection", "plansearch", "leap"], default="auto", help="Inference approach to use")
     parser.add_argument("--simulations", type=int, default=2, help="Number of MCTS simulations")
     parser.add_argument("--exploration", type=float, default=0.2, help="Exploration weight for MCTS")
     parser.add_argument("--depth", type=int, default=1, help="Simulation depth for MCTS")
