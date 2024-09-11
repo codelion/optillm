@@ -29,9 +29,6 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
         <output>
         [Your final, concise answer to the query. This is the only part that will be shown to the user.]
         </output>
-
-        Now, please respond to the following query:
-        {initial_query}
         """
 
     # Make the API call
