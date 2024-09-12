@@ -18,5 +18,10 @@
     "name": "GSM8K",
     "system_prompt": "",
     "query": "Problem: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot? Solution: Let's solve this step by step:\n1. Initially, there are 3 cars in the parking lot.\n2. 2 more cars arrive.\n3. To find the total, we add the initial number of cars to the new arrivals: 3 + 2 = 5 Therefore, there are now 5 cars in the parking lot.\nProblem: A bakery has 8 cakes on display. They bake 4 more cakes and put them out. How many cakes are now on display? Solution: Let's break it down:\n1. The bakery starts with 8 cakes on display.\n2. They bake and add 4 more cakes.\n3. To find the total, we add the initial number of cakes to the new ones: 8 + 4 = 12 So, there are now 12 cakes on display.\nProblem: There are 5 books on a shelf. If you add 3 more books, how many books are on the shelf? Solution: Let's solve this step by step:\n1. Initially, there are 5 books on the shelf.\n2. 3 more books are added.\n3. To find the total, we add the initial number of books to the new additions: 5 + 3 = 8 Therefore, there are now 8 books on the shelf.\nProblem: A farmer has 10 chickens. He buys 6 more chickens. How many chickens does the farmer have now? Solution: Let's break it down:\n1. The farmer starts with 10 chickens.\n2. He buys 6 more chickens.\n3. To find the total, we add the initial number of chickens to the new ones: 10 + 6 = 16 So, the farmer now has 16 chickens.\nProblem: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?"
+  },
+  {
+    "name": "r/LocalLLaMA",
+    "system_prompt": "",
+    "query" : "I have a dish of potatoes. The following statements are true: No potatoes of mine, that are new, have >been boiled. All my potatoes in this dish are fit to eat. No unboiled potatoes of mine are fit to eat. Are there any new potatoes in this dish?"
   }
 ]
