@@ -147,6 +147,7 @@ def main():
     parser.add_argument("--rstar-c", type=float, default=1.4, help="Exploration constant for rStar algorithm")
     parser.add_argument("--n", type=int, default=1, help="Number of final responses to be returned")
     parser.add_argument("--return-full-response", type=bool, default=False, help="Return the full response including the CoT with <thinking> tags")
+    parser.add_argument("--port", type=int, default=8000, help="Specify the port to run the proxy")
     args = parser.parse_args()
     
     server_config.update({
@@ -163,10 +164,10 @@ def main():
         'return_full_response': args.return_full_response,
         'n': args.n,
     })
-    
+    port = args.port
     logger.info(f"Starting server with approach: {args.approach}")
     logger.info(f"Server configuration: {server_config}")
-    app.run(host='0.0.0.0', port=8000)
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
     main()

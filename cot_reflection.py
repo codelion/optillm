@@ -39,7 +39,7 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
             {"role": "user", "content": initial_query}
         ],
         temperature=0.7,
-        max_tokens=8192
+        max_tokens=4096
     )
 
     # Extract the full response
