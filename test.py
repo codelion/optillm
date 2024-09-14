@@ -18,6 +18,7 @@ from rstar import RStar
 from cot_reflection import cot_reflection
 from plansearch import plansearch
 from leap import leap
+from agent import agent_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,6 +49,7 @@ APPROACHES = {
     'cot_reflection': cot_reflection,
     'plansearch': plansearch,
     'leap': leap,
+    'agent': agent_approach,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
