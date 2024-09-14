@@ -1,0 +1,38 @@
+services:
+  &name optillm:
+    build:
+      context: https://github.com/codelion/optillm.git#main
+      # context: .
+      dockerfile: Dockerfile
+      tags:
+        - optillm:latest
+    image: optillm:latest
+    container_name: *name
+    hostname: *name
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-""}
+      OPTILLM_BASE_URL: ${OPENAI_BASE_URL:-"https://api.openai.com/v1"}
+      # OPTILLM_API_KEY: ${OPTILLM_API_KEY:-} # optionally sets an API key for Optillm clients
+      # Uncomment and set values for other arguments (prefixed with OPTILLM_) as needed, e.g.:
+      # OPTILLM_APPROACH: auto
+      # OPTILLM_MODEL: gpt-4o-mini
+      # OPTILLM_SIMULATIONS: 2
+      # OPTILLM_EXPLORATION: 0.2
+      # OPTILLM_DEPTH: 1
+      # OPTILLM_BEST_OF_N: 3
+      # OPTILLM_RSTAR_MAX_DEPTH: 3
+      # OPTILLM_RSTAR_NUM_ROLLOUTS: 5
+      # OPTILLM_RSTAR_C: 1.4
+      # OPTILLM_N: 1
+      # OPTILLM_RETURN_FULL_RESPONSE: false
+      # OPTILLM_PORT: 8000
+    restart: on-failure
+    stop_grace_period: 2s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 3s
