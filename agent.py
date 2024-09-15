@@ -157,7 +157,7 @@ class Agent:
             model=self.model,
             messages=[{"role": "user", "content": reflection_prompt}],
             temperature=0.2,
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         try:
