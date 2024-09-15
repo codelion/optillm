@@ -64,7 +64,8 @@ class Agent:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
+            temperature=0.2,
+            max_tokens=4096,
         )
 
         raw_content = response.choices[0].message.content
@@ -155,7 +156,8 @@ class Agent:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": reflection_prompt}],
-            temperature=0.2
+            temperature=0.2,
+            max_tokens=8192,
         )
 
         try:

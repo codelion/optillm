@@ -22,6 +22,7 @@ Please provide {num_observations} observations."""
 
         response = self.client.chat.completions.create(
             model=self.model,
+            max_tokens=4096,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
@@ -48,6 +49,7 @@ Please provide {num_new_observations} new observations derived from the existing
 
         response = self.client.chat.completions.create(
             model=self.model,
+            max_tokens=4096,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
@@ -72,6 +74,7 @@ IS CRUCIAL."""
 
         response = self.client.chat.completions.create(
             model=self.model,
+            max_tokens=4096,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
@@ -96,6 +99,7 @@ Please implement the solution in Python."""
 
         response = self.client.chat.completions.create(
             model=self.model,
+            max_tokens=4096,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}

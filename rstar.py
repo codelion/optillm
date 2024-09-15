@@ -41,7 +41,7 @@ class RStar:
                     "model": self.model_name,
                     "messages": [{"role": "system", "content": "You are a helpful assistant focused on solving mathematical problems. Stick to the given question and avoid introducing new scenarios."},
                         {"role": "user", "content": prompt}],
-                    "max_tokens": 256,
+                    "max_tokens": 4096,
                     "temperature": 0.2
                 }
             ) as response:
@@ -111,7 +111,7 @@ class RStar:
                 {"role": "system", "content": "You are a helpful assistant focused on solving mathematical problems. Stick to the given question and avoid introducing new scenarios."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=512,
+            max_tokens=4096,
             temperature=0.2
         )
         generated_response = response.choices[0].message.content.strip()
