@@ -11,6 +11,8 @@ services:
     hostname: *name
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-""}
       OPTILLM_BASE_URL: ${OPENAI_BASE_URL:-"https://api.openai.com/v1"}
