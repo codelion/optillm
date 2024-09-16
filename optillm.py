@@ -56,6 +56,9 @@ known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg"
 @app.before_request
 def check_api_key():
     if server_config['api_key']:
+        if request.path == "/health":
+            return
+
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({"error": "Invalid Authorization header. Expected format: 'Authorization: Bearer YOUR_API_KEY'"}), 401
