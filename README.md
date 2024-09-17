@@ -2,7 +2,14 @@
 
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
-## SOTA results with optillm
+## Patchwork with optillm
+
+Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm in [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
+called patchflows. We saw huge performance gains across all the patchflows they support as shown below. 
+
+![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
+
+## SOTA results on benchmarks with optillm
 
 ### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
 
