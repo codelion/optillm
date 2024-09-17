@@ -5,7 +5,7 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 ## Patchwork with optillm
 
 Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below. 
+called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
 
 ![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
 
