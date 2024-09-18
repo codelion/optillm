@@ -3,7 +3,7 @@ import logging
 import os
 import secrets
 from flask import Flask, request, jsonify
-from openai import AzureOpenAI, OpenAI
+from openai import OpenAI
 
 # Import approach modules
 from mcts import chat_with_mcts
@@ -25,17 +25,6 @@ logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
-
-# OpenAI or Azure API configuration
-if os.environ.get("OPENAI_API_KEY") != None:
-    API_KEY = os.environ.get("OPENAI_API_KEY")
-    default_client = OpenAI(api_key=API_KEY)
-else:
-    default_client = AzureOpenAI(
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-        api_version=os.environ.get("AZURE_API_VERSION"),
-        azure_endpoint=os.environ.get("AZURE_API_BASE"),
-)
 
 # Server configuration
 server_config = {
@@ -59,21 +48,6 @@ server_config = {
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
                     "cot_reflection", "plansearch", "leap", "agent"]
 
-# Optional API key configuration to secure the proxy
-@app.before_request
-def check_api_key():
-    if server_config['api_key']:
-        if request.path == "/health":
-            return
-
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"error": "Invalid Authorization header. Expected format: 'Authorization: Bearer YOUR_API_KEY'"}), 401
-
-        client_key = auth_header.split('Bearer ', 1)[1].strip()
-        if not secrets.compare_digest(client_key, server_config['api_key']):
-            return jsonify({"error": "Invalid API key"}), 401
-
 @app.route('/v1/chat/completions', methods=['POST'])
 def proxy():
     logger.info('Received request to /v1/chat/completions')
@@ -90,10 +64,15 @@ def proxy():
     approach = server_config['approach']
     base_url = server_config['base_url']
 
-    if base_url != "":
-        client = OpenAI(api_key=API_KEY, base_url=base_url)
+    # Extract OpenAI API key from Authorization header
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        openai_api_key = auth_header.split('Bearer ', 1)[1].strip()
     else:
-        client = default_client
+        return jsonify({"error": "OpenAI API key not provided in Authorization header"}), 401
+
+    # Initialize OpenAI client with the provided API key
+    client = OpenAI(api_key=openai_api_key, base_url=base_url if base_url else None)
 
     # Handle 'auto' approach
     if approach == 'auto':
@@ -105,7 +84,6 @@ def proxy():
         else:
             # If no known approach is found in the model name, default to 'bon'
             approach = 'bon'
-
 
     logger.info(f'Using approach {approach}, with {model}')
 
@@ -179,16 +157,21 @@ def proxy_models():
     logger.info('Received request to /v1/models')
     
     try:
-        if server_config['base_url']:
-            client = OpenAI(api_key=API_KEY, base_url=server_config['base_url'])
+        # Extract OpenAI API key from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            openai_api_key = auth_header.split('Bearer ', 1)[1].strip()
         else:
-            client = default_client
+            return jsonify({"error": "OpenAI API key not provided in Authorization header"}), 401
+
+        base_url = server_config['base_url']
+        client = OpenAI(api_key=openai_api_key, base_url=base_url if base_url else None)
 
         # Fetch models using the OpenAI client and return the raw response
         models_response = client.models.list()
 
         logger.debug('Models retrieved successfully')
-        return models_response.model_dump(), 200
+        return jsonify(models_response.model_dump()), 200
     except Exception as e:
         logger.error(f"Error fetching models: {str(e)}")
         return jsonify({"error": f"Error fetching models: {str(e)}"}), 500
