@@ -166,6 +166,27 @@ def proxy():
     logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200
 
+
+@app.route('/v1/models', methods=['GET'])
+def proxy_models():
+    logger.info('Received request to /v1/models')
+    
+    try:
+        if server_config['base_url']:
+            client = OpenAI(api_key=API_KEY, base_url=server_config['base_url'])
+        else:
+            client = default_client
+
+        # Fetch models using the OpenAI client and return the raw response
+        models_response = client.models.list()
+
+        logger.debug('Models retrieved successfully')
+        return models_response.model_dump(), 200
+    except Exception as e:
+        logger.error(f"Error fetching models: {str(e)}")
+        return jsonify({"error": f"Error fetching models: {str(e)}"}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"}), 200
