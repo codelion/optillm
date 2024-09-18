@@ -3,7 +3,7 @@ import logging
 import os
 import secrets
 from flask import Flask, request, jsonify
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 # Import approach modules
 from mcts import chat_with_mcts
@@ -26,9 +26,16 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# OpenAI API configuration
-API_KEY = os.environ.get("OPENAI_API_KEY")
-default_client = OpenAI(api_key=API_KEY)
+# OpenAI or Azure API configuration
+if os.environ.get("OPENAI_API_KEY") != None:
+    API_KEY = os.environ.get("OPENAI_API_KEY")
+    default_client = OpenAI(api_key=API_KEY)
+else:
+    default_client = AzureOpenAI(
+        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+        api_version=os.environ.get("AZURE_API_VERSION"),
+        azure_endpoint=os.environ.get("AZURE_API_BASE"),
+)
 
 # Server configuration
 server_config = {
