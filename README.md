@@ -89,6 +89,20 @@ mixture of agents as the optimization approach. In the proxy logs you will see t
 2024-09-06 08:35:44,797 - INFO - 127.0.0.1 - - [06/Sep/2024 08:35:44] "POST /v1/chat/completions HTTP/1.1" 200 -
 ```
 
+optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
+the same OpenAI API comptaible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
+doesn't have an OpenAI API comptaible endpoint (like Google or Anthropic) you can use [LiteLLM proxy server](https://docs.litellm.ai/docs/proxy/quick_start) that supports most LLMs.
+
+The following sequence diagram illustrates how the request and responses go through optillm. 
+
+![Sequance diagram showing optillm in use](./optillm-sequence-diagram.png)
+
+In the diagram:
+- `A` is an existing tool (like [oobabooga](https://github.com/oobabooga/text-generation-webui/)), framework (like [patchwork](https://github.com/patched-codes/patchwork))
+or your own code where you want to use the results from optillm. You can use it directly using any OpenAI client sdk.
+- `B` is the optillm service (running directly or in a docker container) that will send requests to the `base_url`.
+- `C` is any service providing an OpenAI API compatible chat completions endpoint. 
+
 ## Implemented techniques
 
 | Technique               | Slug               | Description                                                                                    |
