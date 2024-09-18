@@ -36,7 +36,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-
+Set up the `OPENAI_API_KEY` environment variable (for OpenAI) or the `AZURE_OPENAI_API_KEY`, `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables (for Azure OpenAI).  
 You can then run the optillm proxy as follows.
 
 ```bash
@@ -77,7 +77,7 @@ response = client.chat.completions.create(
 
 print(response)
 ```
-
+The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key.  
 You can control the technique you use for optimization by prepending the slug to the model name `{slug}-model-name`. E.g. in the above code we are using `moa` or
 mixture of agents as the optimization approach. In the proxy logs you will see the following showing the `moa` is been used with the base model as `gpt-4o-mini`.
 
