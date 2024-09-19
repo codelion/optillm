@@ -4,3 +4,4 @@ openai
 z3-solver
 aiohttp
 flask
+azure.identity
