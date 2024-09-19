@@ -4,6 +4,7 @@ import os
 import secrets
 from flask import Flask, request, jsonify
 from openai import AzureOpenAI, OpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # Import approach modules
 from mcts import chat_with_mcts
@@ -41,7 +42,6 @@ else:
             azure_endpoint=AZURE_ENDPOINT,
         )
     else:
-        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
         azure_credential = DefaultAzureCredential()
         token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
         default_client = AzureOpenAI(
