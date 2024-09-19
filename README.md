@@ -36,7 +36,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-Set up the `OPENAI_API_KEY` environment variable (for OpenAI) or the `AZURE_OPENAI_API_KEY`, `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables (for Azure OpenAI).  
+Set up the `OPENAI_API_KEY` environment variable (for OpenAI) 
+or the `AZURE_OPENAI_API_KEY`, `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables (for Azure OpenAI)
+or `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables + `az login` for Azure OpenAI with Managed Entra.
+
 You can then run the optillm proxy as follows.
 
 ```bash
