@@ -189,7 +189,7 @@ class Agent:
             
             final_response = reflection_result.get('final_response', '')
             if final_response:
-                logger.info("Final response generated")
+                logger.info(f"Final response: {final_response}")
                 logger.info(f"Analysis: {reflection_result.get('analysis', {})}")
                 logger.info(f"Explanation: {reflection_result.get('explanation', '')}")
                 return final_response
