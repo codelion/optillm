@@ -143,8 +143,8 @@ def proxy():
             final_response = agent_approach(system_prompt, initial_query, client, model, max_attempts=3)
         elif approach == 'cot_decoding':
             local_model = AutoModelForCausalLM.from_pretrained(model)
-            tokenizer = AutoTokenizer.from_pretrained(local_model)
-            final_response, _ = cot_decode(local_model, tokenizer, messages, aggregate_paths=True)
+            tokenizer = AutoTokenizer.from_pretrained(model)
+            final_response, _ = cot_decode(local_model, tokenizer, messages, max_length=2048, aggregate_paths=True)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
