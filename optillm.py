@@ -6,18 +6,18 @@ from flask import Flask, request, jsonify
 from openai import AzureOpenAI, OpenAI
 
 # Import approach modules
-from mcts import chat_with_mcts
-from bon import best_of_n_sampling
-from moa import mixture_of_agents
-from rto import round_trip_optimization
-from z3_solver import Z3SolverSystem
-from self_consistency import advanced_self_consistency_approach
-from pvg import inference_time_pv_game
-from rstar import RStar
-from cot_reflection import cot_reflection
-from plansearch import plansearch
-from leap import leap
-from agent import agent_approach
+from optillm.mcts import chat_with_mcts
+from optillm.bon import best_of_n_sampling
+from optillm.moa import mixture_of_agents
+from optillm.rto import round_trip_optimization
+from optillm.self_consistency import advanced_self_consistency_approach
+from optillm.pvg import inference_time_pv_game
+from optillm.z3_solver import Z3SolverSystem
+from optillm.rstar import RStar
+from optillm.cot_reflection import cot_reflection
+from optillm.plansearch import plansearch
+from optillm.leap import leap
+from optillm.agent import agent_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
