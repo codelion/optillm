@@ -6,3 +6,4 @@ aiohttp
 flask
 gradio
 requests
+azure.identity
