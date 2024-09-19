@@ -31,11 +31,24 @@ if os.environ.get("OPENAI_API_KEY") != None:
     API_KEY = os.environ.get("OPENAI_API_KEY")
     default_client = OpenAI(api_key=API_KEY)
 else:
-    default_client = AzureOpenAI(
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-        api_version=os.environ.get("AZURE_API_VERSION"),
-        azure_endpoint=os.environ.get("AZURE_API_BASE"),
-)
+    API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
+    API_VERSION = os.environ.get("AZURE_API_VERSION")
+    AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
+    if API_KEY is not None:
+        default_client = AzureOpenAI(
+            api_key=API_KEY,
+            api_version=API_VERSION,
+            azure_endpoint=AZURE_ENDPOINT,
+        )
+    else:
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+        azure_credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
+        default_client = AzureOpenAI(
+            api_version=API_VERSION,
+            azure_endpoint=AZURE_ENDPOINT,
+            azure_ad_token_provider=token_provider
+        )
 
 # Server configuration
 server_config = {
