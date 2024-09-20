@@ -12,7 +12,7 @@ setup(
         "aiohttp",
         "flask",
         "torch",
-        "transformers"
+        "transformers",
         "azure-identity",
     ],
     author="codelion",
