@@ -142,21 +142,4 @@ def cot_decode(
         return aggregate_paths_based_on_scores(paths)
     else:
         return max(paths, key=lambda x: x[1])
-
-# Example usage
-if __name__ == "__main__":
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    # Change this to a chat-based model that supports chat templates
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-    model = AutoModelForCausalLM.from_pretrained(model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    messages = [
-        {"role": "user", "content": "I have 3 apples, my dad has 2 more apples than me, how many apples do we have in total?"}
-    ]
-
-    result, confidence = cot_decode(model, tokenizer, messages, aggregate_paths=True)
-    print(f"Result: {result}")
-    print(f"Confidence: {confidence}")
-    print(f"Using device: {get_device()}")
+    
