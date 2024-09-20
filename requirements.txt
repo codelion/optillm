@@ -6,3 +6,4 @@ aiohttp
 flask
 torch
 transformers
+azure.identity

@@ -7,19 +7,18 @@ from openai import AzureOpenAI, OpenAI
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Import approach modules
-from mcts import chat_with_mcts
-from bon import best_of_n_sampling
-from moa import mixture_of_agents
-from rto import round_trip_optimization
-from z3_solver import Z3SolverSystem
-from self_consistency import advanced_self_consistency_approach
-from pvg import inference_time_pv_game
-from rstar import RStar
-from cot_reflection import cot_reflection
-from plansearch import plansearch
-from leap import leap
-from agent import agent_approach
-from cot_decoding import cot_decode
+from optillm.mcts import chat_with_mcts
+from optillm.bon import best_of_n_sampling
+from optillm.moa import mixture_of_agents
+from optillm.rto import round_trip_optimization
+from optillm.self_consistency import advanced_self_consistency_approach
+from optillm.pvg import inference_time_pv_game
+from optillm.z3_solver import Z3SolverSystem
+from optillm.rstar import RStar
+from optillm.cot_reflection import cot_reflection
+from optillm.plansearch import plansearch
+from optillm.leap import leap
+from optillm.agent import agent_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,11 +32,24 @@ if os.environ.get("OPENAI_API_KEY") != None:
     API_KEY = os.environ.get("OPENAI_API_KEY")
     default_client = OpenAI(api_key=API_KEY)
 else:
-    default_client = AzureOpenAI(
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-        api_version=os.environ.get("AZURE_API_VERSION"),
-        azure_endpoint=os.environ.get("AZURE_API_BASE"),
-)
+    API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
+    API_VERSION = os.environ.get("AZURE_API_VERSION")
+    AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
+    if API_KEY is not None:
+        default_client = AzureOpenAI(
+            api_key=API_KEY,
+            api_version=API_VERSION,
+            azure_endpoint=AZURE_ENDPOINT,
+        )
+    else:
+        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+        azure_credential = DefaultAzureCredential()
+        token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
+        default_client = AzureOpenAI(
+            api_version=API_VERSION,
+            azure_endpoint=AZURE_ENDPOINT,
+            azure_ad_token_provider=token_provider
+        )
 
 # Server configuration
 server_config = {
