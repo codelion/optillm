@@ -11,6 +11,8 @@ setup(
         "z3-solver",
         "aiohttp",
         "flask",
+        "torch",
+        "transformers"
         "azure-identity",
     ],
     author="codelion",
