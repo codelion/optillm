@@ -16,6 +16,7 @@ from optillm.pvg import inference_time_pv_game
 from optillm.z3_solver import Z3SolverSystem
 from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
+from optillm.cot_decoding import cot_decode
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.agent import agent_approach
