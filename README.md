@@ -62,7 +62,7 @@ python optillm.py
 
 - Set the `OPENAI_API_KEY` env variable to a placeholder value
   - e.g. `export OPENAI_API_KEY="no_key"`
-- Run `./llama-server -m path_to_model` to start the server with the specified model
+- Run `./llama-server -c 4096 -m path_to_model` to start the server with the specified model and a context length of 4096 tokens
 - Run `python3 optillm.py --base_url base_url` to start the proxy
   - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
 
