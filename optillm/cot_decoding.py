@@ -53,7 +53,7 @@ def cot_decode(
     messages: List[Dict[str, str]],
     k: int = 10,
     num_beams: int = 1,
-    max_length: int = 512,
+    max_new_tokens: int = 512,
     temperature: float = 1.0,
     top_p: float = 1.0,
     repetition_penalty: float = 1.0,
@@ -71,7 +71,7 @@ def cot_decode(
         messages: List of chat messages in the format [{"role": "user", "content": "..."}]
         k: The number of alternative tokens to consider at the first step.
         num_beams: Number of beams for beam search.
-        max_length: Maximum length of generated sequence.
+        max_new_tokens: Maximum number of new tokens to generate.
         temperature: Sampling temperature.
         top_p: Nucleus sampling probability.
         repetition_penalty: Repetition penalty factor.
@@ -116,7 +116,7 @@ def cot_decode(
         output = model.generate(
             start_ids,
             attention_mask=start_mask,
-            max_length=max_length,
+            max_new_tokens=max_new_tokens,
             num_beams=num_beams,
             temperature=temperature,
             top_p=top_p,
