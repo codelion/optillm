@@ -127,6 +127,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | CoT with Reflection     | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch              | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
+| ReRead                  | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
 
 ## Available Parameters
 
@@ -196,6 +197,7 @@ Authorization: Bearer your_secret_api_key
 
 ## References
 
+- [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
 - [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
 - [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171)
