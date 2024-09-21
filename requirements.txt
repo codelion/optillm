@@ -4,4 +4,6 @@ openai
 z3-solver
 aiohttp
 flask
+gradio
+requests
 azure.identity
