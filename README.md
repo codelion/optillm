@@ -115,7 +115,6 @@ or your own code where you want to use the results from optillm. You can use it 
 
 | Technique               | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Agent                   | `agent`            | Determines which of the below approaches to take and then combines the results                 |
 | Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
 | Best of N Sampling      | `bon`              | Generates multiple responses and selects the best one                                          |
 | Mixture of Agents       | `moa`              | Combines responses from multiple critiques                                                     |
