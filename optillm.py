@@ -17,7 +17,6 @@ from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
-from optillm.agent import agent_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -70,7 +69,7 @@ server_config = {
 
 # List of known approaches
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
-                    "cot_reflection", "plansearch", "leap", "agent"]
+                    "cot_reflection", "plansearch", "leap"]
 
 # Optional API key configuration to secure the proxy
 @app.before_request
@@ -150,8 +149,6 @@ def proxy():
             final_response = plansearch(system_prompt, initial_query, client, model, n=n)
         elif approach == 'leap':
             final_response = leap(system_prompt, initial_query, client, model)
-        elif approach == 'agent':
-            final_response = agent_approach(system_prompt, initial_query, client, model, max_attempts=3)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
