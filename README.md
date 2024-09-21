@@ -58,6 +58,22 @@ python optillm.py
 2024-09-06 07:57:14,212 - INFO - Press CTRL+C to quit
 ```
 
+### Starting the optillm proxy for a local server (e.g. llama.cpp)
+
+- Set the `OPENAI_API_KEY` env variable to a placeholder value
+  - e.g. `export OPENAI_API_KEY="no_key"`
+- Run `./llama-server -c 4096 -m path_to_model` to start the server with the specified model and a context length of 4096 tokens
+- Run `python3 optillm.py --base_url base_url` to start the proxy
+  - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
+
+> [!WARNING]
+> Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
+> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, and `z3`.
+> In order to use other approaches, consider using an alternative compatible server such as [ollama](https://github.com/ollama/ollama).
+
+> [!NOTE]
+> You'll later need to specify a model name in the OpenAI client configuration. Since llama-server was started with a single model, you can choose any name you want.
+
 ## Usage
 
 Once the proxy is running, you can use it as a drop in replacement for an OpenAI client by setting the `base_url` as `http://localhost:8000/v1`.
