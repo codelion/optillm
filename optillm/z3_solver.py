@@ -35,7 +35,8 @@ class Z3SolverSystem:
             
             return self.generate_response(query, analysis, solver_result)
         except Exception as e:
-            return f"An error occurred while processing the query: {str(e)}"
+            logging.error(f"An error occurred while processing the query with Z3, returning standard llm inference results: {str(e)}")
+            return self.standard_llm_inference(query)
 
     def analyze_query(self, query: str) -> str:
         analysis_prompt = f"""Analyze the given query and determine if it can be solved using Z3:

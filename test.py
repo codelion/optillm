@@ -18,7 +18,6 @@ from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
-from optillm.agent import agent_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # OpenAI API configuration
 API_KEY = os.environ.get("OPENAI_API_KEY")
-client = OpenAI(api_key=API_KEY)
 
 # Mock OpenAI client for testing purposes
 class MockOpenAIClient:
@@ -49,7 +47,6 @@ APPROACHES = {
     'cot_reflection': cot_reflection,
     'plansearch': plansearch,
     'leap': leap,
-    'agent': agent_approach,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
@@ -93,12 +90,15 @@ def run_test_case(test_case: Dict, approaches: List[str], client, model: str) ->
         'results': results
     }
 
-def run_tests(test_cases: List[Dict], approaches: List[str], client, model: str) -> List[Dict]:
+def run_tests(test_cases: List[Dict], approaches: List[str], client, model: str, single_test_name: str = None) -> List[Dict]:
     results = []
     for test_case in test_cases:
-        result = run_test_case(test_case, approaches, client, model)
-        results.append(result)
-        logger.info(f"Completed test case: {test_case['name']}")
+        if single_test_name is None or test_case['name'] == single_test_name:
+            result = run_test_case(test_case, approaches, client, model)
+            results.append(result)
+            logger.info(f"Completed test case: {test_case['name']}")
+        if single_test_name and test_case['name'] == single_test_name:
+            break
     return results
 
 def print_summary(results: List[Dict]):
@@ -116,10 +116,18 @@ def main():
     parser.add_argument("--test_cases", type=str, default="test_cases.json", help="Path to test cases JSON file")
     parser.add_argument("--approaches", nargs='+', default=list(APPROACHES.keys()), help="Approaches to test")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model to use for testing")
+    parser.add_argument("--base-url", type=str, default=None, help="The base_url for the OpenAI API compatible endpoint")
+    parser.add_argument("--single-test", type=str, default=None, help="Name of a single test case to run")
     args = parser.parse_args()
 
     test_cases = load_test_cases(args.test_cases)
-    results = run_tests(test_cases, args.approaches, client, args.model)
+
+    if args.base_url:
+        client = OpenAI(api_key=API_KEY, base_url=args.base_url)
+    else:
+        client = OpenAI(api_key=API_KEY)
+
+    results = run_tests(test_cases, args.approaches, client, args.model, args.single_test)
     print_summary(results)
 
     # Optionally, save detailed results to a file

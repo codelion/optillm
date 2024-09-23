@@ -23,5 +23,10 @@
     "name": "r/LocalLLaMA",
     "system_prompt": "",
     "query" : "I have a dish of potatoes. The following statements are true: No potatoes of mine, that are new, have >been boiled. All my potatoes in this dish are fit to eat. No unboiled potatoes of mine are fit to eat. Are there any new potatoes in this dish?"
+  },
+  {
+    "name" : "reddit",
+    "system_prompt": "",
+    "query" : "There are 24 volunteers. Over the next 3 weeks, each volunteer is assigned to a different task. There are 8 tasks. Each week, the volunteers switch tasks. Each task has 3 volunteers assigned to it. Volunteers cannot be assigned to the same task more than once, and volunteers cannot share the same task more than once."
   }
 ]

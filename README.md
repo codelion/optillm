@@ -3,7 +3,6 @@
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
 
 ## Patchwork with optillm
 
@@ -58,6 +57,22 @@ python optillm.py
  * Running on http://192.168.10.48:8000
 2024-09-06 07:57:14,212 - INFO - Press CTRL+C to quit
 ```
+
+### Starting the optillm proxy for a local server (e.g. llama.cpp)
+
+- Set the `OPENAI_API_KEY` env variable to a placeholder value
+  - e.g. `export OPENAI_API_KEY="no_key"`
+- Run `./llama-server -c 4096 -m path_to_model` to start the server with the specified model and a context length of 4096 tokens
+- Run `python3 optillm.py --base_url base_url` to start the proxy
+  - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
+
+> [!WARNING]
+> Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
+> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, and `z3`.
+> In order to use other approaches, consider using an alternative compatible server such as [ollama](https://github.com/ollama/ollama).
+
+> [!NOTE]
+> You'll later need to specify a model name in the OpenAI client configuration. Since llama-server was started with a single model, you can choose any name you want.
 
 ## Usage
 
@@ -115,7 +130,6 @@ or your own code where you want to use the results from optillm. You can use it 
 
 | Technique               | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Agent                   | `agent`            | Determines which of the below approaches to take and then combines the results                 |
 | Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
 | Best of N Sampling      | `bon`              | Generates multiple responses and selects the best one                                          |
 | Mixture of Agents       | `moa`              | Combines responses from multiple critiques                                                     |
@@ -127,6 +141,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | CoT with Reflection     | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch              | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
+| ReRead                  | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
 
 ## Available Parameters
 
@@ -196,6 +211,7 @@ Authorization: Bearer your_secret_api_key
 
 ## References
 
+- [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
 - [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
 - [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171)
