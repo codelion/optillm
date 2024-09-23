@@ -212,6 +212,7 @@ Authorization: Bearer your_secret_api_key
 
 ## References
 
+- [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200)
 - [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
 - [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
