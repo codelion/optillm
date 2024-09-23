@@ -3,6 +3,7 @@
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
 
 ## Patchwork with optillm
 
@@ -142,6 +143,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | PlanSearch              | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
 | ReRead                  | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
+| CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 
 ## Available Parameters
 
@@ -211,6 +213,7 @@ Authorization: Bearer your_secret_api_key
 
 ## References
 
+- [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200)
 - [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
 - [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733)
