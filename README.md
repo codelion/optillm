@@ -143,6 +143,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | PlanSearch              | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
 | ReRead                  | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
+| CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 
 ## Available Parameters
 
