@@ -1,14 +1,14 @@
 # optillm
 
-optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
+optillm is both a library, and an OpenAI API-compatible optimizing inference proxy.  These implement several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
 
-## Patchwork with optillm
+## Patchwork with optillm-proxy
 
-Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
+Since `optillm-proxy` is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used `optillm-proxy` with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
+called `patchflows`. We saw huge performance gains across all the supported patchflows as shown below when using the mixture of agents approach (moa).
 
 ![Results showing optillm mixture of agents approach used with patchflows](./media/moa-patchwork-results.png)
 
@@ -30,24 +30,29 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## Installation
 
-Just clone the repository with `git` and use `pip install` to setup the dependencies.
+### User Installation
 
-```bash
-git clone https://github.com/codelion/optillm.git
-cd optillm
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+1. Download the `*.whl` file for the latest release from github.
+2. Install it with `pipx install optillm_file.whl`.
+3. You can now run the command `optillm-proxy` per instructions under **Usage**, below.
+
+### Developer Installation
+
+1. Clone the repository with `git`.
+2. Run `poetry install` in the cloned directory.
+3. You can now run `optillm-proxy` per instructions under **Usage**, below.
+
+
+## Usage
 
 Set up the `OPENAI_API_KEY` environment variable (for OpenAI) 
 or the `AZURE_OPENAI_API_KEY`, `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables (for Azure OpenAI)
 or the `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables and login using `az login` for Azure OpenAI with managed identity (see [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity)).
 
-You can then run the optillm proxy as follows.
+You can then run `optillm-proxy` as follows:
 
 ```bash
-python optillm.py
+$ optillm-proxy
 2024-09-06 07:57:14,191 - INFO - Starting server with approach: auto
 2024-09-06 07:57:14,191 - INFO - Server configuration: {'approach': 'auto', 'mcts_simulations': 2, 'mcts_exploration': 0.2, 'mcts_depth': 1, 'best_of_n': 3, 'model': 'gpt-4o-mini', 'rstar_max_depth': 3, 'rstar_num_rollouts': 5, 'rstar_c': 1.4, 'base_url': ''}
  * Serving Flask app 'optillm'
@@ -68,14 +73,15 @@ python optillm.py
   - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
 
 > [!WARNING]
-> Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
+> Note that the `llama.cpp` `llama-server` command currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
 > `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, and `z3`.
 > In order to use other approaches, consider using an alternative compatible server such as [ollama](https://github.com/ollama/ollama).
 
 > [!NOTE]
 > You'll later need to specify a model name in the OpenAI client configuration. Since llama-server was started with a single model, you can choose any name you want.
 
-## Usage
+
+## Calling optillm-proxy from Python client code
 
 Once the proxy is running, you can use it as a drop in replacement for an OpenAI client by setting the `base_url` as `http://localhost:8000/v1`.
 
@@ -100,6 +106,7 @@ response = client.chat.completions.create(
 
 print(response)
 ```
+
 The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key. You can control the technique you use for optimization by prepending the slug to the model name `{slug}-model-name`. E.g. in the above code we are using `moa` or mixture of agents as the optimization approach. In the proxy logs you will see the following showing the `moa` is been used with the base model as `gpt-4o-mini`. 
 
 ```bash
@@ -113,7 +120,7 @@ The code above applies to both OpenAI and Azure OpenAI, just remember to populat
 Please note that the naming convention described above for the `model` attribute works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
 
 > [!TIP]
-> optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
+> `optillm-proxy` is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
 the same OpenAI API compatible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
 doesn't have an OpenAI API compatible endpoint (like Google or Anthropic) you can use [LiteLLM proxy server](https://docs.litellm.ai/docs/proxy/quick_start) that supports most LLMs.
 
