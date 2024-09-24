@@ -6,12 +6,119 @@ import re
 import contextlib
 import logging
 import ast
+import math
+import itertools
+from fractions import Fraction
+import threading
+import ctypes
+import multiprocessing
+import traceback
+import sys
 
 class TimeoutException(Exception):
     pass
 
-def timeout_handler(signum, frame):
-    raise TimeoutException("Execution timed out")
+def prepare_safe_globals():
+    safe_globals = {
+        'print': print,
+        '__builtins__': {
+            'True': True,
+            'False': False,
+            'None': None,
+            'abs': abs,
+            'float': float,
+            'int': int,
+            'len': len,
+            'max': max,
+            'min': min,
+            'round': round,
+            'sum': sum,
+            'complex': complex,
+        }
+    }
+    
+    # Add common math functions
+    safe_globals.update({
+        'log': math.log,
+        'log2': math.log2,
+        'sqrt': math.sqrt,
+        'exp': math.exp,
+        'sin': math.sin,
+        'cos': math.cos,
+        'tan': math.tan,
+        'pi': math.pi,
+        'e': math.e,
+    })
+
+    # Add complex number support
+    safe_globals['I'] = complex(0, 1)
+    safe_globals['Complex'] = complex
+
+    return safe_globals
+
+def execute_code_in_process(code: str):
+    import z3
+    import math
+    import itertools
+    from fractions import Fraction
+
+    safe_globals = prepare_safe_globals()
+    
+    # Add Z3 specific functions
+    z3_whitelist = set(dir(z3))
+    safe_globals.update({name: getattr(z3, name) for name in z3_whitelist})
+
+    # Ensure key Z3 components are available
+    safe_globals.update({
+        'z3': z3,
+        'Solver': z3.Solver,
+        'solver': z3.Solver,
+        'Optimize': z3.Optimize,
+        'sat': z3.sat,
+        'unsat': z3.unsat,
+        'unknown': z3.unknown,
+        'Real': z3.Real,
+        'Int': z3.Int,
+        'Bool': z3.Bool,
+        'And': z3.And,
+        'Or': z3.Or,
+        'Not': z3.Not,
+        'Implies': z3.Implies,
+        'If': z3.If,
+        'Sum': z3.Sum,
+        'ForAll': z3.ForAll,
+        'Exists': z3.Exists,
+        'model': z3.Model,
+    })
+    
+    # Add custom functions
+    def as_numerical(x):
+        if z3.is_expr(x):
+            if z3.is_int_value(x) or z3.is_rational_value(x):
+                return float(x.as_decimal(20))
+            elif z3.is_algebraic_value(x):
+                return x.approx(20)
+        return float(x)
+
+    safe_globals['as_numerical'] = as_numerical
+
+    def Mod(x, y):
+        return x % y
+
+    safe_globals['Mod'] = Mod
+
+    def Rational(numerator, denominator=1):
+        return z3.Real(str(Fraction(numerator, denominator)))
+
+    safe_globals['Rational'] = Rational
+
+    output_buffer = io.StringIO()
+    with contextlib.redirect_stdout(output_buffer):
+        try:
+            exec(code, safe_globals, {})
+        except Exception:
+            return ("error", traceback.format_exc())
+    return ("success", output_buffer.getvalue())
 
 class Z3SolverSystem:
     def __init__(self, system_prompt: str, client, model: str, timeout: int = 30):
@@ -19,6 +126,7 @@ class Z3SolverSystem:
         self.model = model
         self.client = client
         self.timeout = timeout
+        self.z3_completion_tokens = 0
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def process_query(self, query: str) -> str:
@@ -26,17 +134,17 @@ class Z3SolverSystem:
             analysis = self.analyze_query(query)
             # print("Analysis: "+ analysis)
             if "SOLVER_CAN_BE_APPLIED: True" not in analysis:
-                return self.standard_llm_inference(query)
+                return self.standard_llm_inference(query) , self.z3_completion_tokens
             
             formulation = self.extract_and_validate_expressions(analysis)
             # print("Formulation: "+ formulation)
             solver_result = self.solve_with_z3(formulation)
             # print(solver_result)
-            
-            return self.generate_response(query, analysis, solver_result)
+             
+            return self.generate_response(query, analysis, solver_result), self.z3_completion_tokens
         except Exception as e:
             logging.error(f"An error occurred while processing the query with Z3, returning standard llm inference results: {str(e)}")
-            return self.standard_llm_inference(query)
+            return self.standard_llm_inference(query), self.z3_completion_tokens
 
     def analyze_query(self, query: str) -> str:
         analysis_prompt = f"""Analyze the given query and determine if it can be solved using Z3:
@@ -45,7 +153,8 @@ class Z3SolverSystem:
 2. Determine the problem type (e.g., SAT, optimization).
 3. Decide if Z3 is suitable.
 
-If Z3 can be applied, provide Python code using Z3 to solve the problem.
+If Z3 can be applied, provide Python code using Z3 to solve the problem. Make sure you define any additional methods you need for solving the problem.
+The code will be executed in an environment with only Z3 available, so do not include any other libraries or modules.
 
 Query: {query}
 
@@ -71,6 +180,7 @@ Analysis:
             n=1,
             temperature=0.1
         )
+        self.z3_completion_tokens  = analysis_response.usage.completion_tokens
         return analysis_response.choices[0].message.content
 
     def generate_response(self, query: str, analysis: str, solver_result: Dict[str, Any]) -> str:
@@ -98,6 +208,7 @@ Response:
             n=1,
             temperature=0.1
         )
+        self.z3_completion_tokens  = response.usage.completion_tokens
         return response.choices[0].message.content
 
     def standard_llm_inference(self, query: str) -> str:
@@ -111,6 +222,7 @@ Response:
             n=1,
             temperature=0.1
         )
+        self.z3_completion_tokens  = response.usage.completion_tokens
         return response.choices[0].message.content
 
     def extract_and_validate_expressions(self, analysis: str) -> str:
@@ -148,12 +260,14 @@ Provide corrected Z3 code:
                 n=1,
                 temperature=0.1
             )
+            self.z3_completion_tokens  = response.usage.completion_tokens
             formulation = self.extract_and_validate_expressions(response.choices[0].message.content)
 
         return {"status": "failed", "output": "Failed to solve after multiple attempts."}
 
     def execute_solver_code(self, code: str) -> str:
         logging.info("Executing Z3 solver code")
+        logging.info(f"Code: {code}")
         
         # Define a whitelist of allowed Z3 names
         z3_whitelist = set(dir(z3))
@@ -169,16 +283,19 @@ Provide corrected Z3 code:
         for node in ast.walk(parsed_ast):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name != 'z3':
+                    if alias.name not in ['z3', 'math', 'fractions', 'itertools']:
                         logging.warning(f"Unauthorized import: {alias.name}")
                         return f"Error: Unauthorized import: {alias.name}"
-            elif isinstance(node, ast.ImportFrom) and node.module != 'z3':
-                    logging.warning(f"Unauthorized import from: {node.module}")
-                    return f"Error: Unauthorized import from: {node.module}"
+            elif isinstance(node, ast.ImportFrom) and node.module not in ['z3', 'math', 'fractions', 'itertools']:
+                logging.warning(f"Unauthorized import from: {node.module}")
+                return f"Error: Unauthorized import from: {node.module}"
 
         # Prepare a restricted global namespace
         safe_globals = {
             'z3': z3,
+            'math': math,
+            'itertools': itertools,
+            'Fraction': Fraction,
             'print': print,  # Allow print for output
             '__builtins__': {
                 'True': True,
@@ -192,19 +309,67 @@ Provide corrected Z3 code:
                 'min': min,
                 'round': round,
                 'sum': sum,
+                'complex': complex,
             }
         }
         safe_globals.update({name: getattr(z3, name) for name in z3_whitelist})
+        
+        # Add common math functions
+        safe_globals.update({
+            'log': math.log,
+            'sqrt': math.sqrt,
+            'exp': math.exp,
+            'sin': math.sin,
+            'cos': math.cos,
+            'tan': math.tan,
+            'pi': math.pi,
+            'e': math.e,
+        })
 
-        # Execute the code
-        output_buffer = io.StringIO()
-        with contextlib.redirect_stdout(output_buffer):
+        # Add complex number support
+        safe_globals['I'] = complex(0, 1)
+        safe_globals['Complex'] = complex
+
+        # Add Z3 specific types and functions
+        safe_globals['Optimize'] = z3.Optimize
+
+        # Add custom functions for Z3 specific operations
+        def as_numerical(x):
+            if z3.is_expr(x):
+                if z3.is_int_value(x) or z3.is_rational_value(x):
+                    return float(x.as_decimal(20))
+                elif z3.is_algebraic_value(x):
+                    return x.approx(20)
+            return float(x)
+
+        safe_globals['as_numerical'] = as_numerical
+
+        # Add a custom Mod function that uses Z3's modulo operator
+        def Mod(x, y):
+            return x % y
+
+        safe_globals['Mod'] = Mod
+
+        # Add a custom Rational function to create rational numbers in Z3
+        def Rational(numerator, denominator=1):
+            return z3.Real(str(Fraction(numerator, denominator)))
+
+        safe_globals['Rational'] = Rational
+
+         # Execute the code in a separate process
+        ctx = multiprocessing.get_context('spawn')
+        with ctx.Pool(1) as pool:
+            async_result = pool.apply_async(execute_code_in_process, (code,))
             try:
-                exec(code, safe_globals, {})
-            except Exception as e:
-                logging.error(f"Execution error: {str(e)}")
-                return f"Error: Execution error: {str(e)}"
+                status, result = async_result.get(timeout=self.timeout)
+            except multiprocessing.TimeoutError:
+                pool.terminate()
+                logging.error("Execution timed out")
+                return "Error: Execution timed out"
 
-        executed_output = output_buffer.getvalue()
+        if status == "error":
+            logging.error(f"Execution error: {result}")
+            return f"Error: {result}"
+
         logging.info("Z3 solver code executed successfully")
-        return executed_output
+        return result

@@ -3,6 +3,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: str, n: int = 3) -> str:
+    bon_completion_tokens = 0
+
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": initial_query}]
     
@@ -16,6 +18,7 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         temperature=1
     )
     completions = [choice.message.content for choice in response.choices]
+    bon_completion_tokens += response.usage.completion_tokens
     
     # Rate the completions
     rating_messages = messages.copy()
@@ -33,7 +36,7 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
             n=1,
             temperature=0.1
         )
-        
+        bon_completion_tokens += rating_response.usage.completion_tokens
         try:
             rating = float(rating_response.choices[0].message.content.strip())
             ratings.append(rating)
@@ -43,4 +46,4 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         rating_messages = rating_messages[:-2]
     
     best_index = ratings.index(max(ratings))
-    return completions[best_index]
+    return completions[best_index], bon_completion_tokens

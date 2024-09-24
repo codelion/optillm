@@ -123,37 +123,38 @@ def proxy():
 
 
     logger.info(f'Using approach {approach}, with {model}')
+    completion_tokens = 0
 
     try:
         if approach == 'mcts':
-            final_response = chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
+            final_response, completion_tokens = chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
                                             server_config['mcts_exploration'], server_config['mcts_depth'])
         elif approach == 'bon':
-            final_response = best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
+            final_response, completion_tokens = best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
         elif approach == 'moa':
-            final_response = mixture_of_agents(system_prompt, initial_query, client, model)
+            final_response, completion_tokens = mixture_of_agents(system_prompt, initial_query, client, model)
         elif approach == 'rto':
-            final_response = round_trip_optimization(system_prompt, initial_query, client, model)
+            final_response, completion_tokens = round_trip_optimization(system_prompt, initial_query, client, model)
         elif approach == 'z3':
             z3_solver = Z3SolverSystem(system_prompt, client, model)
-            final_response = z3_solver.process_query(initial_query)
+            final_response, completion_tokens = z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
-            final_response = advanced_self_consistency_approach(system_prompt, initial_query, client, model)
+            final_response, completion_tokens = advanced_self_consistency_approach(system_prompt, initial_query, client, model)
         elif approach == "pvg":
-            final_response = inference_time_pv_game(system_prompt, initial_query, client, model)
+            final_response, completion_tokens = inference_time_pv_game(system_prompt, initial_query, client, model)
         elif approach == "rstar":
             rstar = RStar(system_prompt, client, model,
                           max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
                           c=server_config['rstar_c'])
-            final_response = rstar.solve(initial_query)
+            final_response, completion_tokens = rstar.solve(initial_query)
         elif approach == "cot_reflection":
-            final_response = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
+            final_response, completion_tokens = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
         elif approach == 'plansearch':
-            final_response = plansearch(system_prompt, initial_query, client, model, n=n)
+            final_response, completion_tokens = plansearch(system_prompt, initial_query, client, model, n=n)
         elif approach == 'leap':
-            final_response = leap(system_prompt, initial_query, client, model)
+            final_response, completion_tokens = leap(system_prompt, initial_query, client, model)
         elif approach == 're2':
-            final_response = re2_approach(system_prompt, initial_query, client, model, n=n)
+            final_response, completion_tokens = re2_approach(system_prompt, initial_query, client, model, n=n)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
@@ -162,7 +163,10 @@ def proxy():
 
     response_data = {
         'model': model,
-        'choices': []
+        'choices': [],
+        'usage': {
+            'completion_tokens': completion_tokens,
+        }
     }
 
     if isinstance(final_response, list):

@@ -18,6 +18,7 @@ from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
+from optillm.reread import re2_approach
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -47,6 +48,7 @@ APPROACHES = {
     'cot_reflection': cot_reflection,
     'plansearch': plansearch,
     'leap': leap,
+    're2': re2_approach,
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:

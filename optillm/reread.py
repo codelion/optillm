@@ -17,6 +17,7 @@ def re2_approach(system_prompt, initial_query, client, model, n=1):
     str or list: The generated response(s) from the model.
     """
     logger.info("Using RE2 approach for query processing")
+    re2_completion_tokens = 0
     
     # Construct the RE2 prompt
     re2_prompt = f"{initial_query}\nRead the question again: {initial_query}"
@@ -32,11 +33,11 @@ def re2_approach(system_prompt, initial_query, client, model, n=1):
             messages=messages,
             n=n
         )
-        
+        re2_completion_tokens += response.usage.completion_tokens
         if n == 1:
-            return response.choices[0].message.content.strip()
+            return response.choices[0].message.content.strip(), re2_completion_tokens
         else:
-            return [choice.message.content.strip() for choice in response.choices]
+            return [choice.message.content.strip() for choice in response.choices], re2_completion_tokens
     
     except Exception as e:
         logger.error(f"Error in RE2 approach: {str(e)}")

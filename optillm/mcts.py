@@ -32,6 +32,7 @@ class MCTS:
         self.node_labels = {}
         self.client = client
         self.model = model
+        self.completion_tokens = 0
 
     def select(self, node: MCTSNode) -> MCTSNode:
         logger.debug(f"Selecting node. Current node visits: {node.visits}, value: {node.value}")
@@ -118,6 +119,7 @@ class MCTS:
             temperature=1
         )
         completions = [choice.message.content.strip() for choice in response.choices]
+        self.completion_tokens += response.usage.completion_tokens
         logger.info(f"Received {len(completions)} completions from the model")
         return completions
 
@@ -140,6 +142,7 @@ class MCTS:
         )
         
         next_query = response.choices[0].message.content
+        self.completion_tokens += response.usage.completion_tokens
         logger.info(f"Generated next user query: {next_query}")
         return DialogueState(state.system_prompt, new_history, next_query)
 
@@ -161,7 +164,7 @@ class MCTS:
             n=1,
             temperature=0.1
         )
-        
+        self.completion_tokens += response.usage.completion_tokens
         try:
             score = float(response.choices[0].message.content.strip())
             score = max(0, min(score, 1))  # Ensure the score is between 0 and 1
@@ -181,4 +184,4 @@ def chat_with_mcts(system_prompt: str, initial_query: str, client, model: str, n
     final_state = mcts.search(initial_state, num_simulations)
     response = final_state.conversation_history[-1]['content'] if final_state.conversation_history else ""
     logger.info(f"MCTS chat complete. Final response: {response[:100]}...")
-    return response
+    return response, mcts.completion_tokens

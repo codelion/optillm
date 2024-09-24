@@ -14,6 +14,7 @@ class LEAP:
         self.model = model
         self.low_level_principles = []
         self.high_level_principles = []
+        self.leap_completion_tokens = 0
 
     def extract_output(self, text: str) -> str:
         match = re.search(r'<output>(.*?)(?:</output>|$)', text, re.DOTALL)
@@ -46,6 +47,7 @@ class LEAP:
                 """}
             ]
         )
+        self.leap_completion_tokens += response.usage.completion_tokens
         examples_str = self.extract_output(response.choices[0].message.content)
         logger.debug(f"Extracted examples: {examples_str}")
         examples = []
@@ -80,6 +82,7 @@ class LEAP:
                 ],
                 temperature=0.7,
             )
+            self.leap_completion_tokens += response.usage.completion_tokens
             generated_reasoning = response.choices[0].message.content
             generated_answer = self.extract_output(generated_reasoning)
             if generated_answer != correct_answer:
@@ -110,6 +113,7 @@ class LEAP:
                     """}
                 ]
             )
+            self.leap_completion_tokens += response.usage.completion_tokens
             self.low_level_principles.append(self.extract_output(response.choices[0].message.content))
         return self.low_level_principles
 
@@ -134,6 +138,7 @@ class LEAP:
                 """}
             ]
         )
+        self.leap_completion_tokens += response.usage.completion_tokens
         self.high_level_principles = self.extract_output(response.choices[0].message.content).split("\n")
         return self.high_level_principles
 
@@ -154,6 +159,7 @@ class LEAP:
                 """}
             ]
         )
+        self.leap_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content
 
     def solve(self, initial_query: str) -> str:
@@ -171,4 +177,4 @@ class LEAP:
 
 def leap(system_prompt: str, initial_query: str, client, model: str) -> str:
     leap_solver = LEAP(system_prompt, client, model)
-    return leap_solver.solve(initial_query)
+    return leap_solver.solve(initial_query), leap_solver.leap_completion_tokens
