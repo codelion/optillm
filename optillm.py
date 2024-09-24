@@ -30,7 +30,7 @@ app = Flask(__name__)
 if os.environ.get("OPENAI_API_KEY") != None:
     API_KEY = os.environ.get("OPENAI_API_KEY")
     default_client = OpenAI(api_key=API_KEY)
-else:
+elif os.environ.get("AZURE_OPENAI_API_KEY") != None:
     API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
     API_VERSION = os.environ.get("AZURE_API_VERSION")
     AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
@@ -49,6 +49,8 @@ else:
             azure_endpoint=AZURE_ENDPOINT,
             azure_ad_token_provider=token_provider
         )
+else:
+    API_KEY = "optillm_no_key"
 
 # Server configuration
 server_config = {
@@ -63,7 +65,7 @@ server_config = {
     'rstar_c': 1.4,
     'n': 1,
     'base_url': '',
-    'api_key': '',
+    'optillm_api_key': '',
     'return_full_response': False,
     'port': 8000,
 }
@@ -75,7 +77,7 @@ known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg"
 # Optional API key configuration to secure the proxy
 @app.before_request
 def check_api_key():
-    if server_config['api_key']:
+    if server_config['optillm_api_key']:
         if request.path == "/health":
             return
 
@@ -84,7 +86,7 @@ def check_api_key():
             return jsonify({"error": "Invalid Authorization header. Expected format: 'Authorization: Bearer YOUR_API_KEY'"}), 401
 
         client_key = auth_header.split('Bearer ', 1)[1].strip()
-        if not secrets.compare_digest(client_key, server_config['api_key']):
+        if not secrets.compare_digest(client_key, server_config['optillm_api_key']):
             return jsonify({"error": "Invalid API key"}), 401
 
 @app.route('/v1/chat/completions', methods=['POST'])
@@ -217,7 +219,7 @@ def parse_args():
 
     # Define arguments and their corresponding environment variables
     args_env = [
-        ("--api-key", "OPTILLM_API_KEY", str, "", "Optional API key for client authentication to optillm"),
+        ("--optillm-api-key", "OPTILLM_API_KEY", str, "", "Optional API key for client authentication to optillm"),
         ("--approach", "OPTILLM_APPROACH", str, "auto", "Inference approach to use", known_approaches),
         ("--simulations", "OPTILLM_SIMULATIONS", int, 2, "Number of MCTS simulations"),
         ("--exploration", "OPTILLM_EXPLORATION", float, 0.2, "Exploration weight for MCTS"),
@@ -268,6 +270,9 @@ def parse_args():
 def main():
     global server_config
     args = parse_args()
+    if args.base_url == "" and API_KEY == "optillm_no_key":
+        logger.error(f"Please set the OPENAI_API_KEY environment variable before using the proxy")
+        exit(1)
 
     # Update server_config with all argument values
     server_config.update(vars(args))
@@ -275,8 +280,8 @@ def main():
     port = server_config['port']
     logger.info(f"Starting server with approach: {server_config['approach']}")
     server_config_clean = server_config.copy()
-    if server_config_clean['api_key']:
-        server_config_clean['api_key'] = '[REDACTED]'
+    if server_config_clean['optillm_api_key']:
+        server_config_clean['optillm_api_key'] = '[REDACTED]'
     logger.info(f"Server configuration: {server_config_clean}")
     app.run(host='0.0.0.0', port=port)
 
