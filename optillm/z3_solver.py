@@ -1,4 +1,3 @@
-import signal
 from typing import Dict, Any
 from z3 import *
 import io
@@ -7,13 +6,8 @@ import contextlib
 import logging
 import ast
 import math
-import itertools
-from fractions import Fraction
-import threading
-import ctypes
 import multiprocessing
 import traceback
-import sys
 
 class TimeoutException(Exception):
     pass
@@ -236,20 +230,27 @@ Response:
             output = self.execute_solver_code(formulation)
             if "Error:" not in output:
                 return {"status": "success", "output": output}
-            
-            error_prompt = f"""Fix the Z3 code that resulted in an error:
+        
+            error_prompt = f"""Fix the Z3 code that resulted in an error. Follow these steps:
 
-Code:
-{formulation}
+    1. Review the original code and the error message carefully.
+    2. Analyze the error and identify its root cause.
+    3. Think through the necessary changes to fix the error.
+    4. Generate a corrected version of the Z3 code.
 
-Error:
-{output}
+    Original Code:
+    {formulation}
 
-Provide corrected Z3 code:
-```python
-# Corrected Z3 code here
-```
-"""
+    Error Message:
+    {output}
+
+    Step-by-Step Analysis:
+    [Provide your step-by-step analysis here]
+
+    Corrected Z3 Code:
+    ```python
+    # Corrected Z3 code here
+    """
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -269,94 +270,14 @@ Provide corrected Z3 code:
         logging.info("Executing Z3 solver code")
         logging.info(f"Code: {code}")
         
-        # Define a whitelist of allowed Z3 names
-        z3_whitelist = set(dir(z3))
-        
         # Parse the code into an AST
         try:
-            parsed_ast = ast.parse(code)
+            _ = ast.parse(code)
         except SyntaxError as e:
             logging.error(f"Syntax error in provided code: {e}")
             return f"Error: Syntax error: {e}"
 
-        # Check for any potentially unsafe operations
-        for node in ast.walk(parsed_ast):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name not in ['z3', 'math', 'fractions', 'itertools']:
-                        logging.warning(f"Unauthorized import: {alias.name}")
-                        return f"Error: Unauthorized import: {alias.name}"
-            elif isinstance(node, ast.ImportFrom) and node.module not in ['z3', 'math', 'fractions', 'itertools']:
-                logging.warning(f"Unauthorized import from: {node.module}")
-                return f"Error: Unauthorized import from: {node.module}"
-
-        # Prepare a restricted global namespace
-        safe_globals = {
-            'z3': z3,
-            'math': math,
-            'itertools': itertools,
-            'Fraction': Fraction,
-            'print': print,  # Allow print for output
-            '__builtins__': {
-                'True': True,
-                'False': False,
-                'None': None,
-                'abs': abs,
-                'float': float,
-                'int': int,
-                'len': len,
-                'max': max,
-                'min': min,
-                'round': round,
-                'sum': sum,
-                'complex': complex,
-            }
-        }
-        safe_globals.update({name: getattr(z3, name) for name in z3_whitelist})
-        
-        # Add common math functions
-        safe_globals.update({
-            'log': math.log,
-            'sqrt': math.sqrt,
-            'exp': math.exp,
-            'sin': math.sin,
-            'cos': math.cos,
-            'tan': math.tan,
-            'pi': math.pi,
-            'e': math.e,
-        })
-
-        # Add complex number support
-        safe_globals['I'] = complex(0, 1)
-        safe_globals['Complex'] = complex
-
-        # Add Z3 specific types and functions
-        safe_globals['Optimize'] = z3.Optimize
-
-        # Add custom functions for Z3 specific operations
-        def as_numerical(x):
-            if z3.is_expr(x):
-                if z3.is_int_value(x) or z3.is_rational_value(x):
-                    return float(x.as_decimal(20))
-                elif z3.is_algebraic_value(x):
-                    return x.approx(20)
-            return float(x)
-
-        safe_globals['as_numerical'] = as_numerical
-
-        # Add a custom Mod function that uses Z3's modulo operator
-        def Mod(x, y):
-            return x % y
-
-        safe_globals['Mod'] = Mod
-
-        # Add a custom Rational function to create rational numbers in Z3
-        def Rational(numerator, denominator=1):
-            return z3.Real(str(Fraction(numerator, denominator)))
-
-        safe_globals['Rational'] = Rational
-
-         # Execute the code in a separate process
+        # Execute the code in a separate process
         ctx = multiprocessing.get_context('spawn')
         with ctx.Pool(1) as pool:
             async_result = pool.apply_async(execute_code_in_process, (code,))
