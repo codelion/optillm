@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str) -> str:
+    moa_completion_tokens = 0
     completions = []
 
     response = client.chat.completions.create(
@@ -16,6 +17,7 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         temperature=1
     )
     completions = [choice.message.content for choice in response.choices]
+    moa_completion_tokens += response.usage.completion_tokens
     
     critique_prompt = f"""
     Original query: {initial_query}
@@ -45,6 +47,7 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         temperature=0.1
     )
     critiques = critique_response.choices[0].message.content
+    moa_completion_tokens += critique_response.usage.completion_tokens
     
     final_prompt = f"""
     Original query: {initial_query}
@@ -76,5 +79,5 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         n=1,
         temperature=0.1
     )
-    
-    return final_response.choices[0].message.content
+    moa_completion_tokens += final_response.usage.completion_tokens
+    return final_response.choices[0].message.content, moa_completion_tokens

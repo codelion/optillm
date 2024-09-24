@@ -8,6 +8,7 @@ class PlanSearch:
         self.system_prompt = system_prompt
         self.client = client
         self.model = model
+        self.plansearch_completion_tokens = 0
 
     def generate_observations(self, problem: str, num_observations: int = 3) -> List[str]:
         prompt = f"""You are an expert Python programmer. You will be given a competitive programming question
@@ -28,7 +29,7 @@ Please provide {num_observations} observations."""
                 {"role": "user", "content": prompt}
             ]
         )
-        
+        self.plansearch_completion_tokens += response.usage.completion_tokens
         observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in observations if obs.strip()]
 
@@ -55,7 +56,7 @@ Please provide {num_new_observations} new observations derived from the existing
                 {"role": "user", "content": prompt}
             ]
         )
-        
+        self.plansearch_completion_tokens += response.usage.completion_tokens
         new_observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in new_observations if obs.strip()]
 
@@ -80,7 +81,7 @@ IS CRUCIAL."""
                 {"role": "user", "content": prompt}
             ]
         )
-        
+        self.plansearch_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content.strip()
 
     def implement_solution(self, problem: str, solution: str) -> str:
@@ -105,7 +106,7 @@ Please implement the solution in Python."""
                 {"role": "user", "content": prompt}
             ]
         )
-        
+        self.plansearch_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content.strip()
 
     def solve(self, problem: str, num_initial_observations: int = 3, num_derived_observations: int = 2) -> Tuple[str, str]:
@@ -134,4 +135,4 @@ Please implement the solution in Python."""
 
 def plansearch(system_prompt: str, initial_query: str, client, model: str, n: int = 1) -> List[str]:
     planner = PlanSearch(system_prompt, client, model)
-    return planner.solve_multiple(initial_query, n)
+    return planner.solve_multiple(initial_query, n), planner.plansearch_completion_tokens

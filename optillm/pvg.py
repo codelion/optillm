@@ -4,7 +4,10 @@ from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
+pvg_completion_tokens = 0
+
 def generate_solutions(client, system_prompt: str, query: str, model: str, num_solutions: int, is_sneaky: bool = False, temperature: float = 0.7) -> List[str]:
+    global pvg_completion_tokens
     role = "sneaky" if is_sneaky else "helpful"
     logger.info(f"Generating {num_solutions} {role} solutions")
     
@@ -34,11 +37,13 @@ def generate_solutions(client, system_prompt: str, query: str, model: str, num_s
         max_tokens=4096,
         temperature=temperature,
     )
+    pvg_completion_tokens += response.usage.completion_tokens
     solutions = [choice.message.content for choice in response.choices]
     logger.debug(f"Generated {role} solutions: {solutions}")
     return solutions
 
 def verify_solutions(client, system_prompt: str, initial_query: str, solutions: List[str], model: str) -> List[float]:
+    global pvg_completion_tokens
     logger.info(f"Verifying {len(solutions)} solutions")
     verify_prompt = f"""{system_prompt}
 You are a verifier tasked with evaluating the correctness and clarity of solutions to the given problem.
@@ -75,6 +80,7 @@ Ensure that the Score is a single number between 0 and 10, and the Explanation i
             max_tokens=1024,
             temperature=0.2,
         )
+        pvg_completion_tokens += response.usage.completion_tokens
         rating = response.choices[0].message.content
         logger.debug(f"Raw rating for solution {i+1}: {rating}")
 
@@ -130,6 +136,7 @@ def extract_answer(final_state: str) -> Tuple[str, float]:
     return "", 0.0
 
 def inference_time_pv_game(system_prompt: str, initial_query: str, client, model: str, num_rounds: int = 2, num_solutions: int = 3) -> str:
+    global pvg_completion_tokens
     logger.info(f"Starting inference-time PV game with {num_rounds} rounds and {num_solutions} solutions per round")
    
     best_solution = ""
@@ -178,9 +185,10 @@ def inference_time_pv_game(system_prompt: str, initial_query: str, client, model
                 max_tokens=1024,
                 temperature=0.5,
             )
+            pvg_completion_tokens += response.usage.completion_tokens
             initial_query = response.choices[0].message.content
             logger.debug(f"Refined query: {initial_query}")
 
     logger.info(f"Inference-time PV game completed. Best solution score: {best_score}")
 
-    return best_solution
+    return best_solution, pvg_completion_tokens
