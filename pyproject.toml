@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "optillm"
+version = "0.0.62"
+description = "Optimizing inference proxy for LLMs"
+authors = [
+	"Asankhaya Sharma <codelion@github.com>",
+	"TY <CTY-git@github.com>",
+	"Gauransh Mathur <GuranshMathur@github.com>",
+	"Pratham Jagga <prathamjagga@github.com>",
+	"whisarpit <whoisarpit@github.com>",
+	"manascb1344 <manascb1344@github.com>",
+	"Greyisheep <Greyisheep@github.com>",
+	"dsnum1 <dsnum1@github.com>",
+	"Lee Braiden <lee-b@github.com>",
+]
+license = "Apache 2.0"
+readme = "README.md"
+packages = [
+    { include="optillm", from="src" },
+]
+
+[tool.poetry.scripts]
+optillm-proxy = "optillm.proxy:main"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+numpy = "^2.1.1"
+networkx = "^3.3"
+openai = "^1.47.1"
+z3-solver = "^4.13.0.0"
+aiohttp = "^3.10.5"
+flask = "^3.0.3"
+torch = "^2.4.1"
+transformers = "^4.44.2"
+azure-identity = "^1.18.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
