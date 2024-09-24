@@ -10,7 +10,7 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
 called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
 
-![Results showing optillm mixture of agents approach used with patchflows](./media/moa-patchwork-results.png)
+![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
 
 ## SOTA results on benchmarks with optillm
 
@@ -26,7 +26,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
 
-![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./mediamedia/moa-results.png)
+![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
 
 ## Installation
 
@@ -119,7 +119,7 @@ doesn't have an OpenAI API compatible endpoint (like Google or Anthropic) you ca
 
 The following sequence diagram illustrates how the request and responses go through optillm. 
 
-![Sequance diagram showing optillm in use](./media/optillm-sequence-diagram.png)
+![Sequance diagram showing optillm in use](./optillm-sequence-diagram.png)
 
 In the diagram:
 - `A` is an existing tool (like [oobabooga](https://github.com/oobabooga/text-generation-webui/)), framework (like [patchwork](https://github.com/patched-codes/patchwork))
