@@ -114,8 +114,8 @@ Please note that the naming convention described above for the `model` attribute
 
 > [!TIP]
 > optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
-the same OpenAI API comptaible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
-doesn't have an OpenAI API comptaible endpoint (like Google or Anthropic) you can use [LiteLLM proxy server](https://docs.litellm.ai/docs/proxy/quick_start) that supports most LLMs.
+the same OpenAI API compatible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
+doesn't have an OpenAI API compatible endpoint (like Google or Anthropic) you can use [LiteLLM proxy server](https://docs.litellm.ai/docs/proxy/quick_start) that supports most LLMs.
 
 The following sequence diagram illustrates how the request and responses go through optillm. 
 
