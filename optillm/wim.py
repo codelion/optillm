@@ -1,17 +1,22 @@
 from collections import deque
 import tiktoken
+import re
 
 class WiMInfiniteContextAPI:
-    def __init__(self, system_prompt, client, model, max_context_tokens=8192, max_margins=50, chunk_size=2000):
+    def __init__(self, system_prompt, client, model, max_context_tokens=64000, max_margins=10, chunk_size=16000):
         self.model = model
         self.max_context_tokens = max_context_tokens
         self.max_margins = max_margins
         self.chunk_size = chunk_size
         self.context_buffer = deque()
         self.margins = deque(maxlen=max_margins)
-        self.tokenizer = tiktoken.encoding_for_model(model)
+        try:
+            self.tokenizer = tiktoken.encoding_for_model(model) 
+        except:
+            self.tokenizer = tiktoken.get_encoding("o200k_base")
         self.system_message = system_prompt
         self.client = client
+        self.win_completion_tokens = 0
 
     def count_tokens(self, text):
         return len(self.tokenizer.encode(text))
@@ -39,14 +44,27 @@ Example answers:
 - NO#No relevant context.
 """}
         ]
-        response = self.client.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model=self.model,
-            messages=messages
+            messages=messages,
+            max_tokens = 512
         )
-        return response.choices[0].message['content']
+        self.win_completion_tokens += response.usage.completion_tokens
+        return response.choices[0].message.content
 
     def classify_margin(self, margin):
         return margin.startswith("YES#")
+    
+    def extract_query(self, text):
+        # Split the text into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        # Check if the last sentence starts with "Query:"
+        if sentences[-1].startswith("Query:"):
+            return sentences[-1][6:].strip(), "".join(sentences[:-1])
+        
+        # If not, assume the last sentence is the query
+        return sentences[-1].strip(), "".join(sentences[:-1])
 
     def process_chunk(self, chunk, query):
         self.context_buffer.append(chunk)
@@ -77,11 +95,12 @@ Read again the note(s) and the provided content, take a deep breath and answer t
 {query}
 """}
         ]
-        response = self.client.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model=self.model,
             messages=messages
         )
-        return response.choices[0].message['content']
+        self.win_completion_tokens += response.usage.completion_tokens
+        return response.choices[0].message.content
 
     def run(self, text_stream, query):
         self.process_stream(text_stream, query)
@@ -91,17 +110,13 @@ Read again the note(s) and the provided content, take a deep breath and answer t
     def instruction(self):
         return "Answer the following question based on the provided context and margin notes:"
 
-# Usage
-def text_stream_generator(text, chunk_size):
-    for i in range(0, len(text), chunk_size):
-        yield text[i:i+chunk_size]
+    # Usage
+    def text_stream_generator(self, text):
+        for i in range(0, len(text), self.chunk_size):
+            yield text[i:i+self.chunk_size]
 
-api_key = "your-api-key-here"
-wim = WiMInfiniteContextAPI(api_key)
-
-text = "Very long text..."  # Your infinite context here
-query = "What is the main topic?"
-
-text_stream = text_stream_generator(text, wim.chunk_size)
-final_answer = wim.run(text_stream, query)
-print(final_answer)
+    def process_query(self, initial_query):
+        query, context = self.extract_query(initial_query)
+        text_stream = self.text_stream_generator(context)
+        final_answer = self.run(text_stream, query)
+        return final_answer, self.win_completion_tokens
