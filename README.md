@@ -69,7 +69,7 @@ python optillm.py
 
 > [!WARNING]
 > Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
-> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, and `z3`.
+> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`.
 > In order to use other approaches, consider using an alternative compatible server such as [ollama](https://github.com/ollama/ollama).
 
 > [!NOTE]
