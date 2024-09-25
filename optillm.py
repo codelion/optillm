@@ -4,6 +4,8 @@ import os
 import secrets
 from flask import Flask, request, jsonify
 from openai import AzureOpenAI, OpenAI
+from flask import Response
+import json
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -74,6 +76,39 @@ server_config = {
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
                     "cot_reflection", "plansearch", "leap", "re2"]
 
+def generate_streaming_response(final_response, model):
+    # Yield the final response
+    if isinstance(final_response, list):
+        for index, response in enumerate(final_response):
+            yield "data: " + json.dumps({
+                "choices": [{"delta": {"content": response}, "index": index, "finish_reason": "stop"}],
+                "model": model,
+            }) + "\n\n"
+    else:
+        yield "data: " + json.dumps({
+            "choices": [{"delta": {"content": final_response}, "index": 0, "finish_reason": "stop"}],
+            "model": model,
+        }) + "\n\n"
+
+    # Yield the final message to indicate the stream has ended
+    yield "data: [DONE]\n\n"
+
+def parse_conversation(messages):
+    system_prompt = ""
+    conversation = []
+    
+    for message in messages:
+        role = message['role']
+        content = message['content']
+        
+        if role == 'system':
+            system_prompt = content
+        elif role in ['user', 'assistant']:
+            conversation.append(f"{role.capitalize()}: {content}")
+    
+    initial_query = "\n".join(conversation)
+    return system_prompt, initial_query
+
 # Optional API key configuration to secure the proxy
 @app.before_request
 def check_api_key():
@@ -95,12 +130,12 @@ def proxy():
     data = request.get_json()
     logger.debug(f'Request data: {data}')
 
+    stream = data.get('stream', False)
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
     n = data.get('n', server_config['n'])
 
-    system_prompt = next((msg['content'] for msg in messages if msg['role'] == 'system'), "")
-    initial_query = next((msg['content'] for msg in messages if msg['role'] == 'user'), "")
+    system_prompt, initial_query = parse_conversation(messages)
 
     approach = server_config['approach']
     base_url = server_config['base_url']
@@ -160,34 +195,37 @@ def proxy():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-    response_data = {
-        'model': model,
-        'choices': [],
-        'usage': {
-            'completion_tokens': completion_tokens,
+    
+    if stream:
+        return Response(generate_streaming_response(final_response, model), content_type='text/event-stream')
+    else:
+        response_data = {
+            'model': model,
+            'choices': [],
+            'usage': {
+                'completion_tokens': completion_tokens,
+            }
         }
-    }
 
-    if isinstance(final_response, list):
-        for index, response in enumerate(final_response):
+        if isinstance(final_response, list):
+            for index, response in enumerate(final_response):
+                response_data['choices'].append({
+                    'index': index,
+                    'message': {
+                        'role': 'assistant',
+                        'content': response,
+                    },
+                    'finish_reason': 'stop'
+                })
+        else:
             response_data['choices'].append({
-                'index': index,
+                'index': 0,
                 'message': {
                     'role': 'assistant',
-                    'content': response,
+                    'content': final_response,
                 },
                 'finish_reason': 'stop'
             })
-    else:
-        response_data['choices'].append({
-            'index': 0,
-            'message': {
-                'role': 'assistant',
-                'content': final_response,
-            },
-            'finish_reason': 'stop'
-        })
 
     logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200

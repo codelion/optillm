@@ -15,7 +15,7 @@ services:
       - .env
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-""}
-      OPTILLM_BASE_URL: ${OPENAI_BASE_URL:-"https://api.openai.com/v1"}
+      # OPTILLM_BASE_URL: ${OPENAI_BASE_URL:-"https://openrouter.ai/api/v1"} # can be set to any OpenAI API compatible endpoint
       # OPTILLM_API_KEY: ${OPTILLM_API_KEY:-} # optionally sets an API key for Optillm clients
       # Uncomment and set values for other arguments (prefixed with OPTILLM_) as needed, e.g.:
       # OPTILLM_APPROACH: auto
