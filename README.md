@@ -69,7 +69,7 @@ python optillm.py
 
 > [!WARNING]
 > Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
-> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, and `z3`.
+> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`.
 > In order to use other approaches, consider using an alternative compatible server such as [ollama](https://github.com/ollama/ollama).
 
 > [!NOTE]
@@ -129,20 +129,20 @@ or your own code where you want to use the results from optillm. You can use it 
 
 ## Implemented techniques
 
-| Technique               | Slug               | Description                                                                                    |
+| Approach                | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
-| Best of N Sampling      | `bon`              | Generates multiple responses and selects the best one                                          |
-| Mixture of Agents       | `moa`              | Combines responses from multiple critiques                                                     |
-| Round Trip Optimization | `rto`              | Optimizes responses through a round-trip process                                               |
-| Z3 Solver               | `z3`               | Utilizes the Z3 theorem prover for logical reasoning                                           |
-| Self-Consistency        | `self_consistency` | Implements an advanced self-consistency method                                                 |
-| PV Game                 | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
-| R* Algorithm            | `rstar`            | Implements the R* algorithm for problem-solving                                                |
 | CoT with Reflection     | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch              | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
-| LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
 | ReRead                  | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
+| Self-Consistency        | `self_consistency` | Implements an advanced self-consistency method                                                 |
+| Z3 Solver               | `z3`               | Utilizes the Z3 theorem prover for logical reasoning                                           |
+| R* Algorithm            | `rstar`            | Implements the R* algorithm for problem-solving                                                |
+| LEAP                    | `leap`             | Learns task-specific principles from few shot examples                                         |
+| Round Trip Optimization | `rto`              | Optimizes responses through a round-trip process                                               |
+| Best of N Sampling      | `bon`              | Generates multiple responses and selects the best one                                          |
+| Mixture of Agents       | `moa`              | Combines responses from multiple critiques                                                     |
+| Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
+| PV Game                 | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
 | CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 
 ## Available Parameters
@@ -164,7 +164,7 @@ optillm supports various command-line arguments and environment variables for co
 | `--n`                    | Number of final responses to be returned                        | 1               |
 | `--return-full-response` | Return the full response including the CoT with <thinking> tags | `False`         |
 | `--port`                 | Specify the port to run the proxy                               | 8000            |
-| `--api-key`              | Optional API key for client authentication to optillm           | `""`            |
+| `--optillm-api-key`      | Optional API key for client authentication to optillm           | `""`            |
 
 When using Docker, these can be set as environment variables prefixed with `OPTILLM_`.
 
