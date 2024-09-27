@@ -5,29 +5,6 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
 
-## Patchwork with optillm
-
-Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
-
-![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
-
-## SOTA results on benchmarks with optillm
-
-### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
-
-| Model                  | pass@1 | pass@5 | pass@10 |
-| ---------------------- | ------ | ------ | ------- |
-| plansearch-gpt-4o-mini | 44.03  | 59.31  | 63.5    |
-| gpt-4o-mini            | 43.9   | 50.61  | 53.25   |
-| claude-3.5-sonnet      | 51.3   |        |         |
-| gpt-4o-2024-05-13      | 45.2   |        |         |
-| gpt-4-turbo-2024-04-09 | 44.2   |        |         |
-
-### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
-
-![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
-
 ## Installation
 
 Just clone the repository with `git` and use `pip install` to setup the dependencies.
@@ -210,6 +187,28 @@ When the API key is set, clients must include it in their requests using the `Au
 ```plain
 Authorization: Bearer your_secret_api_key
 ```
+## SOTA results on benchmarks with optillm
+
+### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
+
+| Model                  | pass@1 | pass@5 | pass@10 |
+| ---------------------- | ------ | ------ | ------- |
+| plansearch-gpt-4o-mini | 44.03  | 59.31  | 63.5    |
+| gpt-4o-mini            | 43.9   | 50.61  | 53.25   |
+| claude-3.5-sonnet      | 51.3   |        |         |
+| gpt-4o-2024-05-13      | 45.2   |        |         |
+| gpt-4-turbo-2024-04-09 | 44.2   |        |         |
+
+### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
+
+![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
+
+### optillm with Patchwork (July 2024)
+
+Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
+called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
+
+![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
 
 ## References
 
