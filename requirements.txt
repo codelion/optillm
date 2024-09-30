@@ -10,3 +10,5 @@ azure.identity
 tiktoken
 scikit-learn
 litellm
+requests
+beautifulsoup4

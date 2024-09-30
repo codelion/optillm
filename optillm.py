@@ -84,9 +84,9 @@ known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg"
 plugin_approaches = {}
 
 def load_plugins():
-    plugin_dir = os.path.join(os.path.dirname(__file__), 'plugins')
+    plugin_dir = os.path.join(os.path.dirname(__file__), 'optillm/plugins')
     plugin_files = glob.glob(os.path.join(plugin_dir, '*.py'))
-    
+
     for plugin_file in plugin_files:
         module_name = os.path.basename(plugin_file)[:-3]  # Remove .py extension
         spec = importlib.util.spec_from_file_location(module_name, plugin_file)
