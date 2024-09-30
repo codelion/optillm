@@ -257,7 +257,6 @@ def proxy_models():
 def health():
     return jsonify({"status": "ok"}), 200
 
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
 

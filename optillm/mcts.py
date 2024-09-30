@@ -130,7 +130,7 @@ class MCTS:
         
         messages = [{"role": "system", "content": state.system_prompt}]
         messages.extend(new_history)
-        messages.append({"role": "system", "content": "Based on this conversation, what might the user ask or say next? Provide a likely user query."})
+        messages.append({"role": "user", "content": "Based on this conversation, what might the user ask or say next? Provide a likely user query."})
         
         logger.info("Requesting next user query from the model")
         response = self.client.chat.completions.create(
@@ -155,7 +155,7 @@ class MCTS:
         logger.info("Evaluating current state")
         messages = [{"role": "system", "content": state.system_prompt}]
         messages.extend(state.conversation_history)
-        messages.append({"role": "system", "content": "Evaluate the quality of this conversation on a scale from 0 to 1, where 0 is poor and 1 is excellent. Consider factors such as coherence, relevance, and engagement. Respond with only a number."})
+        messages.append({"role": "user", "content": "Evaluate the quality of this conversation on a scale from 0 to 1, where 0 is poor and 1 is excellent. Consider factors such as coherence, relevance, and engagement. Respond with only a number."})
         
         response = self.client.chat.completions.create(
             model=self.model,

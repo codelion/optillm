@@ -34,21 +34,7 @@ class RStar:
         logger.debug(f"Initialized RStar with model: {model}, max_depth: {max_depth}, num_rollouts: {num_rollouts}")
 
     async def generate_response_async(self, prompt: str) -> str:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.client.base_url}chat/completions",
-                headers={"Authorization": f"Bearer {self.client.api_key}"},
-                json={
-                    "model": self.model_name,
-                    "messages": [{"role": "system", "content": "You are a helpful assistant focused on solving mathematical problems. Stick to the given question and avoid introducing new scenarios."},
-                        {"role": "user", "content": prompt}],
-                    "max_tokens": 4096,
-                    "temperature": 0.2
-                }
-            ) as response:
-                result = await response.json()
-                self.rstar_completion_tokens += result['usage']['completion_tokens']
-                return result['choices'][0]['message']['content'].strip()
+        return await asyncio.to_thread(self.generate_response, prompt)
 
     async def expand_async(self, node: Node, action: str) -> Node:
         prompt = self.create_prompt(node.state, action)
