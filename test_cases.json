@@ -28,5 +28,10 @@
     "name" : "reddit",
     "system_prompt": "",
     "query" : "There are 24 volunteers. Over the next 3 weeks, each volunteer is assigned to a different task. There are 8 tasks. Each week, the volunteers switch tasks. Each task has 3 volunteers assigned to it. Volunteers cannot be assigned to the same task more than once, and volunteers cannot share the same task more than once."
+  },
+  {
+    "name" : "GH",
+    "system_prompt" : "",
+    "query" : "Find the largest possible real part of[(75+117i)z+\frac{96+144i}{z}]where z is a complex number with |z|=4"
   }
 ]

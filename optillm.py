@@ -6,6 +6,8 @@ from flask import Flask, request, jsonify
 from openai import AzureOpenAI, OpenAI
 from flask import Response
 import json
+import importlib
+import glob
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -20,7 +22,6 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
-from optillm.wim import WiMInfiniteContextAPI
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -76,6 +77,23 @@ server_config = {
 # List of known approaches
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
                     "cot_reflection", "plansearch", "leap", "re2", "wim"]
+
+plugin_approaches = {}
+
+def load_plugins():
+    plugin_dir = os.path.join(os.path.dirname(__file__), 'plugins')
+    plugin_files = glob.glob(os.path.join(plugin_dir, '*.py'))
+    
+    for plugin_file in plugin_files:
+        module_name = os.path.basename(plugin_file)[:-3]  # Remove .py extension
+        spec = importlib.util.spec_from_file_location(module_name, plugin_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        if hasattr(module, 'SLUG') and hasattr(module, 'run'):
+            plugin_approaches[module.SLUG] = module.run
+            logger.info(f"Loaded plugin: {module.SLUG}")
+
 
 def generate_streaming_response(final_response, model):
     # Yield the final response
@@ -191,9 +209,8 @@ def proxy():
             final_response, completion_tokens = leap(system_prompt, initial_query, client, model)
         elif approach == 're2':
             final_response, completion_tokens = re2_approach(system_prompt, initial_query, client, model, n=n)
-        elif approach == "wim":
-            wim_context = WiMInfiniteContextAPI(system_prompt, client, model, max_context_tokens=64000, max_margins=10, chunk_size=16000)
-            final_response, completion_tokens = wim_context.process_query(initial_query)
+        elif approach in plugin_approaches:
+            final_response, completion_tokens = plugin_approaches[approach](system_prompt, initial_query, client, model)
         else:
             raise ValueError(f"Unknown approach: {approach}")
     except Exception as e:
@@ -320,6 +337,8 @@ def main():
         logger.error(f"Please set the OPENAI_API_KEY environment variable before using the proxy")
         exit(1)
 
+    # Call this function at the start of main()
+    load_plugins()
     # Update server_config with all argument values
     server_config.update(vars(args))
 
