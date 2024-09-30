@@ -8,6 +8,8 @@ from flask import Response
 import json
 import importlib
 import glob
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # Import the LiteLLM wrapper
 from litellm_wrapper import LiteLLMWrapper
@@ -97,6 +99,94 @@ def load_plugins():
             plugin_approaches[module.SLUG] = module.run
             logger.info(f"Loaded plugin: {module.SLUG}")
 
+def parse_combined_approach(model: str, known_approaches: list, plugin_approaches: dict):
+    if model == 'auto':
+        return 'SINGLE', ['bon'], model
+
+    parts = model.split('-')
+    approaches = []
+    operation = 'SINGLE'
+    model_parts = []
+    parsing_approaches = True
+
+    for part in parts:
+        if parsing_approaches:
+            if part in known_approaches or part in plugin_approaches:
+                approaches.append(part)
+            elif '&' in part:
+                operation = 'AND'
+                approaches.extend(part.split('&'))
+            elif '|' in part:
+                operation = 'OR'
+                approaches.extend(part.split('|'))
+            else:
+                parsing_approaches = False
+                model_parts.append(part)
+        else:
+            model_parts.append(part)
+
+    if not approaches:
+        approaches = ['bon']
+        operation = 'SINGLE'
+
+    actual_model = '-'.join(model_parts)
+
+    return operation, approaches, actual_model
+    
+def execute_single_approach(approach, system_prompt, initial_query, client, model):
+    if approach in known_approaches:
+        # Execute known approaches
+        if approach == 'mcts':
+            return chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
+                                            server_config['mcts_exploration'], server_config['mcts_depth'])
+        elif approach == 'bon':
+            return  best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
+        elif approach == 'moa':
+            return mixture_of_agents(system_prompt, initial_query, client, model)
+        elif approach == 'rto':
+            return round_trip_optimization(system_prompt, initial_query, client, model)
+        elif approach == 'z3':
+            z3_solver = Z3SolverSystem(system_prompt, client, model)
+            return z3_solver.process_query(initial_query)
+        elif approach == "self_consistency":
+            return advanced_self_consistency_approach(system_prompt, initial_query, client, model)
+        elif approach == "pvg":
+            return inference_time_pv_game(system_prompt, initial_query, client, model)
+        elif approach == "rstar":
+            rstar = RStar(system_prompt, client, model,
+                          max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
+                          c=server_config['rstar_c'])
+            return rstar.solve(initial_query)
+        elif approach == "cot_reflection":
+            return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
+        elif approach == 'plansearch':
+            return plansearch(system_prompt, initial_query, client, model, n=n)
+        elif approach == 'leap':
+            return leap(system_prompt, initial_query, client, model)
+        elif approach == 're2':
+            return re2_approach(system_prompt, initial_query, client, model, n=n)
+    elif approach in plugin_approaches:
+        return plugin_approaches[approach](system_prompt, initial_query, client, model)
+    else:
+        raise ValueError(f"Unknown approach: {approach}")
+    
+def execute_combined_approaches(approaches, system_prompt, initial_query, client, model):
+    final_response = initial_query
+    total_tokens = 0
+    for approach in approaches:
+        response, tokens = execute_single_approach(approach, system_prompt, final_response, client, model)
+        final_response = response
+        total_tokens += tokens
+    return final_response, total_tokens
+
+async def execute_parallel_approaches(approaches, system_prompt, initial_query, client, model):
+    async def run_approach(approach):
+        return await asyncio.to_thread(execute_single_approach, approach, system_prompt, initial_query, client, model)
+
+    tasks = [run_approach(approach) for approach in approaches]
+    results = await asyncio.gather(*tasks)
+    responses, tokens = zip(*results)
+    return list(responses), sum(tokens)
 
 def generate_streaming_response(final_response, model):
     # Yield the final response
@@ -167,55 +257,20 @@ def proxy():
     else:
         client = default_client
 
-    # Handle 'auto' approach
-    if approach == 'auto':
-        for known_approach in known_approaches:
-            if model.startswith(f"{known_approach}-"):
-                approach = known_approach
-                model = model[len(known_approach)+1:]
-                break
-        else:
-            # If no known approach is found in the model name, default to 'bon'
-            approach = 'bon'
-
-
-    logger.info(f'Using approach {approach}, with {model}')
-    completion_tokens = 0
+    operation, approaches, model = parse_combined_approach(model, known_approaches, plugin_approaches)
+    logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}')
 
     try:
-        if approach == 'mcts':
-            final_response, completion_tokens = chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
-                                            server_config['mcts_exploration'], server_config['mcts_depth'])
-        elif approach == 'bon':
-            final_response, completion_tokens = best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
-        elif approach == 'moa':
-            final_response, completion_tokens = mixture_of_agents(system_prompt, initial_query, client, model)
-        elif approach == 'rto':
-            final_response, completion_tokens = round_trip_optimization(system_prompt, initial_query, client, model)
-        elif approach == 'z3':
-            z3_solver = Z3SolverSystem(system_prompt, client, model)
-            final_response, completion_tokens = z3_solver.process_query(initial_query)
-        elif approach == "self_consistency":
-            final_response, completion_tokens = advanced_self_consistency_approach(system_prompt, initial_query, client, model)
-        elif approach == "pvg":
-            final_response, completion_tokens = inference_time_pv_game(system_prompt, initial_query, client, model)
-        elif approach == "rstar":
-            rstar = RStar(system_prompt, client, model,
-                          max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
-                          c=server_config['rstar_c'])
-            final_response, completion_tokens = rstar.solve(initial_query)
-        elif approach == "cot_reflection":
-            final_response, completion_tokens = cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
-        elif approach == 'plansearch':
-            final_response, completion_tokens = plansearch(system_prompt, initial_query, client, model, n=n)
-        elif approach == 'leap':
-            final_response, completion_tokens = leap(system_prompt, initial_query, client, model)
-        elif approach == 're2':
-            final_response, completion_tokens = re2_approach(system_prompt, initial_query, client, model, n=n)
-        elif approach in plugin_approaches:
-            final_response, completion_tokens = plugin_approaches[approach](system_prompt, initial_query, client, model)
+        if operation == 'SINGLE':
+            final_response, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+        elif operation == 'AND':
+            final_response, completion_tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
+        elif operation == 'OR':
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            final_response, completion_tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
         else:
-            raise ValueError(f"Unknown approach: {approach}")
+            raise ValueError(f"Unknown operation: {operation}")
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -253,7 +308,6 @@ def proxy():
 
     logger.debug(f'API response: {response_data}')
     return jsonify(response_data), 200
-
 
 @app.route('/v1/models', methods=['GET'])
 def proxy_models():
