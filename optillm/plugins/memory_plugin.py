@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 SLUG = "memory"
 
 class Memory:
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: int = 100):
         self.max_size = max_size
         self.items: List[str] = []
         self.vectorizer = TfidfVectorizer()
@@ -59,7 +59,7 @@ Key information:"""
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=150
+        max_tokens=1000
     )
 
     key_info = response.choices[0].message.content.strip().split('\n')
@@ -72,7 +72,7 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     completion_tokens = 0
 
     # Process context and add to memory
-    chunk_size = 1000
+    chunk_size = 10000
     for i in range(0, len(context), chunk_size):
         chunk = context[i:i+chunk_size]
         key_info, tokens = extract_key_information(chunk, client, model)
@@ -94,7 +94,7 @@ Context: {' '.join(relevant_info)}
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=500
+        max_tokens=1000
     )
 
     final_response = response.choices[0].message.content.strip()

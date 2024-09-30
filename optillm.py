@@ -160,11 +160,11 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == "cot_reflection":
             return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
         elif approach == 'plansearch':
-            return plansearch(system_prompt, initial_query, client, model, n=n)
+            return plansearch(system_prompt, initial_query, client, model, n=server_config['n'])
         elif approach == 'leap':
             return leap(system_prompt, initial_query, client, model)
         elif approach == 're2':
-            return re2_approach(system_prompt, initial_query, client, model, n=n)
+            return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
     elif approach in plugin_approaches:
         return plugin_approaches[approach](system_prompt, initial_query, client, model)
     else:
@@ -249,7 +249,6 @@ def proxy():
 
     system_prompt, initial_query = parse_conversation(messages)
 
-    approach = server_config['approach']
     base_url = server_config['base_url']
 
     if base_url != "":

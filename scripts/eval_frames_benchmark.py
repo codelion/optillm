@@ -9,11 +9,10 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 client = OpenAI(api_key="none", base_url="http://localhost:8000/v1")
-SLEEP_INTERVAL = 10
+SLEEP_INTERVAL = 30
 
 def generate_llm_prompt(prompt: str, wiki_links: List[str]) -> str:
-    wiki_links_str = "\n".join(wiki_links)
-    return f"{prompt}\n\nHere are the relevant Wikipedia articles:\n{wiki_links_str}\n\nBased on all this, answer the query."
+    return f"Here are the relevant Wikipedia articles:\n{wiki_links}\n\nBased on all the information, answer the query. \n\nQuery: {prompt}\n\n"
 
 def get_llm_response(prompt: str, model: str) -> str:
     response = client.chat.completions.create(
@@ -98,6 +97,7 @@ def main(model: str):
             "reasoning_type": item['reasoning_types']
         }
         results.append(result)
+        print(result["evaluation_decision"])
         time.sleep(SLEEP_INTERVAL)
 
     # Save results to a JSON file

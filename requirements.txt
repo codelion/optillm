@@ -12,3 +12,4 @@ scikit-learn
 litellm
 requests
 beautifulsoup4
+lxml

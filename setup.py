@@ -19,6 +19,7 @@ setup(
         "litellm",
         "requests",
         "beautifulsoup4",
+        "lxml",
     ],
     author="codelion",
     author_email="codelion@okyasoft.com",
