@@ -89,6 +89,20 @@ The code above applies to both OpenAI and Azure OpenAI, just remember to populat
 
 Please note that the naming convention described above for the `model` attribute works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
 
+We now suport all LLM providers (by wrapping around the [LiteLLM sdk](https://docs.litellm.ai/docs/#litellm-python-sdk)). E.g. you can use the Gemini Flash model with `moa` by setting passing the api key in the environment variable `os.environ['GEMINI_API_KEY']` and then calling the model `moa-gemini/gemini-1.5-flash-002`. In the output you will then see that LiteLLM is being used to call the base model.
+
+```bash
+9:43:21 - LiteLLM:INFO: utils.py:2952 - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+2024-09-29 19:43:21,011 - INFO - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+2024-09-29 19:43:21,481 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=[redacted] "HTTP/1.1 200 OK"
+19:43:21 - LiteLLM:INFO: utils.py:988 - Wrapper: Completed Call, calling success_handler
+2024-09-29 19:43:21,483 - INFO - Wrapper: Completed Call, calling success_handler
+19:43:21 - LiteLLM:INFO: utils.py:2952 - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+```
+
 > [!TIP]
 > optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
 the same OpenAI API compatible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
