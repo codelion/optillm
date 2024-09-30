@@ -9,3 +9,4 @@ transformers
 azure.identity
 tiktoken
 scikit-learn
+litellm

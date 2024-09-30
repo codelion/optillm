@@ -27,7 +27,7 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
     ratings = []
     for completion in completions:
         rating_messages.append({"role": "assistant", "content": completion})
-        rating_messages.append({"role": "system", "content": "Rate the above response:"})
+        rating_messages.append({"role": "user", "content": "Rate the above response:"})
         
         rating_response = client.chat.completions.create(
             model=model,

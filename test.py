@@ -7,6 +7,7 @@ from typing import List, Dict
 import logging
 from openai import OpenAI
 
+from litellm_wrapper import LiteLLMWrapper
 from optillm.mcts import chat_with_mcts
 from optillm.bon import best_of_n_sampling
 from optillm.moa import mixture_of_agents
@@ -128,6 +129,7 @@ def main():
         client = OpenAI(api_key=API_KEY, base_url=args.base_url)
     else:
         client = OpenAI(api_key=API_KEY)
+        # client = LiteLLMWrapper()
 
     results = run_tests(test_cases, args.approaches, client, args.model, args.single_test)
     print_summary(results)

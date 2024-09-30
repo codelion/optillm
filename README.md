@@ -5,29 +5,6 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
 
-## Patchwork with optillm
-
-Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
-
-![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
-
-## SOTA results on benchmarks with optillm
-
-### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
-
-| Model                  | pass@1 | pass@5 | pass@10 |
-| ---------------------- | ------ | ------ | ------- |
-| plansearch-gpt-4o-mini | 44.03  | 59.31  | 63.5    |
-| gpt-4o-mini            | 43.9   | 50.61  | 53.25   |
-| claude-3.5-sonnet      | 51.3   |        |         |
-| gpt-4o-2024-05-13      | 45.2   |        |         |
-| gpt-4-turbo-2024-04-09 | 44.2   |        |         |
-
-### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
-
-![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
-
 ## Installation
 
 Just clone the repository with `git` and use `pip install` to setup the dependencies.
@@ -111,6 +88,20 @@ The code above applies to both OpenAI and Azure OpenAI, just remember to populat
 ```
 
 Please note that the naming convention described above for the `model` attribute works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
+
+We now suport all LLM providers (by wrapping around the [LiteLLM sdk](https://docs.litellm.ai/docs/#litellm-python-sdk)). E.g. you can use the Gemini Flash model with `moa` by setting passing the api key in the environment variable `os.environ['GEMINI_API_KEY']` and then calling the model `moa-gemini/gemini-1.5-flash-002`. In the output you will then see that LiteLLM is being used to call the base model.
+
+```bash
+9:43:21 - LiteLLM:INFO: utils.py:2952 - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+2024-09-29 19:43:21,011 - INFO - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+2024-09-29 19:43:21,481 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=[redacted] "HTTP/1.1 200 OK"
+19:43:21 - LiteLLM:INFO: utils.py:988 - Wrapper: Completed Call, calling success_handler
+2024-09-29 19:43:21,483 - INFO - Wrapper: Completed Call, calling success_handler
+19:43:21 - LiteLLM:INFO: utils.py:2952 - 
+LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
+```
 
 > [!TIP]
 > optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
@@ -210,6 +201,28 @@ When the API key is set, clients must include it in their requests using the `Au
 ```plain
 Authorization: Bearer your_secret_api_key
 ```
+## SOTA results on benchmarks with optillm
+
+### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
+
+| Model                  | pass@1 | pass@5 | pass@10 |
+| ---------------------- | ------ | ------ | ------- |
+| plansearch-gpt-4o-mini | 44.03  | 59.31  | 63.5    |
+| gpt-4o-mini            | 43.9   | 50.61  | 53.25   |
+| claude-3.5-sonnet      | 51.3   |        |         |
+| gpt-4o-2024-05-13      | 45.2   |        |         |
+| gpt-4-turbo-2024-04-09 | 44.2   |        |         |
+
+### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
+
+![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
+
+### optillm with Patchwork (July 2024)
+
+Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
+called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
+
+![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
 
 ## References
 

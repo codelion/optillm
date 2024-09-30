@@ -9,6 +9,9 @@ import json
 import importlib
 import glob
 
+# Import the LiteLLM wrapper
+from litellm_wrapper import LiteLLMWrapper
+
 # Import approach modules
 from optillm.mcts import chat_with_mcts
 from optillm.bon import best_of_n_sampling
@@ -30,11 +33,11 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# OpenAI or Azure API configuration
-if os.environ.get("OPENAI_API_KEY") != None:
+# OpenAI, Azure, or LiteLLM API configuration
+if os.environ.get("OPENAI_API_KEY"):
     API_KEY = os.environ.get("OPENAI_API_KEY")
     default_client = OpenAI(api_key=API_KEY)
-elif os.environ.get("AZURE_OPENAI_API_KEY") != None:
+elif os.environ.get("AZURE_OPENAI_API_KEY"):
     API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
     API_VERSION = os.environ.get("AZURE_API_VERSION")
     AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
@@ -54,7 +57,7 @@ elif os.environ.get("AZURE_OPENAI_API_KEY") != None:
             azure_ad_token_provider=token_provider
         )
 else:
-    API_KEY = "optillm_no_key"
+    default_client = LiteLLMWrapper()
 
 # Server configuration
 server_config = {
@@ -271,11 +274,9 @@ def proxy_models():
         logger.error(f"Error fetching models: {str(e)}")
         return jsonify({"error": f"Error fetching models: {str(e)}"}), 500
 
-
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"}), 200
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
@@ -329,13 +330,9 @@ def parse_args():
 
     return args
 
-
 def main():
     global server_config
     args = parse_args()
-    if args.base_url == "" and API_KEY == "optillm_no_key":
-        logger.error(f"Please set the OPENAI_API_KEY environment variable before using the proxy")
-        exit(1)
 
     # Call this function at the start of main()
     load_plugins()
