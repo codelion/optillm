@@ -7,3 +7,4 @@ flask
 torch
 transformers
 azure.identity
+litellm
