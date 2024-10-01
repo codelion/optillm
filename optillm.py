@@ -22,7 +22,7 @@ from optillm.moa import mixture_of_agents
 from optillm.rto import round_trip_optimization
 from optillm.self_consistency import advanced_self_consistency_approach
 from optillm.pvg import inference_time_pv_game
-from optillm.z3_solver import Z3SolverSystem
+from optillm.z3_solver import Z3SymPySolverSystem
 from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
@@ -147,7 +147,7 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 'rto':
             return round_trip_optimization(system_prompt, initial_query, client, model)
         elif approach == 'z3':
-            z3_solver = Z3SolverSystem(system_prompt, client, model)
+            z3_solver = Z3SymPySolverSystem(system_prompt, client, model)
             return z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
             return advanced_self_consistency_approach(system_prompt, initial_query, client, model)
