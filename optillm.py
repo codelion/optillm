@@ -9,6 +9,7 @@ import json
 import importlib
 import glob
 import asyncio
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 # Import the LiteLLM wrapper
@@ -208,18 +209,31 @@ def generate_streaming_response(final_response, model):
 def parse_conversation(messages):
     system_prompt = ""
     conversation = []
+    optillm_approach = None
     
     for message in messages:
         role = message['role']
         content = message['content']
         
         if role == 'system':
-            system_prompt = content
-        elif role in ['user', 'assistant']:
-            conversation.append(f"{role.capitalize()}: {content}")
+            system_prompt, optillm_approach = extract_optillm_approach(content)
+        elif role == 'user':
+            if not optillm_approach:
+                content, optillm_approach = extract_optillm_approach(content)
+            conversation.append(f"User: {content}")
+        elif role == 'assistant':
+            conversation.append(f"Assistant: {content}")
     
     initial_query = "\n".join(conversation)
-    return system_prompt, initial_query
+    return system_prompt, initial_query, optillm_approach
+
+def extract_optillm_approach(content):
+    match = re.search(r'<optillm_approach>(.*?)</optillm_approach>', content)
+    if match:
+        approach = match.group(1)
+        content = re.sub(r'<optillm_approach>.*?</optillm_approach>', '', content).strip()
+        return content, approach
+    return content, None
 
 # Optional API key configuration to secure the proxy
 @app.before_request
@@ -245,9 +259,17 @@ def proxy():
     stream = data.get('stream', False)
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
-    n = data.get('n', server_config['n'])
 
-    system_prompt, initial_query = parse_conversation(messages)
+    optillm_approach = data.get('optillm_approach', {})
+
+    system_prompt, initial_query, message_optillm_approach = parse_conversation(messages)
+
+    # Use optillm_approach from extra_body if present, otherwise use from messages
+    if not optillm_approach and message_optillm_approach:
+        optillm_approach = message_optillm_approach
+
+    if optillm_approach:
+        model = f"{optillm_approach}-{model}"
 
     base_url = server_config['base_url']
 
