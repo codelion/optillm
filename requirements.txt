@@ -7,4 +7,9 @@ flask
 torch
 transformers
 azure.identity
+tiktoken
+scikit-learn
 litellm
+requests
+beautifulsoup4
+lxml
