@@ -77,7 +77,10 @@ response = client.chat.completions.create(
 
 print(response)
 ```
-The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key. You can control the technique you use for optimization by prepending the slug to the model name `{slug}-model-name`. E.g. in the above code we are using `moa` or mixture of agents as the optimization approach. In the proxy logs you will see the following showing the `moa` is been used with the base model as `gpt-4o-mini`. 
+The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key. 
+There are multiple ways to control the optimization techniques, they are applied in the follow order of preference:
+
+- You can control the technique you use for optimization by prepending the slug to the model name `{slug}-model-name`. E.g. in the above code we are using `moa` or mixture of agents as the optimization approach. In the proxy logs you will see the following showing the `moa` is been used with the base model as `gpt-4o-mini`.
 
 ```bash
 2024-09-06 08:35:32,597 - INFO - Using approach moa, with gpt-4o-mini
@@ -87,7 +90,31 @@ The code above applies to both OpenAI and Azure OpenAI, just remember to populat
 2024-09-06 08:35:44,797 - INFO - 127.0.0.1 - - [06/Sep/2024 08:35:44] "POST /v1/chat/completions HTTP/1.1" 200 -
 ```
 
-Please note that the naming convention described above for the `model` attribute works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
+- Or, you can pass the slug in the `optillm_approach` field in the `extra_body`.
+
+```bash
+response = client.chat.completions.create(
+  model="gpt-4o-mini",
+  messages=[{ "role": "user","content": "" }],
+  temperature=0.2,
+  extra_body={"optillm_approach": "bon|moa|mcts"}
+)
+```
+- Or, you can just mention the approach in either your `system` or user `prompt`, within `<optillm_approach> </optillm_approach>` tags.
+
+```bash
+response = client.chat.completions.create(
+  model="gpt-4o-mini",
+  messages=[{ "role": "user","content": "<optillm_approach>re2</optillm_approach> How many r's are there in strawberry?" }],
+  temperature=0.2
+)
+```
+
+> [!TIP]
+> You can also combine different techniques either by using symbols `&` and `|`. When you use `&` the techniques are processed in the order from left to right in a pipeline
+> with response from previous stage used as request to the next. While, with `|` we run all the requests in parallel and generate multiple responses that are returned as a list.
+
+Please note that the convention described above works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
 
 We now suport all LLM providers (by wrapping around the [LiteLLM sdk](https://docs.litellm.ai/docs/#litellm-python-sdk)). E.g. you can use the Gemini Flash model with `moa` by setting passing the api key in the environment variable `os.environ['GEMINI_API_KEY']` and then calling the model `moa-gemini/gemini-1.5-flash-002`. In the output you will then see that LiteLLM is being used to call the base model.
 
