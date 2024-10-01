@@ -82,7 +82,7 @@ server_config = {
 
 # List of known approaches
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
-                    "cot_reflection", "plansearch", "leap", "re2", "wim"]
+                    "cot_reflection", "plansearch", "leap", "re2"]
 
 plugin_approaches = {}
 
