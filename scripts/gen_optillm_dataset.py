@@ -11,14 +11,17 @@ import random
 # OptILM approaches
 APPROACHES = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
 
-async def generate_response(prompt: str, approach: str) -> Dict[str, Any]:
+async def generate_response(prompt: str, **kwargs) -> Dict[str, Any]:
     """Generate a response using the specified approach."""
+    approach = kwargs.get("approach", "none")
+    temperature = kwargs.get("temperature", 0.)
     if approach == "none":
         # Use the base model without any optimization technique
         client = AsyncOpenAI()
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
         )
         return {
             "content": response.choices[0].message.content,
@@ -48,17 +51,16 @@ async def rank_responses(prompt: str, responses: List[Dict[str, Any]]) -> List[i
     )
     
     ranking_str = ranking_response.choices[0].message.content.strip()
-    print(ranking_str)
     return [int(idx) for idx in ranking_str.split(",")]
 
-async def process_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
+async def process_sample(sample: Dict[str, Any], **kwargs) -> Dict[str, Any]:
     """Process a single sample from the dataset."""
-    prompt = sample["turns"][0]["content"]
+    prompt = sample[kwargs["prompt_column"]]
+    approach = kwargs["approach"]
     results = []
 
-    # Generate responses for each approach
-    for approach in APPROACHES:
-        response = await generate_response(prompt, approach)
+    for _ in range(kwargs["num_completions_per_prompt"]):
+        response = await generate_response(prompt, approach=approach, temperature=kwargs["temperature"])
         results.append({"approach": approach, **response})
 
     random.shuffle(results)
@@ -74,22 +76,31 @@ async def process_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
         "results": results,
     }
 
-async def generate_dataset(num_samples: int, output_file: str):
+async def generate_dataset(dataset: str, output_file: str, **kwargs):
     """Generate the dataset and save it to a JSONL file."""
-    dataset = load_dataset("lmsys/arena-hard-auto-v0.1", split="train")
+    dataset = load_dataset(dataset, split=f"{kwargs.get('split')}[:{kwargs.get('num_samples')}]")
     
-    with open(output_file, "w") as f:
-        for sample in tqdm(dataset.select(range(num_samples)), total=num_samples):
-            result = await process_sample(sample)
+    process_kwargs = {k: v for k, v in kwargs.items() if k not in ["dataset", "split", "output_file"]}
+
+
+    with open(f"data/{output_file}", "w") as f:
+        for sample in tqdm(dataset):
+            result = await process_sample(sample, **process_kwargs)
             f.write(json.dumps(result) + "\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate OptILM dataset")
+    parser.add_argument("--approach", type=str, default="mcts", help="optillm approach")
+    parser.add_argument("--dataset", type=str, default="AI-MO/NuminaMath-CoT", help="Dataset name")
+    parser.add_argument("--split", type=str, default="train", help="Dataset split")
+    parser.add_argument("--prompt_column", type=str, default="problem", help="Column name for the prompt")
     parser.add_argument("--num_samples", type=int, default=100, help="Number of samples to process")
+    parser.add_argument("--num_completions_per_prompt", type=int, default=1, help="Number of completions per prompt")
+    parser.add_argument("--temperature", type=float, default=0., help="Temperature for sampling")
     parser.add_argument("--output_file", type=str, default="optillm_dataset.jsonl", help="Output file path")
     args = parser.parse_args()
 
-    asyncio.run(generate_dataset(args.num_samples, args.output_file))
+    asyncio.run(generate_dataset(**vars(args)))
     print(f"Dataset generated and saved to {args.output_file}")
 
 if __name__ == "__main__":

@@ -36,6 +36,12 @@ python optillm.py
 2024-09-06 07:57:14,212 - INFO - Press CTRL+C to quit
 ```
 
+Note that the server defaults can be overriden when the proxy is spun up as follows:
+
+```shell
+python optillm.py --approach mcts --return-full-response true
+```
+
 ### Starting the optillm proxy for a local server (e.g. llama.cpp)
 
 - Set the `OPENAI_API_KEY` env variable to a placeholder value
@@ -144,6 +150,26 @@ In the diagram:
 or your own code where you want to use the results from optillm. You can use it directly using any OpenAI client sdk.
 - `B` is the optillm service (running directly or in a docker container) that will send requests to the `base_url`.
 - `C` is any service providing an OpenAI API compatible chat completions endpoint. 
+
+### Generate a synthetic dataset
+
+To generate a synthetic dataset with `otillm`, first spin up the proxy to return the full reasoning trace
+
+```shell
+python optillm.py --return-full-response true
+```
+
+Then run the following:
+
+```shell
+python scripts/gen_optillm_dataset.py --dataset AI-MO/NuminaMath-CoT --prompt_column problem --approach cot_reflection --num_samples 5
+```
+
+By default this generates one completion per prompt and the outputs will be saved to `optillm_dataset.jsonl`. If you want to generate multiple completions per propmt (e.g. for preference modelling), then run:
+
+```shell
+python scripts/gen_optillm_dataset.py --dataset AI-MO/NuminaMath-CoT --prompt_column problem --approach cot_reflection --temperature 0.9 --num_completions_per_prompt 3 --num_samples 5 
+```
 
 ## Implemented techniques
 
