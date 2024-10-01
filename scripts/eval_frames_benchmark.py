@@ -9,7 +9,26 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 client = OpenAI(api_key="none", base_url="http://localhost:8000/v1")
-SLEEP_INTERVAL = 30
+SLEEP_INTERVAL = 60
+
+def load_existing_results(filename: str) -> List[Dict]:
+    try:
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+def save_result(filename: str, result: Dict):
+    results = load_existing_results(filename)
+    results.append(result)
+    with open(filename, 'w') as f:
+        json.dump(results, f, indent=2)
+
+def get_last_processed_index(results: List[Dict]) -> int:
+    if not results:
+        return -1
+    return max(int(r.get('index', -1)) for r in results)
+
 
 def generate_llm_prompt(prompt: str, wiki_links: List[str]) -> str:
     return f"Here are the relevant Wikipedia articles:\n{wiki_links}\n\nBased on all the information, answer the query. \n\nQuery: {prompt}\n\n"
@@ -76,19 +95,24 @@ Please proceed with the evaluation."""
     return {"decision": decision, "explanation": explanation}
 
 def main(model: str):
-    
     # Load the dataset
     dataset = load_dataset("google/frames-benchmark", split="test")
     
-    results = []
+    filename = f"evaluation_results_{model.replace('/', '_')}.json"
+    existing_results = load_existing_results(filename)
+    last_processed_index = get_last_processed_index(existing_results)
     
     for item in tqdm(dataset, desc="Processing samples"):
-        # print(item)
+        index = int(item['Unnamed: 0'])
+        if index <= last_processed_index:
+            continue
+        
         prompt = generate_llm_prompt(item['Prompt'], item['wiki_links'])
         llm_response = get_llm_response(prompt, model)
         evaluation = evaluate_response(item['Prompt'], llm_response, item['Answer'], model)
         
         result = {
+            "index": index,
             "prompt": item['Prompt'],
             "ground_truth": item['Answer'],
             "llm_response": llm_response,
@@ -96,15 +120,13 @@ def main(model: str):
             "evaluation_explanation": evaluation['explanation'],
             "reasoning_type": item['reasoning_types']
         }
-        results.append(result)
-        print(result["evaluation_decision"])
+        
+        save_result(filename, result)
+        print(f"Index: {index}, Decision: {result['evaluation_decision']}")
         time.sleep(SLEEP_INTERVAL)
 
-    # Save results to a JSON file
-    with open(f"evaluation_results_{model.replace('/', '_')}.json", "w") as f:
-        json.dump(results, f, indent=2)
-    
     # Calculate and print summary statistics
+    results = load_existing_results(filename)
     total_samples = len(results)
     correct_answers = sum(1 for r in results if r['evaluation_decision'] == 'TRUE')
     accuracy = correct_answers / total_samples

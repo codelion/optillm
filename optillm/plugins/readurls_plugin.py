@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
-SLUG = "url_content"
+SLUG = "readurls"
 
 def extract_urls(text: str) -> List[str]:
     # Updated regex pattern to be more precise
