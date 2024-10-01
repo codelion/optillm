@@ -58,6 +58,18 @@ python optillm.py --approach mcts --return-full-response true
 > [!NOTE]
 > You'll later need to specify a model name in the OpenAI client configuration. Since llama-server was started with a single model, you can choose any name you want.
 
+To start the proxy with `vllm`, first spin up the OpenAI-compatible server with:
+
+```shell
+vllm serve {MODEL_NAME}
+```
+
+Then run:
+
+```shell
+python optillm.py --base_url http://localhost:8000/v1 --port 8080
+```
+
 ## Usage
 
 Once the proxy is running, you can use it as a drop in replacement for an OpenAI client by setting the `base_url` as `http://localhost:8000/v1`.

@@ -19,7 +19,7 @@ async def generate_response(prompt: str, **kwargs) -> Dict[str, Any]:
         # Use the base model without any optimization technique
         client = AsyncOpenAI()
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=kwargs["model"],
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
@@ -31,7 +31,7 @@ async def generate_response(prompt: str, **kwargs) -> Dict[str, Any]:
         # Use OptILM with the specified approach
         client = AsyncOpenAI(api_key="none", base_url="http://localhost:8000/v1")
         response = await client.chat.completions.create(
-            model=f"{approach}-gpt-4o-mini",  # Assuming OptILM uses this naming convention
+            model=f"{approach}-{kwargs['model']}",  # Assuming OptILM uses this naming convention
             messages=[{"role": "user", "content": prompt}],
         )
         return {
@@ -60,7 +60,7 @@ async def process_sample(sample: Dict[str, Any], **kwargs) -> Dict[str, Any]:
     results = []
 
     for _ in range(kwargs["num_completions_per_prompt"]):
-        response = await generate_response(prompt, approach=approach, temperature=kwargs["temperature"])
+        response = await generate_response(prompt, model=kwargs["model"], approach=approach, temperature=kwargs["temperature"])
         results.append({"approach": approach, **response})
 
     random.shuffle(results)
@@ -98,6 +98,7 @@ def main():
     parser.add_argument("--num_completions_per_prompt", type=int, default=1, help="Number of completions per prompt")
     parser.add_argument("--temperature", type=float, default=0., help="Temperature for sampling")
     parser.add_argument("--output_file", type=str, default="optillm_dataset.jsonl", help="Output file path")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model name")
     args = parser.parse_args()
 
     asyncio.run(generate_dataset(**vars(args)))
