@@ -369,7 +369,7 @@ def parse_args():
         ("--rstar-c", "OPTILLM_RSTAR_C", float, 1.4, "Exploration constant for rStar algorithm"),
         ("--n", "OPTILLM_N", int, 1, "Number of final responses to be returned"),
         ("--return-full-response", "OPTILLM_RETURN_FULL_RESPONSE", bool, False, "Return the full response including the CoT with <thinking> tags"),
-        ("--port", "OPTILLM_PORT", int, 8000, "Specify the port to run the proxy"),
+        ("--port", "OPTILLM_PORT", int, 8080, "Specify the port to run the proxy"),
     ]
 
     for arg, env, type_, default, help_text, *extra in args_env:

@@ -67,7 +67,7 @@ vllm serve {MODEL_NAME}
 Then run:
 
 ```shell
-python optillm.py --base_url http://localhost:8000/v1 --port 8080
+python optillm.py --base_url http://localhost:8000/v1
 ```
 
 ## Usage
@@ -177,10 +177,22 @@ Then run the following:
 python scripts/gen_optillm_dataset.py --dataset AI-MO/NuminaMath-CoT --prompt_column problem --approach cot_reflection --num_samples 5
 ```
 
-By default this generates one completion per prompt and the outputs will be saved to `optillm_dataset.jsonl`. If you want to generate multiple completions per propmt (e.g. for preference modelling), then run:
+By default this generates one completion per prompt with `gpt-4o-mini` and the outputs will be saved to `data/optillm_dataset.jsonl`. If you want to generate multiple completions per propmt (e.g. for preference modelling), then run:
 
 ```shell
 python scripts/gen_optillm_dataset.py --dataset AI-MO/NuminaMath-CoT --prompt_column problem --approach cot_reflection --temperature 0.9 --num_completions_per_prompt 3 --num_samples 5 
+```
+
+If you're running a local vLLM server, you will need to align the served model name with `{approach}-local` in the script. E.g. first run:
+
+```shell
+vllm serve Qwen/Qwen2.5-Math-1.5B-Instruct --served-model-name cot_reflection-local
+```
+
+Then, assuming the optillm proxy is running, run:
+
+```shell
+python scripts/gen_optillm_dataset.py --num_samples 1 --approach cot_reflection --model local
 ```
 
 ## Implemented techniques
