@@ -32,6 +32,14 @@ from optillm.reread import re2_approach
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging_levels = {
+    "notset": logging.NOTSET,
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -78,6 +86,7 @@ server_config = {
     'optillm_api_key': '',
     'return_full_response': False,
     'port': 8000,
+    'log': 'info',
 }
 
 # List of known approaches
@@ -370,6 +379,7 @@ def parse_args():
         ("--n", "OPTILLM_N", int, 1, "Number of final responses to be returned"),
         ("--return-full-response", "OPTILLM_RETURN_FULL_RESPONSE", bool, False, "Return the full response including the CoT with <thinking> tags"),
         ("--port", "OPTILLM_PORT", int, 8000, "Specify the port to run the proxy"),
+        ("--log", "OPTILLM_LOG", str, "info", "Specify the logging level", list(logging_levels.keys()))
     ]
 
     for arg, env, type_, default, help_text, *extra in args_env:
@@ -415,6 +425,12 @@ def main():
     server_config.update(vars(args))
 
     port = server_config['port']
+
+    # Set logging level from user request
+    logging_level = server_config['log']
+    if logging_level in logging_levels.keys():
+        logger.setLevel(logging_levels[logging_level])
+    
     logger.info(f"Starting server with approach: {server_config['approach']}")
     server_config_clean = server_config.copy()
     if server_config_clean['optillm_api_key']:
