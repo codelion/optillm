@@ -27,10 +27,10 @@ def calculate_confidence(logits: List[torch.Tensor], answer_ids: torch.Tensor) -
             break
         token_logits = logits[t]
         probs = torch.softmax(token_logits, dim=-1)
-        if probs.size(0) > 1:
-            top_2_probs, _ = torch.topk(probs, min(2, probs.size(0)))
-            if top_2_probs.size(0) > 1:
-                confidence_sum += (top_2_probs[0] - top_2_probs[1]).item()
+        if probs.size(-1) > 1:
+            top_2_probs, _ = torch.topk(probs, min(2, probs.size(-1)))
+            if top_2_probs.size(-1) > 1:
+                confidence_sum += (top_2_probs[-1][0] - top_2_probs[-1][1]).item()
             else:
                 confidence_sum += 1.0  # Max confidence if there's only one token
         else:
