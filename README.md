@@ -163,7 +163,14 @@ or your own code where you want to use the results from optillm. You can use it 
 | PV Game                 | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
 | CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 
-## Available Parameters
+## Implemented plugins
+
+| Plugin                  | Slug               | Description                                                                                    |
+| ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
+| Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
+
+## Available parameters
 
 optillm supports various command-line arguments and environment variables for configuration.
 
