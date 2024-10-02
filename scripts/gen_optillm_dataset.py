@@ -1,4 +1,3 @@
-import os
 import json
 import argparse
 import asyncio
@@ -76,29 +75,37 @@ async def process_sample(sample: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         "results": results,
     }
 
-async def generate_dataset(dataset: str, output_file: str, **kwargs):
+async def generate_dataset(dataset_name: str, output_file: str, **kwargs):
     """Generate the dataset and save it to a JSONL file."""
-    dataset = load_dataset(dataset, split=f"{kwargs.get('split')}[:{kwargs.get('num_samples')}]")
+    dataset = load_dataset(dataset_name, split=f"{kwargs.get('dataset_split')}")
+    dataset = dataset.select(range(kwargs.get("num_samples")))
     
-    process_kwargs = {k: v for k, v in kwargs.items() if k not in ["dataset", "split", "output_file"]}
-
+    process_kwargs = {k: v for k, v in kwargs.items() if k not in ["dataset_name", "dataset_split", "output_file"]}
 
     with open(f"data/{output_file}", "w") as f:
         for sample in tqdm(dataset):
             result = await process_sample(sample, **process_kwargs)
             f.write(json.dumps(result) + "\n")
 
+    # Push to hub
+    if kwargs.get("push_to_hub", True) and kwargs.get("hub_dataset_id") is not None:
+        results_ds = load_dataset("json", data_files=f"data/{output_file}", split="train")
+        dataset = dataset.add_column("optillm_completions", results_ds["results"])
+        dataset.push_to_hub(kwargs.get("hub_dataset_id"))
+
 def main():
     parser = argparse.ArgumentParser(description="Generate OptILM dataset")
     parser.add_argument("--approach", type=str, default="mcts", help="optillm approach")
-    parser.add_argument("--dataset", type=str, default="AI-MO/NuminaMath-CoT", help="Dataset name")
-    parser.add_argument("--split", type=str, default="train", help="Dataset split")
+    parser.add_argument("--dataset_name", type=str, default="AI-MO/NuminaMath-CoT", help="Dataset name")
+    parser.add_argument("--dataset_split", type=str, default="train", help="Dataset split")
     parser.add_argument("--prompt_column", type=str, default="problem", help="Column name for the prompt")
     parser.add_argument("--num_samples", type=int, default=100, help="Number of samples to process")
     parser.add_argument("--num_completions_per_prompt", type=int, default=1, help="Number of completions per prompt")
     parser.add_argument("--temperature", type=float, default=0., help="Temperature for sampling")
     parser.add_argument("--output_file", type=str, default="optillm_dataset.jsonl", help="Output file path")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model name")
+    parser.add_argument("--hub_dataset_id", type=str, default=None, help="Hugging Face dataset ID to push results to")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push results to Hugging Face dataset")
     args = parser.parse_args()
 
     asyncio.run(generate_dataset(**vars(args)))
