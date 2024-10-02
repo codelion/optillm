@@ -20,6 +20,8 @@ setup(
         "requests",
         "beautifulsoup4",
         "lxml",
+        "presidio_analyzer",
+        "presidio_anonymizer"
     ],
     author="codelion",
     author_email="codelion@okyasoft.com",

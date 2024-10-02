@@ -22,7 +22,7 @@ from optillm.moa import mixture_of_agents
 from optillm.rto import round_trip_optimization
 from optillm.self_consistency import advanced_self_consistency_approach
 from optillm.pvg import inference_time_pv_game
-from optillm.z3_solver import Z3SolverSystem
+from optillm.z3_solver import Z3SymPySolverSystem
 from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
@@ -44,31 +44,34 @@ logging_levels = {
 # Initialize Flask app
 app = Flask(__name__)
 
-# OpenAI, Azure, or LiteLLM API configuration
-if os.environ.get("OPENAI_API_KEY"):
-    API_KEY = os.environ.get("OPENAI_API_KEY")
-    default_client = OpenAI(api_key=API_KEY)
-elif os.environ.get("AZURE_OPENAI_API_KEY"):
-    API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
-    API_VERSION = os.environ.get("AZURE_API_VERSION")
-    AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
-    if API_KEY is not None:
-        default_client = AzureOpenAI(
-            api_key=API_KEY,
-            api_version=API_VERSION,
-            azure_endpoint=AZURE_ENDPOINT,
-        )
+def get_config():
+    API_KEY = None
+    # OpenAI, Azure, or LiteLLM API configuration
+    if os.environ.get("OPENAI_API_KEY"):
+        API_KEY = os.environ.get("OPENAI_API_KEY")
+        default_client = OpenAI(api_key=API_KEY)
+    elif os.environ.get("AZURE_OPENAI_API_KEY"):
+        API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
+        API_VERSION = os.environ.get("AZURE_API_VERSION")
+        AZURE_ENDPOINT = os.environ.get("AZURE_API_BASE")
+        if API_KEY is not None:
+            default_client = AzureOpenAI(
+                api_key=API_KEY,
+                api_version=API_VERSION,
+                azure_endpoint=AZURE_ENDPOINT,
+            )
+        else:
+            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            azure_credential = DefaultAzureCredential()
+            token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
+            default_client = AzureOpenAI(
+                api_version=API_VERSION,
+                azure_endpoint=AZURE_ENDPOINT,
+                azure_ad_token_provider=token_provider
+            )
     else:
-        from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-        azure_credential = DefaultAzureCredential()
-        token_provider = get_bearer_token_provider(azure_credential, "https://cognitiveservices.azure.com/.default")
-        default_client = AzureOpenAI(
-            api_version=API_VERSION,
-            azure_endpoint=AZURE_ENDPOINT,
-            azure_ad_token_provider=token_provider
-        )
-else:
-    default_client = LiteLLMWrapper()
+        default_client = LiteLLMWrapper()
+    return default_client, API_KEY
 
 # Server configuration
 server_config = {
@@ -156,7 +159,7 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 'rto':
             return round_trip_optimization(system_prompt, initial_query, client, model)
         elif approach == 'z3':
-            z3_solver = Z3SolverSystem(system_prompt, client, model)
+            z3_solver = Z3SymPySolverSystem(system_prompt, client, model)
             return z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
             return advanced_self_consistency_approach(system_prompt, initial_query, client, model)
@@ -263,6 +266,14 @@ def check_api_key():
 def proxy():
     logger.info('Received request to /v1/chat/completions')
     data = request.get_json()
+    auth_header = request.headers.get("Authorization")
+    bearer_token = ""
+
+    if auth_header and auth_header.startswith("Bearer "):
+        # Extract the bearer token
+        bearer_token = auth_header.split("Bearer ")[1].strip()
+        logger.debug(f"Intercepted Bearer Token: {bearer_token}")
+    
     logger.debug(f'Request data: {data}')
 
     stream = data.get('stream', False)
@@ -281,14 +292,19 @@ def proxy():
         model = f"{optillm_approach}-{model}"
 
     base_url = server_config['base_url']
-
-    if base_url != "":
-        client = OpenAI(api_key=API_KEY, base_url=base_url)
-    else:
-        client = default_client
+    default_client, api_key = get_config()
 
     operation, approaches, model = parse_combined_approach(model, known_approaches, plugin_approaches)
     logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}')
+
+    if bearer_token != "" and bearer_token.startswith("sk-") and model.startswith("gpt"):
+        api_key = bearer_token
+        if base_url != "":
+            client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            client = OpenAI(api_key=api_key)
+    else: 
+        client = default_client
 
     try:
         if operation == 'SINGLE':
@@ -342,7 +358,7 @@ def proxy():
 @app.route('/v1/models', methods=['GET'])
 def proxy_models():
     logger.info('Received request to /v1/models')
-    
+    default_client, API_KEY = get_config()
     try:
         if server_config['base_url']:
             client = OpenAI(api_key=API_KEY, base_url=server_config['base_url'])

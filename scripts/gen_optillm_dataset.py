@@ -26,7 +26,7 @@ async def generate_response(prompt: str, approach: str) -> Dict[str, Any]:
         }
     else:
         # Use OptILM with the specified approach
-        client = AsyncOpenAI(api_key="none", base_url="http://localhost:8000/v1")
+        client = AsyncOpenAI(api_key="none", base_url="http://localhost:8080/v1")
         response = await client.chat.completions.create(
             model=f"{approach}-gpt-4o-mini",  # Assuming OptILM uses this naming convention
             messages=[{"role": "user", "content": prompt}],
@@ -48,7 +48,7 @@ async def rank_responses(prompt: str, responses: List[Dict[str, Any]]) -> List[i
     )
     
     ranking_str = ranking_response.choices[0].message.content.strip()
-    print(ranking_str)
+    print(f"Ranking str: {ranking_str}")
     return [int(idx) for idx in ranking_str.split(",")]
 
 async def process_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,6 +66,7 @@ async def process_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
     rankings = await rank_responses(prompt, results)
 
     # Add rankings to results
+    print(rankings)
     for rank, idx in enumerate(rankings):
         results[idx]["rank"] = rank
 
@@ -79,7 +80,7 @@ async def generate_dataset(num_samples: int, output_file: str):
     dataset = load_dataset("lmsys/arena-hard-auto-v0.1", split="train")
     
     with open(output_file, "w") as f:
-        for sample in tqdm(dataset.select(range(num_samples)), total=num_samples):
+        for sample in tqdm(dataset.select(range(29, 29 + num_samples)), total=num_samples):
             result = await process_sample(sample)
             f.write(json.dumps(result) + "\n")
 

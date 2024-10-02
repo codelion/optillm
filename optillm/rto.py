@@ -59,7 +59,7 @@ def round_trip_optimization(system_prompt: str, initial_query: str, client, mode
     c2 = extract_code_from_prompt(c2)
 
     if c1.strip() == c2.strip():
-        return c1
+        return c1, rto_completion_tokens
 
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Initial query: {initial_query}\n\nFirst generated code (C1):\n{c1}\n\nSecond generated code (C2):\n{c2}\n\nBased on the initial query and these two different code implementations, generate a final, optimized version of the code. Only respond with the final code, do not return anything else."}]

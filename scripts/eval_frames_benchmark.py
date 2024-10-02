@@ -137,9 +137,9 @@ def main(model: str):
     print(f"Accuracy: {accuracy:.2%}")
     
     # Print accuracy by reasoning type
-    reasoning_types = set(r['reasoning_types'] for r in results)
+    reasoning_types = set(r['reasoning_type'] for r in results)
     for rt in reasoning_types:
-        rt_samples = [r for r in results if r['reasoning_types'] == rt]
+        rt_samples = [r for r in results if r['reasoning_type'] == rt]
         rt_correct = sum(1 for r in rt_samples if r['evaluation_decision'] == 'TRUE')
         rt_accuracy = rt_correct / len(rt_samples)
         print(f"Accuracy for {rt}: {rt_accuracy:.2%}")

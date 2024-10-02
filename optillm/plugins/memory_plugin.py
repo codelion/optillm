@@ -50,19 +50,23 @@ def extract_query(text: str) -> Tuple[str, str]:
     return query, context
 
 def extract_key_information(text: str, client, model: str) -> List[str]:
+    # print(f"Prompt : {text}")
     prompt = f"""Extract key information from the following text. Provide a list of important facts or concepts, each on a new line:
 
 {text}
 
 Key information:"""
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=1000
-    )
-
-    key_info = response.choices[0].message.content.strip().split('\n')
+    try: 
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
+        )
+        key_info = response.choices[0].message.content.strip().split('\n')
+    except Exception as e:
+        print(f"Error parsing content: {str(e)}")
+        return [],0
     
     return [info.strip('- ') for info in key_info if info.strip()], response.usage.completion_tokens
 
@@ -75,14 +79,16 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     chunk_size = 10000
     for i in range(0, len(context), chunk_size):
         chunk = context[i:i+chunk_size]
+        # print(f"chunk: {chunk}")
         key_info, tokens = extract_key_information(chunk, client, model)
+        #print(f"key info: {key_info}")
         completion_tokens += tokens
         for info in key_info:
             memory.add(info)
-
+    # print(f"query : {query}")
     # Retrieve relevant information from memory
     relevant_info = memory.get_relevant(query)
-    
+    # print(f"relevant_info : {relevant_info}")
     # Generate response using relevant information
     prompt = f"""System: {system_prompt}
 
@@ -96,8 +102,8 @@ Context: {' '.join(relevant_info)}
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1000
     )
-
+    print(f"response : {response}")
     final_response = response.choices[0].message.content.strip()
     completion_tokens += response.usage.completion_tokens
-
+    print(f"final_response: {final_response}")
     return final_response, completion_tokens
