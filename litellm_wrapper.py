@@ -38,8 +38,8 @@ class LiteLLMWrapper:
             # This list can be expanded as needed.
             return {
                 "data": [
-                    {"id": "gpt-3.5-turbo"},
-                    {"id": "gpt-4"},
+                    {"id": "gpt-4o-mini"},
+                    {"id": "gpt-4o"},
                     {"id": "command-nightly"},
                     # Add more models as needed
                 ]
