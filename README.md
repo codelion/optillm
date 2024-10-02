@@ -7,7 +7,7 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 
 ## Installation
 
-Just clone the repository with `git` and use `pip install` to setup the dependencies.
+Clone the repository with `git` and use `pip install` to setup the dependencies.
 
 ```bash
 git clone https://github.com/codelion/optillm.git
@@ -100,7 +100,7 @@ response = client.chat.completions.create(
   extra_body={"optillm_approach": "bon|moa|mcts"}
 )
 ```
-- Or, you can just mention the approach in either your `system` or user `prompt`, within `<optillm_approach> </optillm_approach>` tags.
+- Or, you can just mention the approach in either your `system` or `user` prompt, within `<optillm_approach> </optillm_approach>` tags.
 
 ```bash
 response = client.chat.completions.create(
