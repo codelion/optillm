@@ -76,7 +76,7 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     completion_tokens = 0
 
     # Process context and add to memory
-    chunk_size = 10000
+    chunk_size = 100000
     for i in range(0, len(context), chunk_size):
         chunk = context[i:i+chunk_size]
         # print(f"chunk: {chunk}")
@@ -100,10 +100,9 @@ Context: {' '.join(relevant_info)}
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=1000
     )
-    print(f"response : {response}")
+    # print(f"response : {response}")
     final_response = response.choices[0].message.content.strip()
     completion_tokens += response.usage.completion_tokens
-    print(f"final_response: {final_response}")
+    # print(f"final_response: {final_response}")
     return final_response, completion_tokens
