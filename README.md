@@ -240,6 +240,14 @@ Authorization: Bearer your_secret_api_key
 ```
 ## SOTA results on benchmarks with optillm
 
+### readurls&memory-gpt-4o-mini on Google FRAMES Benchmark (Oct 2024)
+| Model | Accuracy | 
+| ----- | -------- |
+| readlurls&memory-gpt-4o-mini | 65.66 | 
+| gpt-4o-mini | 50.0 |
+| Gemini Flash 1.5 | 66.5 |
+| Gemini Pro 1.5 | 72.9 |
+
 ### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
 
 | Model                  | pass@1 | pass@5 | pass@10 |
