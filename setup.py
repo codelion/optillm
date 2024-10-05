@@ -21,7 +21,9 @@ setup(
         "beautifulsoup4",
         "lxml",
         "presidio_analyzer",
-        "presidio_anonymizer"
+        "presidio_anonymizer",
+        "nbconvert",
+        "nbformat",
     ],
     author="codelion",
     author_email="codelion@okyasoft.com",
