@@ -297,7 +297,7 @@ def proxy():
     operation, approaches, model = parse_combined_approach(model, known_approaches, plugin_approaches)
     logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}')
 
-    if bearer_token != "" and bearer_token.startswith("sk-") and model.startswith("gpt"):
+    if bearer_token != "" and bearer_token.startswith("sk-"):
         api_key = bearer_token
         if base_url != "":
             client = OpenAI(api_key=api_key, base_url=base_url)

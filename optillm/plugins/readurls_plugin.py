@@ -22,7 +22,7 @@ def extract_urls(text: str) -> List[str]:
     
     return cleaned_urls
 
-def fetch_webpage_content(url: str, max_length: int = 40000) -> str:
+def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
     try:
         headers = {
             'User-Agent': 'optillm/0.0.1 (hhttps://github.com/codelion/optillm)'

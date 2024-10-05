@@ -8,8 +8,9 @@ from openai import OpenAI
 from datasets import load_dataset
 from tqdm import tqdm
 
-client = OpenAI(api_key="none", base_url="http://localhost:8000/v1")
-SLEEP_INTERVAL = 60
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="http://localhost:8000/v1")
+# client = OpenAI()
+SLEEP_INTERVAL = 300
 
 def load_existing_results(filename: str) -> List[Dict]:
     try:
@@ -28,7 +29,6 @@ def get_last_processed_index(results: List[Dict]) -> int:
     if not results:
         return -1
     return max(int(r.get('index', -1)) for r in results)
-
 
 def generate_llm_prompt(prompt: str, wiki_links: List[str]) -> str:
     return f"Here are the relevant Wikipedia articles:\n{wiki_links}\n\nBased on all the information, answer the query. \n\nQuery: {prompt}\n\n"
@@ -54,7 +54,7 @@ truth answer. Your task is to determine if the ground truth answer is present in
 response. Please analyze the provided data and make a decision.
 ===Instructions===
 1. Carefully compare the "Predicted Answer" with the "Ground Truth Answer".
-2. Consider the substance of the answers – look for equivalent information or correct answers.
+2. Consider the substance of the answers - look for equivalent information or correct answers.
 Do not focus on exact wording unless the exact wording is crucial to the meaning.
 3. Your final decision should be based on whether the meaning and the vital facts of the
 "Ground Truth Answer" are present in the "Predicted Answer:"
@@ -122,8 +122,8 @@ def main(model: str):
         }
         
         save_result(filename, result)
-        print(f"Index: {index}, Decision: {result['evaluation_decision']}")
-        time.sleep(SLEEP_INTERVAL)
+        # print(f"Index: {index}, Decision: {result['evaluation_decision']}")
+        # time.sleep(SLEEP_INTERVAL)
 
     # Calculate and print summary statistics
     results = load_existing_results(filename)

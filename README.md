@@ -4,6 +4,7 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
+[![GitHub Discussions](https://img.shields.io/github/discussions/codelion/optillm)](https://github.com/codelion/optillm/discussions)
 
 ## Installation
 
@@ -170,6 +171,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
 | Privacy                 | `privacy`          | Anonymize PII data in request and deanonymize it back to original value in response            |
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
+| Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
 
 ## Available parameters
 
@@ -238,6 +240,14 @@ Authorization: Bearer your_secret_api_key
 ```
 ## SOTA results on benchmarks with optillm
 
+### readurls&memory-gpt-4o-mini on Google FRAMES Benchmark (Oct 2024)
+| Model | Accuracy | 
+| ----- | -------- |
+| readlurls&memory-gpt-4o-mini | 65.66 | 
+| gpt-4o-mini | 50.0 |
+| Gemini Flash 1.5 | 66.5 |
+| Gemini Pro 1.5 | 72.9 |
+
 ### plansearch-gpt-4o-mini on LiveCodeBench (Sep 2024)
 
 | Model                  | pass@1 | pass@5 | pass@10 |
@@ -262,6 +272,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 ## References
 
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941)
+- [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906)
 - [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200)
 - [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)

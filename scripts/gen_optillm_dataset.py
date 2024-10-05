@@ -80,9 +80,12 @@ async def generate_dataset(num_samples: int, output_file: str):
     dataset = load_dataset("lmsys/arena-hard-auto-v0.1", split="train")
     
     with open(output_file, "w") as f:
-        for sample in tqdm(dataset.select(range(29, 29 + num_samples)), total=num_samples):
-            result = await process_sample(sample)
-            f.write(json.dumps(result) + "\n")
+        for sample in tqdm(dataset.select(range( num_samples)), total=num_samples):
+            try:
+                result = await process_sample(sample)
+                f.write(json.dumps(result) + "\n")
+            except Exception as e:
+                print(f"Skip over this item due to error {str(e)}")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate OptILM dataset")
