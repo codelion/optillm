@@ -10,18 +10,29 @@ SLUG = "executecode"
 
 def extract_python_code(text: str) -> List[str]:
     """Extract Python code blocks from text."""
+    # print(f"Extracting code: {text}")
     pattern = r'```python\s*(.*?)\s*```'
     return re.findall(pattern, text, re.DOTALL)
 
 def execute_code(code: str) -> str:
     """Execute Python code in a Jupyter notebook environment."""
-    with tempfile.NamedTemporaryFile(suffix='.ipynb', delete=False) as tmp:
-        notebook = nbformat.v4.new_notebook()
-        notebook['cells'] = [nbformat.v4.new_code_cell(code)]
-        nbformat.write(notebook, tmp)
+    
+    notebook = nbformat.v4.new_notebook()
+    notebook['cells'] = [nbformat.v4.new_code_cell(code)]
+    
+    # Convert notebook to JSON string
+    notebook_json = nbformat.writes(notebook)
+    
+    # Convert JSON string to bytes
+    notebook_bytes = notebook_json.encode('utf-8')
+
+    with tempfile.NamedTemporaryFile(mode='wb', suffix='.ipynb', delete=False) as tmp:
+        tmp.write(notebook_bytes)
+        tmp.flush()
+        tmp_name = tmp.name
 
     try:
-        with open(tmp.name) as f:
+        with open(tmp_name, 'r', encoding='utf-8') as f:
             nb = nbformat.read(f, as_version=4)
         ep = ExecutePreprocessor(timeout=30, kernel_name='python3')
         ep.preprocess(nb, {'metadata': {'path': './'}})
@@ -38,7 +49,7 @@ def execute_code(code: str) -> str:
         
         return output.strip()
     finally:
-        os.unlink(tmp.name)
+        os.unlink(tmp_name)
 
 def should_execute_request_code(query: str) -> bool:
     """Decide whether to execute code from the request based on the query."""
