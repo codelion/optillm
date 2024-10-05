@@ -171,6 +171,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
 | Privacy                 | `privacy`          | Anonymize PII data in request and deanonymize it back to original value in response            |
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
+| Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
 
 ## Available parameters
 
