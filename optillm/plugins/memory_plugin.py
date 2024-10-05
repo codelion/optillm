@@ -20,7 +20,7 @@ class Memory:
         self.items.append(item)
         self.vectors = None  # Reset vectors to force recalculation
 
-    def get_relevant(self, query: str, n: int = 5) -> List[str]:
+    def get_relevant(self, query: str, n: int = 10) -> List[str]:
         if not self.items:
             return []
 
@@ -49,26 +49,46 @@ def extract_query(text: str) -> Tuple[str, str]:
             query = "What is the main point of this text?"
     return query, context
 
-def extract_key_information(text: str, client, model: str) -> List[str]:
+def classify_margin(margin):
+        return margin.startswith("YES#")
+
+def extract_key_information(system_message, text: str, query: str, client, model: str) -> List[str]:
     # print(f"Prompt : {text}")
-    prompt = f"""Extract key information from the following text. Provide a list of important facts or concepts, each on a new line:
-
+    messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": f"""
+'''text
 {text}
-
-Key information:"""
+'''
+Copy over all context relevant to the query: {query}
+Provide the answer in the format: <YES/NO>#<Relevant context>.
+Here are rules:
+- If you don't know how to answer the query - start your answer with NO#
+- If the text is not related to the query - start your answer with NO#
+- If you can extract relevant information - start your answer with YES#
+- If the text does not mention the person by name - start your answer with NO#
+Example answers:
+- YES#Western philosophy originated in Ancient Greece in the 6th century BCE with the pre-Socratics.
+- NO#No relevant context.
+"""}
+    ]
 
     try: 
         response = client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             max_tokens=1000
         )
-        key_info = response.choices[0].message.content.strip().split('\n')
+        key_info = response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error parsing content: {str(e)}")
         return [],0
+    margins = []
+
+    if classify_margin(key_info):
+        margins.append(key_info.split("#", 1)[1])
     
-    return [info.strip('- ') for info in key_info if info.strip()], response.usage.completion_tokens
+    return margins, response.usage.completion_tokens
 
 def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str, int]:
     memory = Memory()
@@ -80,7 +100,7 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     for i in range(0, len(context), chunk_size):
         chunk = context[i:i+chunk_size]
         # print(f"chunk: {chunk}")
-        key_info, tokens = extract_key_information(chunk, client, model)
+        key_info, tokens = extract_key_information(system_prompt, chunk, query, client, model)
         #print(f"key info: {key_info}")
         completion_tokens += tokens
         for info in key_info:
@@ -90,16 +110,22 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     relevant_info = memory.get_relevant(query)
     # print(f"relevant_info : {relevant_info}")
     # Generate response using relevant information
-    prompt = f"""System: {system_prompt}
+    messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"""
 
-Context: {' '.join(relevant_info)}
-
+I asked my assistant to read and analyse the above content page by page to help you complete this task. These are margin notes left on each page:
+'''text
+{relevant_info}
+'''
+Read again the note(s), take a deep breath and answer the query.
 {query}
-"""
+"""}
+    ]
 
     response = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
     )
     # print(f"response : {response}")
     final_response = response.choices[0].message.content.strip()

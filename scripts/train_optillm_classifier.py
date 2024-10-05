@@ -1,13 +1,13 @@
 import argparse
 import torch
-from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_linear_schedule_with_warmup
 from datasets import load_dataset
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-import numpy as np
 import torch.nn.functional as F
 from safetensors.torch import save_model
+from collections import Counter
 
 # Check for MPS (Apple Silicon) support
 if torch.backends.mps.is_available():
@@ -21,14 +21,12 @@ print(f"Using device: {device}")
 
 # Constants
 APPROACHES = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
-MAX_LENGTH = 512  # Maximum sequence length for RoBERTa
+MAX_LENGTH = 512
 
 class OptILMDataset(Dataset):
-    def __init__(self, prompts, efforts, approaches, ranks, tokenizer):
+    def __init__(self, prompts, approaches, tokenizer):
         self.prompts = prompts
-        self.efforts = efforts
         self.approaches = approaches
-        self.ranks = ranks
         self.tokenizer = tokenizer
 
     def __len__(self):
@@ -36,9 +34,7 @@ class OptILMDataset(Dataset):
 
     def __getitem__(self, idx):
         prompt = self.prompts[idx]
-        effort = self.efforts[idx]
         approach = self.approaches[idx]
-        rank = self.ranks[idx]
 
         encoding = self.tokenizer.encode_plus(
             prompt,
@@ -53,17 +49,8 @@ class OptILMDataset(Dataset):
         return {
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
-            'effort': torch.tensor(effort, dtype=torch.float),
-            'approach': torch.tensor(APPROACHES.index(approach), dtype=torch.long),
-            'rank': torch.tensor(rank, dtype=torch.float)
+            'labels': torch.tensor(APPROACHES.index(approach), dtype=torch.long)
         }
-
-def normalize_tokens(tokens):
-    min_tokens = min(tokens)
-    max_tokens = max(tokens)
-    if min_tokens == max_tokens:
-        return [1.0] * len(tokens)
-    return [(t - min_tokens) / (max_tokens - min_tokens) for t in tokens]
 
 def load_and_preprocess_data(tokenizer):
     dataset = load_dataset('json', data_files='optillm_dataset_1.jsonl')
@@ -74,99 +61,54 @@ def load_and_preprocess_data(tokenizer):
         prompt = item['prompt']
         results = item['results']
         
-        valid_results = [r for r in results if 'rank' in r and r['rank'] is not None]
+        valid_results = [r for r in results if 'approach' in r]
         if not valid_results:
             continue
 
-        tokens = [r['tokens'] for r in valid_results]
-        efforts = normalize_tokens(tokens)
-        
-        for result, effort in zip(valid_results, efforts):
+        for result in valid_results:
             data_items.append({
                 'prompt': prompt,
-                'effort': effort,
-                'approach': result['approach'],
-                'rank': result['rank']
+                'approach': result['approach']
             })
 
     # Print some statistics
     print(f"Total data points: {len(data_items)}")
     print(f"Unique prompts: {len(set(item['prompt'] for item in data_items))}")
-    approach_counts = {approach: sum(1 for item in data_items if item['approach'] == approach) for approach in APPROACHES}
+    approach_counts = Counter(item['approach'] for item in data_items)
     print("Approach distribution:")
     for approach, count in approach_counts.items():
         print(f"  {approach}: {count}")
+
+    # Calculate class weights for balanced sampling
+    class_weights = {approach: len(data_items) / count for approach, count in approach_counts.items()}
+    sample_weights = [class_weights[item['approach']] for item in data_items]
 
     # Split the data
     train_data, val_data = train_test_split(data_items, test_size=0.2, random_state=42)
 
     train_dataset = OptILMDataset(
         [item['prompt'] for item in train_data],
-        [item['effort'] for item in train_data],
         [item['approach'] for item in train_data],
-        [item['rank'] for item in train_data],
         tokenizer
     )
     val_dataset = OptILMDataset(
         [item['prompt'] for item in val_data],
-        [item['effort'] for item in val_data],
         [item['approach'] for item in val_data],
-        [item['rank'] for item in val_data],
         tokenizer
     )
 
-    return train_dataset, val_dataset
+    # Create a weighted sampler for the training data
+    train_sampler = WeightedRandomSampler(
+        weights=[class_weights[item['approach']] for item in train_data],
+        num_samples=len(train_data),
+        replacement=True
+    )
 
-class OptILMModel(torch.nn.Module):
-    def __init__(self, base_model, num_labels):
-        super().__init__()
-        self.base_model = base_model
-        self.dropout = torch.nn.Dropout(0.1)
-        hidden_size = base_model.config.hidden_size
-        self.classifier = torch.nn.Linear(hidden_size * 4 + hidden_size, num_labels)
-        self.effort_proj = torch.nn.Linear(1, hidden_size)
+    return train_dataset, val_dataset, train_sampler
 
-    def forward(self, input_ids, attention_mask, effort):
-        outputs = self.base_model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
-        
-        # Use the last 4 layers
-        last_four_layers = outputs.hidden_states[-4:]
-        concatenated_layers = torch.cat([layer[:, 0] for layer in last_four_layers], dim=-1)
-        
-        if effort.dim() == 1:
-            effort = effort.unsqueeze(1)
-        
-        effort_proj = self.effort_proj(effort)
-        
-        combined_features = torch.cat((concatenated_layers, effort_proj), dim=1)
-        combined_features = self.dropout(combined_features)
-        logits = self.classifier(combined_features)
-        return logits
-
-def custom_loss(outputs, approaches, ranks, efforts):
-    ce_loss = F.cross_entropy(outputs, approaches)
-    
-    # Get the predicted approach
-    _, predicted = torch.max(outputs, 1)
-    
-    # Calculate rank loss only for correct predictions
-    correct_predictions = (predicted == approaches)
-    if correct_predictions.sum() > 0:
-        predicted_ranks = ranks[correct_predictions]
-        actual_ranks = ranks[correct_predictions]
-        rank_loss = F.mse_loss(predicted_ranks, actual_ranks)
-    else:
-        rank_loss = torch.tensor(0.0).to(outputs.device)
-    
-    # Combine losses based on effort
-    combined_loss = efforts.mean() * rank_loss + (1 - efforts.mean()) * ce_loss
-    
-    return combined_loss
-
-def calculate_accuracy(outputs, labels):
-    _, predicted = torch.max(outputs, 1)
-    correct = (predicted == labels).sum().item()
-    return correct / labels.size(0)
+def calculate_accuracy(logits, labels):
+    predictions = torch.argmax(logits, dim=-1)
+    return (predictions == labels).float().mean()
 
 def train(model, train_dataloader, val_dataloader, optimizer, scheduler, num_epochs):
     best_val_loss = float('inf')
@@ -179,26 +121,20 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, num_epo
         for batch in tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
-            efforts = batch['effort'].to(device)
-            approaches = batch['approach'].to(device)
-            ranks = batch['rank'].to(device)
+            labels = batch['labels'].to(device)
 
-            try:
-                outputs = model(input_ids, attention_mask=attention_mask, effort=efforts)
-                loss = custom_loss(outputs, approaches, ranks, efforts)
+            outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            logits = outputs.logits
 
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
 
-                total_loss += loss.item()
-                total_accuracy += calculate_accuracy(outputs, approaches)
-            except RuntimeError as e:
-                print(f"Error in batch: {e}")
-                print(f"Shapes - input_ids: {input_ids.shape}, attention_mask: {attention_mask.shape}, efforts: {efforts.shape}, approaches: {approaches.shape}, ranks: {ranks.shape}")
-                continue
+            total_loss += loss.item()
+            total_accuracy += calculate_accuracy(logits, labels)
 
         avg_train_loss = total_loss / len(train_dataloader)
         avg_train_accuracy = total_accuracy / len(train_dataloader)
@@ -212,19 +148,14 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, num_epo
             for batch in val_dataloader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                efforts = batch['effort'].to(device)
-                approaches = batch['approach'].to(device)
-                ranks = batch['rank'].to(device)
+                labels = batch['labels'].to(device)
 
-                try:
-                    outputs = model(input_ids, attention_mask=attention_mask, effort=efforts)
-                    val_loss = custom_loss(outputs, approaches, ranks, efforts)
-                    total_val_loss += val_loss.item()
-                    total_val_accuracy += calculate_accuracy(outputs, approaches)
-                except RuntimeError as e:
-                    print(f"Error in validation batch: {e}")
-                    print(f"Shapes - input_ids: {input_ids.shape}, attention_mask: {attention_mask.shape}, efforts: {efforts.shape}, approaches: {approaches.shape}, ranks: {ranks.shape}")
-                    continue
+                outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+                val_loss = outputs.loss
+                logits = outputs.logits
+
+                total_val_loss += val_loss.item()
+                total_val_accuracy += calculate_accuracy(logits, labels)
 
         avg_val_loss = total_val_loss / len(val_dataloader)
         avg_val_accuracy = total_val_accuracy / len(val_dataloader)
@@ -236,16 +167,16 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, num_epo
             # Save the best model
             save_model(model, "best_model.safetensors")
 
-def inference(model, tokenizer, prompt, effort):
+def inference(model, tokenizer, prompt):
     model.eval()
     with torch.no_grad():
         inputs = tokenizer(prompt, return_tensors="pt", max_length=MAX_LENGTH, truncation=True, padding="max_length")
         input_ids = inputs["input_ids"].to(device)
         attention_mask = inputs["attention_mask"].to(device)
-        effort_tensor = torch.tensor([effort], dtype=torch.float).to(device)
         
-        outputs = model(input_ids, attention_mask=attention_mask, effort=effort_tensor)
-        probabilities = torch.nn.functional.softmax(outputs, dim=1)
+        outputs = model(input_ids, attention_mask=attention_mask)
+        logits = outputs.logits
+        probabilities = F.softmax(logits, dim=1)
         predicted_approach_index = torch.argmax(probabilities, dim=1).item()
         
     return APPROACHES[predicted_approach_index], probabilities[0][predicted_approach_index].item()
@@ -253,15 +184,14 @@ def inference(model, tokenizer, prompt, effort):
 def main(args):
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    base_model = AutoModel.from_pretrained(args.model_name)
-    model = OptILMModel(base_model, num_labels=len(APPROACHES))
+    model = AutoModelForSequenceClassification.from_pretrained(args.model_name, num_labels=len(APPROACHES))
     model.to(device)
 
     # Load and preprocess data
-    train_dataset, val_dataset = load_and_preprocess_data(tokenizer)
+    train_dataset, val_dataset, train_sampler = load_and_preprocess_data(tokenizer)
 
     # Create data loaders
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
     # Optimizer and scheduler
@@ -281,19 +211,17 @@ def main(args):
 
     # Example inference
     test_prompt = "Maximize x + y subject to: x + 2y <= 10, x >= 0, y >= 0"
-    test_effort = 0.5
-    predicted_approach, confidence = inference(model, tokenizer, test_prompt, test_effort)
+    predicted_approach, confidence = inference(model, tokenizer, test_prompt)
     print(f"Test Prompt: {test_prompt}")
-    print(f"Effort: {test_effort}")
     print(f"Predicted Approach: {predicted_approach}")
     print(f"Confidence: {confidence:.4f}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train OptILM model")
-    parser.add_argument("--model_name", type=str, default="roberta-base", help="Pretrained model name")
-    parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
-    parser.add_argument("--learning_rate", type=float, default=5e-6, help="Learning rate")
-    parser.add_argument("--num_epochs", type=int, default=5, help="Number of training epochs")
+    parser = argparse.ArgumentParser(description="Train OptILM classifier")
+    parser.add_argument("--model_name", type=str, default="roberta-large", help="Pretrained model name")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
+    parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
+    parser.add_argument("--num_epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to Hugging Face Hub")
     parser.add_argument("--hub_model_id", type=str, help="Model ID for Hugging Face Hub")
     
