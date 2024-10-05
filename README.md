@@ -272,6 +272,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 ## References
 
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941)
+- [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906)
 - [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200)
 - [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275)
 - [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403)
