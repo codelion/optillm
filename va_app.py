@@ -25,7 +25,7 @@ OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL")
 client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
 
 response = client.chat.completions.create(
-  model="moa-meta-llama/llama-3.1-8b-instruct:free",
+  model="moa-nousresearch/hermes-3-llama-3.1-405b:free",
   messages=[
     {
       "role": "user",
