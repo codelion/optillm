@@ -17,3 +17,5 @@ presidio_analyzer
 presidio_anonymizer
 nbformat
 nbconvert
+ipython
+ipykernel

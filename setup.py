@@ -24,6 +24,8 @@ setup(
         "presidio_anonymizer",
         "nbconvert",
         "nbformat",
+        "ipython",
+        "ipykernel",
     ],
     author="codelion",
     author_email="codelion@okyasoft.com",
