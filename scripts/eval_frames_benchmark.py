@@ -34,7 +34,7 @@ def generate_llm_prompt(prompt: str, wiki_links: List[str]) -> str:
     return f"Here are the relevant Wikipedia articles:\n{wiki_links}\n\nBased on all the information, answer the query. \n\nQuery: {prompt}\n\n"
 
 def get_llm_response(prompt: str, model: str) -> str:
-    response = client.chat.completions.create(
+    response = client.with_options(timeout=1000.0).chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
