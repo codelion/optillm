@@ -245,6 +245,9 @@ Authorization: Bearer your_secret_api_key
 | ----- | -------- |
 | readlurls&memory-gpt-4o-mini | 65.66 | 
 | gpt-4o-mini | 50.0 |
+| readlurls&memory-Gemma2-9b | 30.1 |
+| Gemma2-9b | 5.1 |
+| Gemma2-27b | 30.8 |
 | Gemini Flash 1.5 | 66.5 |
 | Gemini Pro 1.5 | 72.9 |
 
