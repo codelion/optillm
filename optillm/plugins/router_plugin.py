@@ -74,7 +74,7 @@ def preprocess_input(tokenizer, system_prompt, initial_query):
     )
     return encoding['input_ids'], encoding['attention_mask']
 
-def predict_approach(model, input_ids, attention_mask, device, effort=0.8):
+def predict_approach(model, input_ids, attention_mask, device, effort=0.7):
     model.eval()
     with torch.no_grad():
         input_ids = input_ids.to(device)
@@ -151,4 +151,4 @@ def run(system_prompt, initial_query, client, model, **kwargs):
                 {"role": "user", "content": initial_query}
             ]
         )
-        return response.choices[0].message.content, response.usage.completion_tokens()
+        return response.choices[0].message.content, response.usage.completion_tokens
