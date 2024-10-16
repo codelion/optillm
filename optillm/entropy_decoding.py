@@ -141,7 +141,7 @@ def entropy_decode(
     stop = torch.tensor([tokenizer.eos_token_id], device=device, dtype=torch.int32)
 
     for step in range(max_new_tokens):
-        logging.info(f"Generation step: {step + 1}")
+        logging.debug(f"Generation step: {step + 1}")
         with torch.no_grad():
             outputs = model(
                 input_ids if past_key_values is None else input_ids[:, -1:],
@@ -173,17 +173,17 @@ def entropy_decode(
                 next_token = torch.tensor([[2564]], dtype=torch.int32, device=device)
                 logging.debug("Inserting clarification token")
             else:
-                temp_adj = 1.3 + 0.2 * attention_metrics["attn_entropy"]
+                temp_adj = 1.3 + 0.2 * attention_metrics["attn_entropy"].item()
                 next_token = _sample(logits, temperature=min(1.5, temperature * temp_adj), top_p=top_p, top_k=top_k, min_p=min_p, generator=generator)
                 logging.debug(f"Using adjusted temperature sampling: {temp_adj:.3f}")
         elif entropy < 5.0 and varentropy > 5.0:
-            temp_adj = 1.2 + 0.3 * attention_metrics["interaction_strength"]
-            top_k_adj = max(5, int(top_k * (1 + 0.5 * (1 - attention_metrics["agreement"]))))
+            temp_adj = 1.2 + 0.3 * attention_metrics["interaction_strength"].item()
+            top_k_adj = max(5, int(top_k * (1 + 0.5 * (1 - attention_metrics["agreement"].item()))))
             next_token = _sample(logits, temperature=min(1.5, temperature * temp_adj), top_p=top_p, top_k=top_k_adj, min_p=min_p, generator=generator)
             logging.debug(f"Using exploration sampling: temp={temp_adj:.3f}, top_k={top_k_adj}")
         elif entropy > 5.0 and varentropy > 5.0:
-            temp_adj = 2.0 + 0.5 * attention_metrics["attn_varentropy"]
-            top_p_adj = max(0.5, top_p - 0.2 * attention_metrics["attn_entropy"])
+            temp_adj = 2.0 + 0.5 * attention_metrics["attn_varentropy"].item()
+            top_p_adj = max(0.5, top_p - 0.2 * attention_metrics["attn_entropy"].item())
             next_token = _sample(logits, temperature=max(2.0, temperature * temp_adj), top_p=top_p_adj, top_k=top_k, min_p=min_p, generator=generator)
             logging.debug(f"Using high uncertainty sampling: temp={temp_adj:.3f}, top_p={top_p_adj:.3f}")
         else:
@@ -218,17 +218,17 @@ def entropy_decode(
     return generated_text
 
 # Usage example
-from transformers import AutoModelForCausalLM, AutoTokenizer
+# from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="eager")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+# model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+# model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="eager")
+# tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-messages = [
-    {"role": "user", "content": "In a dance class of 20 students, 20% enrolled in contemporary dance, 25% of the remaining enrolled in jazz dance, and the rest enrolled in hip-hop dance. What percentage of the entire students enrolled in hip-hop dance?"}
-]
+# messages = [
+#     {"role": "user", "content": "In a dance class of 20 students, 20% enrolled in contemporary dance, 25% of the remaining enrolled in jazz dance, and the rest enrolled in hip-hop dance. What percentage of the entire students enrolled in hip-hop dance?"}
+# ]
 
-logging.info("Starting entropy decoding process")
-result = entropy_decode(model, tokenizer, messages)
-print(f"Entropy Decoding Result:\n{result}")
-logging.info("Entropy decoding process completed")
+# logging.info("Starting entropy decoding process")
+# result = entropy_decode(model, tokenizer, messages)
+# print(f"Entropy Decoding Result:\n{result}")
+# logging.info("Entropy decoding process completed")
