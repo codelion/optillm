@@ -81,11 +81,12 @@ def adaptive_sample(logits: torch.Tensor, metrics: Dict[str, torch.Tensor],
     ).item())
     min_p = torch.clamp(base_min_p * (1 - 0.5 * logits_uncertainty), 0.01, 0.5)
 
-    logging.debug(f"Adaptive sampling params: temp={temperature:.3f}, top_p={top_p:.3f}, top_k={top_k}, min_p={min_p:.3f}")
+    # Convert tensor values to Python scalars for logging
+    logging.debug(f"Adaptive sampling params: temp={temperature.item():.3f}, top_p={top_p.item():.3f}, top_k={top_k}, min_p={min_p.item():.3f}")
 
     samples = []
     for _ in range(n_samples):
-        sample = _sample(logits, temperature=temperature, top_p=top_p, top_k=top_k, min_p=min_p, generator=generator)
+        sample = _sample(logits, temperature=temperature.item(), top_p=top_p.item(), top_k=top_k, min_p=min_p.item(), generator=generator)
         samples.append(sample)
 
     def score_sample(sample):
