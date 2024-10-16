@@ -4,7 +4,9 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 
 def get_device():
-    if torch.cuda.is_available():
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
         return torch.device("cuda")
     else:
         return torch.device("cpu")
@@ -143,3 +145,18 @@ def cot_decode(
     else:
         return max(paths, key=lambda x: x[1])
     
+# Usage example
+# from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+# model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="eager")
+# tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# messages = [
+#     {"role": "user", "content": "In a dance class of 20 students, 20% enrolled in contemporary dance, 25% of the remaining enrolled in jazz dance, and the rest enrolled in hip-hop dance. What percentage of the entire students enrolled in hip-hop dance?"}
+# ]
+
+# # Generate the response using CoT decoding
+# print(f"Using device: {get_device()}")
+# result, confidence = cot_decode(model, tokenizer, messages, aggregate_paths=True, max_new_tokens=512)
+# print(f"CoT Decoding:\n {result}")
