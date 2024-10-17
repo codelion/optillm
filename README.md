@@ -162,6 +162,7 @@ or your own code where you want to use the results from optillm. You can use it 
 | Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
 | PV Game                 | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
 | CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
+| Entropy Decoding        |  N/A for proxy     | Implements adaptive sampling based on the uncertainy of tokens during generation               |
 
 ## Implemented plugins
 
@@ -273,6 +274,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## References
 
+- [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/entropy_decoding.py)
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](https://github.com/codelion/optillm/blob/main/scripts/eval_frames_benchmark.py)
 - [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906) - [Inspired the implementation of the memory plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/memory_plugin.py)
 - [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/cot_decoding.py)
