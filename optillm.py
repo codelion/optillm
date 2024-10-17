@@ -28,6 +28,7 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
+from optillm.entropy_decoding import entropy_decode_run
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -98,7 +99,7 @@ server_config = {
 
 # List of known approaches
 known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
-                    "cot_reflection", "plansearch", "leap", "re2"]
+                    "cot_reflection", "plansearch", "leap", "re2", "entropy_decoding"]
 
 plugin_approaches = {}
 
@@ -182,6 +183,9 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
             return leap(system_prompt, initial_query, client, model)
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
+        elif approach == 'entropy_decoding':
+            response = entropy_decode_run(system_prompt, initial_query)
+            return response, 0
     elif approach in plugin_approaches:
         return plugin_approaches[approach](system_prompt, initial_query, client, model)
     else:

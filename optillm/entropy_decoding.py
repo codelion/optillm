@@ -217,6 +217,17 @@ def entropy_decode(
 
     return generated_text
 
+def entropy_decode_run(system_prompt, initial_query):
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+    model = AutoModelForCausalLM.from_pretrained(model_name, attn_implementation="eager")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    messages = [
+        {"role": "system", "content" : system_prompt},
+        {"role": "user", "content" : initial_query}
+    ]
+    return entropy_decode(model, tokenizer, messages)
 # Usage example
 # from transformers import AutoModelForCausalLM, AutoTokenizer
 
