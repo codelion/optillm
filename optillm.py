@@ -288,11 +288,10 @@ def proxy():
 
     system_prompt, initial_query, message_optillm_approach = parse_conversation(messages)
 
-    # Use optillm_approach from extra_body if present, otherwise use from messages
-    if not optillm_approach and message_optillm_approach:
+    if message_optillm_approach:
         optillm_approach = message_optillm_approach
 
-    if optillm_approach:
+    if optillm_approach != "auto":
         model = f"{optillm_approach}-{model}"
 
     base_url = server_config['base_url']

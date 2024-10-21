@@ -18,6 +18,7 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         temperature=1
     )
     completions = [choice.message.content for choice in response.choices]
+    logger.info(f"Generated {len(completions)} initial completions. Tokens used: {response.usage.completion_tokens}")
     bon_completion_tokens += response.usage.completion_tokens
     
     # Rate the completions
