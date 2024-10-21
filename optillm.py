@@ -389,9 +389,9 @@ def parse_args():
     args_env = [
         ("--optillm-api-key", "OPTILLM_API_KEY", str, "", "Optional API key for client authentication to optillm"),
         ("--approach", "OPTILLM_APPROACH", str, "auto", "Inference approach to use", known_approaches),
-        ("--simulations", "OPTILLM_SIMULATIONS", int, 2, "Number of MCTS simulations"),
-        ("--exploration", "OPTILLM_EXPLORATION", float, 0.2, "Exploration weight for MCTS"),
-        ("--depth", "OPTILLM_DEPTH", int, 1, "Simulation depth for MCTS"),
+        ("--mcts-simulations", "OPTILLM_SIMULATIONS", int, 2, "Number of MCTS simulations"),
+        ("--mcts-exploration", "OPTILLM_EXPLORATION", float, 0.2, "Exploration weight for MCTS"),
+        ("--mcts-depth", "OPTILLM_DEPTH", int, 1, "Simulation depth for MCTS"),
         ("--model", "OPTILLM_MODEL", str, "gpt-4o-mini", "OpenAI model to use"),
         ("--rstar-max-depth", "OPTILLM_RSTAR_MAX_DEPTH", int, 3, "Maximum depth for rStar algorithm"),
         ("--rstar-num-rollouts", "OPTILLM_RSTAR_NUM_ROLLOUTS", int, 5, "Number of rollouts for rStar algorithm"),
