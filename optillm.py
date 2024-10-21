@@ -284,7 +284,7 @@ def proxy():
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
 
-    optillm_approach = data.get('optillm_approach', {})
+    optillm_approach = data.get('optillm_approach', server_config['approach'])
 
     system_prompt, initial_query, message_optillm_approach = parse_conversation(messages)
 
