@@ -103,18 +103,59 @@ known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg"
 plugin_approaches = {}
 
 def load_plugins():
-    plugin_dir = os.path.join(os.path.dirname(__file__), 'optillm/plugins')
-    plugin_files = glob.glob(os.path.join(plugin_dir, '*.py'))
-
-    for plugin_file in plugin_files:
-        module_name = os.path.basename(plugin_file)[:-3]  # Remove .py extension
-        spec = importlib.util.spec_from_file_location(module_name, plugin_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        
-        if hasattr(module, 'SLUG') and hasattr(module, 'run'):
-            plugin_approaches[module.SLUG] = module.run
-            logger.info(f"Loaded plugin: {module.SLUG}")
+   # Clear existing plugins first but modify the global dict in place
+   plugin_approaches.clear()
+   
+   # Get installed package plugins directory
+   import optillm
+   package_plugin_dir = os.path.join(os.path.dirname(optillm.__file__), 'plugins')
+   
+   # Get local project plugins directory
+   current_dir = os.getcwd()
+   local_plugin_dir = os.path.join(current_dir, 'optillm', 'plugins')
+   
+   plugin_dirs = []
+   
+   # Add package plugin dir
+   plugin_dirs.append((package_plugin_dir, "package"))
+   
+   # Add local plugin dir only if it's different from package dir
+   if local_plugin_dir != package_plugin_dir:
+       plugin_dirs.append((local_plugin_dir, "local"))
+   
+   for plugin_dir, source in plugin_dirs:
+       logger.info(f"Looking for {source} plugins in: {plugin_dir}")
+       
+       if not os.path.exists(plugin_dir):
+           logger.debug(f"{source.capitalize()} plugin directory not found: {plugin_dir}")
+           continue
+           
+       plugin_files = glob.glob(os.path.join(plugin_dir, '*.py'))
+       if not plugin_files:
+           logger.debug(f"No plugin files found in {source} directory: {plugin_dir}")
+           continue
+           
+       logger.info(f"Found {source} plugin files: {plugin_files}")
+       
+       for plugin_file in plugin_files:
+           try:
+               module_name = os.path.basename(plugin_file)[:-3]  # Remove .py extension
+               spec = importlib.util.spec_from_file_location(module_name, plugin_file)
+               module = importlib.util.module_from_spec(spec)
+               spec.loader.exec_module(module)
+               
+               if hasattr(module, 'SLUG') and hasattr(module, 'run'):
+                   if module.SLUG in plugin_approaches:
+                       logger.info(f"Overriding {source} plugin: {module.SLUG}")
+                   plugin_approaches[module.SLUG] = module.run
+                   logger.info(f"Loaded {source} plugin: {module.SLUG}")
+               else:
+                   logger.warning(f"Plugin {module_name} from {source} missing required attributes (SLUG and run)")
+           except Exception as e:
+               logger.error(f"Error loading {source} plugin {plugin_file}: {str(e)}")
+   
+   if not plugin_approaches:
+       logger.warning("No plugins loaded from any location")
 
 def parse_combined_approach(model: str, known_approaches: list, plugin_approaches: dict):
     if model == 'auto':
