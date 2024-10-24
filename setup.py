@@ -4,6 +4,7 @@ setup(
     name="optillm",
     version="0.0.2",
     packages=find_packages(),
+    py_modules=['optillm'],
     install_requires=[
         "numpy",
         "networkx",
@@ -27,6 +28,11 @@ setup(
         "ipython",
         "ipykernel",
     ],
+    entry_points={
+        'console_scripts': [
+            'optillm=optillm:main',  # Points directly to the main function in optillm.py
+        ],
+    },
     author="codelion",
     author_email="codelion@okyasoft.com",
     description="An optimizing inference proxy for LLMs.",
