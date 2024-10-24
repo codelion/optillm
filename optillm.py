@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 # Import the LiteLLM wrapper
-from litellm_wrapper import LiteLLMWrapper
+from optillm.litellm_wrapper import LiteLLMWrapper
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
