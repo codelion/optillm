@@ -137,7 +137,7 @@ doesn't have an OpenAI API compatible endpoint (like Google or Anthropic) you ca
 
 The following sequence diagram illustrates how the request and responses go through optillm. 
 
-![Sequance diagram showing optillm in use](./optillm-sequence-diagram.png)
+![Sequance diagram showing optillm in use](https://raw.githubusercontent.com/codelion/optillm/main/optillm-sequence-diagram.png)
 
 In the diagram:
 - `A` is an existing tool (like [oobabooga](https://github.com/oobabooga/text-generation-webui/)), framework (like [patchwork](https://github.com/patched-codes/patchwork))
@@ -198,7 +198,7 @@ When using Docker, these can be set as environment variables prefixed with `OPTI
 
 ## Running with Docker
 
-optillm can optionally be built and run using Docker and the provided [Dockerfile](./Dockerfile).
+optillm can optionally be built and run using Docker and the provided [Dockerfile](https://github.com/codelion/optillm/blob/main/Dockerfile).
 
 ### Using Docker Compose
 
@@ -263,14 +263,14 @@ Authorization: Bearer your_secret_api_key
 
 ### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
 
-![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](./moa-results.png)
+![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](https://raw.githubusercontent.com/codelion/optillm/main/moa-results.png)
 
 ### optillm with Patchwork (July 2024)
 
 Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
 called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
 
-![Results showing optillm mixture of agents approach used with patchflows](./moa-patchwork-results.png)
+![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
 ## References
 
