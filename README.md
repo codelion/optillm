@@ -8,6 +8,18 @@ optillm is an OpenAI API compatible optimizing inference proxy which implements 
 
 ## Installation
 
+### Using pip
+
+```bash
+pip install optillm
+optillm             
+2024-10-22 07:45:05,612 - INFO - Loaded plugin: privacy
+2024-10-22 07:45:06,293 - INFO - Loaded plugin: memory
+2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
+```
+
+### Install from source
+
 Clone the repository with `git` and use `pip install` to setup the dependencies.
 
 ```bash
