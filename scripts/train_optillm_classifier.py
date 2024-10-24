@@ -297,7 +297,7 @@ def main(args):
         "Find all possible combinations of coins that sum up to $1"
     ]
 
-    effort_levels = [0.2, 0.5, 0.8, 1.0]
+    effort_levels = [0.0, 0.2, 0.5, 0.8, 1.0]
 
     print("\nInference Examples:")
     for prompt in test_prompts:
