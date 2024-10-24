@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.0.1",
+    version="0.0.2",
     packages=find_packages(),
     py_modules=['optillm'],
     install_requires=[
@@ -41,7 +41,7 @@ setup(
     url="https://github.com/codelion/optillm",
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: Apache-2.0 license",
+        "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.10",
