@@ -208,6 +208,45 @@ optillm supports various command-line arguments and environment variables for co
 
 When using Docker, these can be set as environment variables prefixed with `OPTILLM_`.
 
+## Evaluate optillm with Arcee-Atlas
+To evaluate optillm with Arcee-Atlas, we provide a script to generate a dataset and another to evaluate the results.
+
+## API kets
+Please set your API kets in the utils.py
+
+```
+client = OpenAI(
+    api_key= None,
+    base_url="https://inference-time.research.arcee.ai/v1"
+)
+```
+
+## Evaluating Inference Methods
+
+To evaluate all the inference methods, run the following command:
+
+```
+python evaluate/eval_on_gptqa.py main --data_filename datasets/gpqa_diamond.csv --prompt_type zero_shot
+```
+
+
+This script will evaluate the following approaches:
+- none
+- mcts (Monte Carlo Tree Search)
+- bon (Best-of-N)
+- moa (Method of Alternatives)
+- rto (Recursive Task Optimization)
+- z3 (Z3 Theorem Prover)
+- self_consistency
+- pvg (Prompt Variation Generation)
+- rstar (R* Search)
+- cot_reflection (Chain of Thought with Reflection)
+- plansearch
+- leap
+- re2 (Recursive Explanation and Exploration)
+
+The script will generate individual CSV files for each method, as well as a summary CSV file comparing the performance of all methods. Results will include accuracy, refusal rate, and average response time for each approach.
+
 ## Running with Docker
 
 optillm can optionally be built and run using Docker and the provided [Dockerfile](https://github.com/codelion/optillm/blob/main/Dockerfile).
