@@ -211,6 +211,16 @@ When using Docker, these can be set as environment variables prefixed with `OPTI
 ## Evaluate optillm with Arcee-Atlas
 To evaluate optillm with Arcee-Atlas, we provide a script to generate a dataset and another to evaluate the results.
 
+## API kets
+Please set your API kets in the utils.py
+
+```
+client = OpenAI(
+    api_key= None,
+    base_url="https://inference-time.research.arcee.ai/v1"
+)
+```
+
 ## Evaluating Inference Methods
 
 To evaluate all the inference methods, run the following command:
