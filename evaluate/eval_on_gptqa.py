@@ -12,7 +12,8 @@ import fire
 from tqdm import tqdm
 from utils import call_model_with_retries, create_prompts, get_api_type, load_examples, CHAT_MODELS
 
-APPROACHES = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
+APPROACHES = [ "mcts","bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
+
 
 class AnswerPredictor:
 
@@ -20,7 +21,7 @@ class AnswerPredictor:
     
     def __init__(self, data_filename: str, model_name: str, prompt_type: str = 'zero_shot', 
                  call_type: str = 'sample', max_examples: int = None,
-                 verbose: bool = False, seed: int = 0, overwrite_cache: bool = False, num_gpus: int = 1, use_greedy_sampling: bool = False):
+                 verbose: bool = False, seed: int = 0, num_gpus: int = 1, use_greedy_sampling: bool = False):
         self.model_name = model_name
         self.data_filename = data_filename
         self.prompt_type = prompt_type
@@ -28,37 +29,15 @@ class AnswerPredictor:
         self.max_examples = max_examples
         self.verbose = verbose
         self.seed = seed
-        self.cache_filename = f"cache_{self.model_name}.pkl"
-        self.overwrite_cache = overwrite_cache
         self.num_gpus = num_gpus
         self.use_greedy_sampling = use_greedy_sampling
     
-        if os.path.exists(self.cache_filename):
-            with open(self.cache_filename, 'rb') as file:
-                self.cache = pickle.load(file)
-        else:
-            self.cache = {}
         if self.prompt_type == 'few_shot':
             raise ValueError('Few-shot deprecated - use `5_shot` instead')
     
-    def save_cache(self):
-        with open(self.cache_filename, 'wb') as file:
-            pickle.dump(self.cache, file)
-
     def get_response_from_cache_or_model(self, prompt, call_type='sample', temperature=0.0, inference_method: str = "mcts"):
-   
-        key = (self.model_name, self.prompt_type, prompt)
-
-        if key in self.cache and not self.overwrite_cache:
-            return self.cache[key]
-            
+               
         resp = call_model_with_retries(prompt, self.model_name, call_type=call_type, temperature=temperature, inference_method=inference_method)
-    
-        # If you want to save responses for the "self_consistency" prompt type as a list
-    
-        self.cache[key] = resp
-        
-        self.save_cache()
         return resp
            
     @staticmethod
@@ -82,7 +61,6 @@ class AnswerPredictor:
                     answer = resp.choices[0].message.content
                 else:
                     answer = resp.choices[0].text
-
         return self.parse_sampled_answer(answer), answer
 
     def main(self):
@@ -123,7 +101,7 @@ class AnswerPredictor:
                     sampled_answer, model_response = self.sample_answer(prompt, inference_method=inference_method)
                     response_time = time.time() - start_time
                     total_time += response_time
-
+                
                     if sampled_answer is None:
                         print(f"Couldn't find an answer choice for prompt: {prompt}")
                         logging.info("Couldn't find an answer choice!")
@@ -154,15 +132,14 @@ class AnswerPredictor:
                 'refusal_rate': refusal_rate,
                 'avg_time': avg_time
             }
-            
             print(f"Method: {inference_method}")
             print(f"Accuracy: {accuracy}")
-            print(f"Refusal fraction: {refusal_rate}")
-            print(f"Average response time: {avg_time:.2f}s")
+            print(f"Refusal fraction: {refusal_rate:.6f}")
+            print(f"Average response time: {avg_time:.6f}s")
             logging.info(f"Method: {inference_method}")
             logging.info(f"Accuracy: {accuracy}")
-            logging.info(f"Refusal fraction: {refusal_rate}")
-            logging.info(f"Average response time: {avg_time:.2f}s")
+            logging.info(f"Refusal fraction: {refusal_rate:.6f}")
+            logging.info(f"Average response time: {avg_time:.6f}s")
 
         # Write summary CSV
         with open(summary_filename, 'w', newline='') as csvfile:
@@ -174,6 +151,3 @@ class AnswerPredictor:
 
 if __name__ == '__main__':
     fire.Fire(AnswerPredictor)
-
-
-#python eval_on_gptqa.py main  --data_filename datasets/gpqa_diamond.csv --prompt_type zero_shot

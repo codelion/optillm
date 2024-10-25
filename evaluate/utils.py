@@ -12,7 +12,7 @@ from openai import OpenAI
 import pandas as pd
 from tqdm import tqdm
 
-MAX_NUM_RETRIES = 5
+
 CHAT_MODELS = ['supernova-medius']
 OPENAI_MODELS = CHAT_MODELS
 Example = namedtuple('Example', ['question', 'choice1', 'choice2', 'choice3', 'choice4', 'correct_index'])
@@ -126,18 +126,9 @@ def call_model_with_retries(prompt: str,
                             inference_method: str = "mcts") -> Union[str, Dict[str, List[Union[str, float]]]]:
     if model_name is None:
         raise ValueError("Model name must be specified.")
-    num_retries = 0
-    while True:
-        try:
-            response = select_and_call_model(prompt, model_name, call_type, temperature, stop, max_tokens, inference_method)
-        except Exception as e:
-            if num_retries == MAX_NUM_RETRIES:
-                raise e
-            print(f"Error calling model {model_name}: {e}, sleeping for {math.pow(3, num_retries)} seconds and retrying...")
-            time.sleep(math.pow(3, num_retries))
-            num_retries += 1
-            continue
-        break
+   
+    response = select_and_call_model(prompt, model_name, call_type, temperature, stop, max_tokens, inference_method)
+ 
     return response
 
 
