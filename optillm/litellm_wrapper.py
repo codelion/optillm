@@ -24,7 +24,10 @@ class LiteLLMWrapper:
         class Completions:
             @staticmethod
             def create(model: str, messages: List[Dict[str, str]], **kwargs):
-                response = completion(model=model, messages=messages, **kwargs, safety_settings=SAFETY_SETTINGS)
+                if model.startswith("gemini"):
+                    response = completion(model=model, messages=messages, **kwargs, safety_settings=SAFETY_SETTINGS)
+                else:
+                    response = completion(model=model, messages=messages, **kwargs)
                 # Convert LiteLLM response to match OpenAI response structure
                 return response
 
