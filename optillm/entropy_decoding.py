@@ -27,7 +27,8 @@ def calculate_varentropy_logsoftmax(logits: torch.Tensor, axis: int = -1) -> Tup
     return entropy, varentropy
 
 def calculate_attention_metrics(attention_scores: torch.Tensor) -> Dict[str, torch.Tensor]:
-    attention_probs = F.softmax(attention_scores, dim=-1)
+    # attention_probs = F.softmax(attention_scores, dim=-1)
+    attention_probs = attention_scores
     attn_entropy = -torch.sum(attention_probs * torch.log2(torch.clamp(attention_probs, 1e-10, 1.0)), dim=-1)
     attn_varentropy = torch.var(attn_entropy, dim=-1)
     
