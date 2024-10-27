@@ -26,18 +26,28 @@ def calculate_varentropy_logsoftmax(logits: torch.Tensor, axis: int = -1) -> Tup
     varentropy = torch.sum(probs * (log_probs / LN_2 + entropy.unsqueeze(-1))**2, dim=axis)
     return entropy, varentropy
 
-def calculate_attention_metrics(attention_scores: torch.Tensor) -> Dict[str, torch.Tensor]:
-    # attention_probs = F.softmax(attention_scores, dim=-1)
-    attention_probs = attention_scores
-    attn_entropy = -torch.sum(attention_probs * torch.log2(torch.clamp(attention_probs, 1e-10, 1.0)), dim=-1)
-    attn_varentropy = torch.var(attn_entropy, dim=-1)
+def calculate_attention_metrics(attention_weights: torch.Tensor) -> Dict[str, torch.Tensor]:
+    # attention_weights are already probabilities (post-softmax)
+    attention_probs = attention_weights
     
-    attn_varentropy = torch.where(torch.isnan(attn_varentropy), torch.zeros_like(attn_varentropy), attn_varentropy)
+    # Calculate entropy
+    attn_entropy = -torch.sum(attention_probs * torch.log2(torch.clamp(attention_probs, 1e-10, 1.0)), dim=-1)
+    
+    # Calculate variance of entropy
+    attn_varentropy = torch.var(attn_entropy, dim=-1)
+    attn_varentropy = torch.where(torch.isnan(attn_varentropy), 
+                                 torch.zeros_like(attn_varentropy), 
+                                 attn_varentropy)
+    
+    # Calculate mean attention and agreement
     mean_attention = torch.mean(attention_probs, dim=1)
     agreement = torch.mean(torch.abs(attention_probs - mean_attention.unsqueeze(1)), dim=(1, 2))
-
-    interaction_strength = torch.mean(torch.abs(attention_scores), dim=(1, 2, 3))
-
+    
+    # For interaction strength, we can use log probabilities to approximate the original scores
+    # This maintains the relative relationships while providing a reasonable proxy for attention strength
+    attention_scores_proxy = torch.log(torch.clamp(attention_probs, 1e-10, 1.0))
+    interaction_strength = torch.mean(torch.abs(attention_scores_proxy), dim=(1, 2, 3))
+    
     return {
         "attn_entropy": torch.mean(attn_entropy),
         "attn_varentropy": torch.mean(attn_varentropy),
