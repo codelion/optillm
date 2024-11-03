@@ -280,7 +280,7 @@ Authorization: Bearer your_secret_api_key
 ### optillm with Patchwork (July 2024)
 
 Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixutre of agents approach (moa). 
+called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixture of agents approach (moa). 
 
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
