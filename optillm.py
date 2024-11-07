@@ -271,14 +271,24 @@ def parse_conversation(messages):
         role = message['role']
         content = message['content']
         
+        # Handle content that could be a list or string
+        if isinstance(content, list):
+            # Extract text content from the list
+            text_content = ' '.join(
+                item['text'] for item in content 
+                if isinstance(item, dict) and item.get('type') == 'text'
+            )
+        else:
+            text_content = content
+        
         if role == 'system':
-            system_prompt, optillm_approach = extract_optillm_approach(content)
+            system_prompt, optillm_approach = extract_optillm_approach(text_content)
         elif role == 'user':
             if not optillm_approach:
-                content, optillm_approach = extract_optillm_approach(content)
-            conversation.append(f"User: {content}")
+                text_content, optillm_approach = extract_optillm_approach(text_content)
+            conversation.append(f"User: {text_content}")
         elif role == 'assistant':
-            conversation.append(f"Assistant: {content}")
+            conversation.append(f"Assistant: {text_content}")
     
     initial_query = "\n".join(conversation)
     return system_prompt, initial_query, optillm_approach
