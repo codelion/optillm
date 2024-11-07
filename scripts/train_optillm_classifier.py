@@ -57,7 +57,7 @@ class OptILMDataset(Dataset):
         }
 
 def load_and_preprocess_data(tokenizer):
-    dataset = load_dataset('json', data_files='optillm_dataset.jsonl')
+    dataset = load_dataset('json', data_files='optillm_combined_dataset.jsonl')
     
     data_items = []
 
@@ -290,11 +290,54 @@ def main(args):
     best_model.eval()
 
     test_prompts = [
+        # Linear Programming (likely MCTS or Z3)
         "Maximize x + y subject to: x + 2y <= 10, x >= 0, y >= 0",
+        # Graph Theory (likely MCTS or RTO)
         "Find the shortest path between nodes A and B in the given graph",
+        # Recursive Problem (likely MOA or COT)
         "Solve the Tower of Hanoi problem with 4 disks",
+        # Number Theory (likely NONE or Z3)
         "Determine if the given number is prime",
-        "Find all possible combinations of coins that sum up to $1"
+        # Combinatorics (likely MCTS or BON)
+        "Find all possible combinations of coins that sum up to $1",
+        # Symbolic Mathematics (likely Z3 or LEAP)
+        "Solve the equation: 2x^3 - 5x^2 + 3x - 7 = 0",
+        # Natural Language Processing (likely PVG or SELF_CONSISTENCY)
+        "Summarize the main points of the given article in three sentences",
+        # Computer Vision (likely RSTAR or PVG)
+        "Describe the contents of the image, including any text present",
+        # Game Theory (likely MCTS or BON)
+        "Find the Nash equilibrium for the prisoner's dilemma game",
+        # Constraint Satisfaction (likely Z3 or PLANSEARCH)
+        "Solve the Sudoku puzzle given the following initial configuration",
+        # Optimization (likely MCTS or RSTAR)
+        "Find the optimal route for a salesperson visiting 10 cities",
+        # Logical Reasoning (likely COT_REFLECTION or SELF_CONSISTENCY)
+        "If all A are B, and some B are C, what can we conclude about A and C?",
+        # Time Series Analysis (likely RSTAR or PVG)
+        "Predict the stock price for the next week given the past year's data",
+        # Robotics (likely MCTS or RTO)
+        "Plan a path for a robot to navigate through a room with obstacles",
+        # Natural Language Understanding (likely PVG or LEAP)
+        "Identify the sentiment and main topics in the following customer review",
+        # Theorem Proving (likely Z3 or COT_REFLECTION)
+        "Prove that the square root of 2 is irrational",
+        # Reinforcement Learning (likely MCTS or RSTAR)
+        "Design a policy for an agent to maximize its score in a given game environment",
+        # Information Retrieval (likely PVG or SELF_CONSISTENCY)
+        "Find the most relevant documents in the corpus for the given query",
+        # Cryptography (likely Z3 or LEAP)
+        "Decrypt the following message encrypted with a simple substitution cipher",
+        # Quantum Computing (likely NONE or Z3)
+        "Simulate a quantum circuit with 3 qubits and measure the output",
+        # Computer Graphics (likely RSTAR or PVG)
+        "Generate a 3D model of a house based on the given floor plan",
+        # Bioinformatics (likely Z3 or LEAP)
+        "Find potential binding sites for a given protein sequence in a DNA strand",
+        # Automated Reasoning (likely COT_REFLECTION or Z3)
+        "Given a set of logical statements, determine if the conclusion follows",
+        # Natural Language Generation (likely PVG or SELF_CONSISTENCY)
+        "Write a short story in the style of Edgar Allan Poe about a haunted lighthouse"
     ]
 
     effort_levels = [0.0, 0.2, 0.5, 0.8, 1.0]
@@ -310,8 +353,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train OptILM classifier")
     parser.add_argument("--model_name", type=str, default="google-bert/bert-large-uncased", help="Pretrained model name")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
-    parser.add_argument("--learning_rate", type=float, default=1e-6, help="Learning rate")
-    parser.add_argument("--num_epochs", type=int, default=10, help="Maximum number of training epochs")
+    parser.add_argument("--learning_rate", type=float, default=5e-7, help="Learning rate")
+    parser.add_argument("--num_epochs", type=int, default=20, help="Maximum number of training epochs")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to Hugging Face Hub")
     parser.add_argument("--hub_model_id", type=str, help="Model ID for Hugging Face Hub")
     parser.add_argument("--k_folds", type=int, default=5, help="Number of folds for cross-validation")
@@ -320,3 +363,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     main(args)
+    

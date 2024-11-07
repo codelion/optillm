@@ -12,9 +12,6 @@ import asyncio
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-# Import the LiteLLM wrapper
-from optillm.litellm_wrapper import LiteLLMWrapper
-
 # Import approach modules
 from optillm.mcts import chat_with_mcts
 from optillm.bon import best_of_n_sampling
@@ -74,6 +71,8 @@ def get_config():
                 azure_ad_token_provider=token_provider
             )
     else:
+        # Import the LiteLLM wrapper
+        from optillm.litellm_wrapper import LiteLLMWrapper
         default_client = LiteLLMWrapper()
     return default_client, API_KEY
 
