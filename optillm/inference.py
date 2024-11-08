@@ -41,6 +41,119 @@ class ModelConfig:
     enable_prompt_caching: bool = True
     dynamic_temperature: bool = True
 
+
+@dataclass
+class LogProbsResult:
+    """Container for logprobs calculation results"""
+    tokens: List[str]
+    token_logprobs: List[float]
+    top_logprobs: List[Dict[str, float]]
+    bytes_per_token: List[List[int]]
+
+class LogProbsCalculator:
+    """Handles calculation of log probabilities for generated tokens"""
+    
+    def __init__(self, tokenizer, model):
+        self.tokenizer = tokenizer
+        self.model = model
+        
+    def _get_bytes_for_token(self, token: str) -> List[int]:
+        """Get UTF-8 bytes for a token"""
+        try:
+            return list(token.encode('utf-8'))
+        except UnicodeEncodeError:
+            return []
+
+    def _get_top_alternatives(
+        self,
+        logits: torch.Tensor,
+        actual_token_id: int,
+        num_alternatives: int
+    ) -> Dict[str, float]:
+        """Calculate top alternative tokens and their logprobs"""
+        probs = F.softmax(logits, dim=-1)
+        logprobs = torch.log(probs)
+        
+        # Get top tokens excluding the actual token
+        top_values, top_indices = torch.topk(logprobs, k=num_alternatives + 1)
+        
+        alternatives = {}
+        for value, idx in zip(top_values, top_indices):
+            token = self.tokenizer.decode([idx])
+            if idx != actual_token_id:  # Skip the actual token
+                alternatives[token] = value.item()
+                if len(alternatives) >= num_alternatives:
+                    break
+                    
+        return alternatives
+
+    def calculate_logprobs(
+        self,
+        input_ids: torch.Tensor,
+        generated_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        num_alternatives: int = 5
+    ) -> LogProbsResult:
+        """Calculate log probabilities for a sequence of tokens"""
+        self.model.eval()
+        
+        with torch.no_grad():
+            # Get model outputs for the entire sequence
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=True
+            )
+            logits = outputs.logits
+            
+            # Calculate softmax and log probabilities
+            probs = F.softmax(logits, dim=-1)
+            logprobs = torch.log(probs)
+            
+            # Process each position
+            all_tokens = []
+            all_token_logprobs = []
+            all_top_logprobs = []
+            all_bytes = []
+            
+            sequence_length = generated_ids.shape[-1]
+            
+            for pos in range(sequence_length - 1):  # -1 because we look at next token
+                next_token_id = generated_ids[0, pos + 1]
+                current_logits = logits[0, pos]
+                
+                # Get token and its logprob
+                token = self.tokenizer.decode([next_token_id])
+                token_logprob = logprobs[0, pos, next_token_id].item()
+                
+                # Get top alternative tokens
+                top_logprobs = self._get_top_alternatives(
+                    current_logits,
+                    next_token_id,
+                    num_alternatives
+                )
+                
+                # Get bytes for token
+                token_bytes = self._get_bytes_for_token(token)
+                
+                all_tokens.append(token)
+                all_token_logprobs.append(token_logprob)
+                all_top_logprobs.append(top_logprobs)
+                all_bytes.append(token_bytes)
+            
+            # Add None for the last token
+            all_tokens.append(self.tokenizer.decode([generated_ids[0, -1]]))
+            all_token_logprobs.append(None)
+            all_top_logprobs.append(None)
+            all_bytes.append(self._get_bytes_for_token(all_tokens[-1]))
+            
+            return LogProbsResult(
+                tokens=all_tokens,
+                token_logprobs=all_token_logprobs,
+                top_logprobs=all_top_logprobs,
+                bytes_per_token=all_bytes
+            )
+
 class MemoryEfficientAttention(nn.Module):
     """
     Memory-efficient attention using linear attention mechanism.
@@ -561,7 +674,7 @@ class InferencePipeline:
         prompt: str,
         generation_params: Optional[Dict[str, Any]] = None
     ) -> Tuple[List[str], List[int]]:
-        """Generate multiple responses for a prompt when n > 1"""
+        """Generate completions with optional logprobs"""
         
         # Tokenize input
         inputs = self.tokenizer(
@@ -570,7 +683,17 @@ class InferencePipeline:
             truncation=True,
             return_tensors="pt"
         ).to(self.current_model.device)
-
+        
+        # Extract logprobs parameters
+        calculate_logprobs = generation_params.get("logprobs", False)
+        top_logprobs = generation_params.get("top_logprobs", 0)
+        
+        if top_logprobs and not calculate_logprobs:
+            raise ValueError("logprobs must be true when top_logprobs is specified")
+        
+        if top_logprobs and not (0 <= top_logprobs <= 20):
+            raise ValueError("top_logprobs must be between 0 and 20")
+        
         # Configure generation parameters
         gen_config = {
             "max_new_tokens": generation_params.get("max_new_tokens", 4096),
@@ -580,8 +703,11 @@ class InferencePipeline:
             "num_return_sequences": generation_params.get("num_return_sequences", 1),
             "pad_token_id": self.tokenizer.pad_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
+            "return_dict_in_generate": True,
+            "output_scores": calculate_logprobs,
         }
-
+        
+        # Add optional parameters
         if generation_params:
             if generation_params.get("presence_penalty", 0) != 0:
                 gen_config["presence_penalty"] = generation_params["presence_penalty"]
@@ -596,7 +722,7 @@ class InferencePipeline:
                 torch.manual_seed(generation_params["seed"])
                 if torch.cuda.is_available():
                     torch.cuda.manual_seed(generation_params["seed"])
-
+                    
         # Generate responses
         with torch.amp.autocast('cuda', dtype=self.dtype):
             with torch.no_grad():
@@ -604,20 +730,47 @@ class InferencePipeline:
                     **inputs,
                     **gen_config
                 )
-
-        # Process outputs - now handling multiple sequences
+        
+        generated_sequences = outputs.sequences
         input_length = inputs['input_ids'].shape[1]
+        
         responses = []
         token_counts = []
-
-        # For each generated sequence
-        for output in outputs:
-            response_tokens = output[input_length:]
+        logprobs_results = []
+        
+        # Process each generated sequence
+        for sequence in generated_sequences:
+            response_tokens = sequence[input_length:]
             response_text = self.tokenizer.decode(response_tokens, skip_special_tokens=True)
             responses.append(response_text)
             token_counts.append(len(response_tokens))
-
-        return responses, token_counts
+            
+            # Calculate logprobs if requested
+            if calculate_logprobs:
+                calculator = LogProbsCalculator(self.tokenizer, self.current_model)
+                logprobs_result = calculator.calculate_logprobs(
+                    input_ids=sequence.unsqueeze(0),
+                    generated_ids=sequence.unsqueeze(0),
+                    attention_mask=torch.ones_like(sequence).unsqueeze(0),
+                    num_alternatives=top_logprobs or 5
+                )
+                logprobs_results.append({
+                    "content": [{
+                        "token": token,
+                        "logprob": logprob,
+                        "bytes": bytes_,
+                        "top_logprobs": top_logprobs
+                    } for token, logprob, bytes_, top_logprobs in zip(
+                        logprobs_result.tokens[input_length:],
+                        logprobs_result.token_logprobs[input_length:],
+                        logprobs_result.bytes_per_token[input_length:],
+                        logprobs_result.top_logprobs[input_length:]
+                    )]
+                })
+            else:
+                logprobs_results.append(None)
+                
+        return responses, token_counts, logprobs_results
     
     def setup_efficient_attention(self):
         """Replace standard attention with memory-efficient version"""
@@ -917,15 +1070,24 @@ class InferencePipeline:
         return all_responses, [0] * len(all_responses)
     
 class ChatCompletionMessage:
-    def __init__(self, content: str, role: str = "assistant"):
+    def __init__(self, content: str, role: str = "assistant", logprobs: Optional[Dict] = None):
         self.content = content
         self.role = role
+        self.logprobs = logprobs
 
 class ChatCompletionChoice:
-    def __init__(self, index: int, message: Dict[str, str], finish_reason: str = "stop"):
+    def __init__(
+        self,
+        index: int,
+        message: Dict[str, Any],
+        finish_reason: str = "stop",
+        logprobs: Optional[Dict] = None
+    ):
         self.index = index
         self.message = ChatCompletionMessage(**message)
         self.finish_reason = finish_reason
+        if logprobs:
+            self.message.logprobs = logprobs
 
 class ChatCompletionUsage:
     def __init__(self, prompt_tokens: int, completion_tokens: int, total_tokens: int):
@@ -950,7 +1112,6 @@ class ChatCompletion:
         self.usage = ChatCompletionUsage(**response_dict["usage"])
     
     def model_dump(self) -> Dict:
-        """Convert back to dictionary format if needed"""
         return {
             "id": self.id,
             "object": self.object,
@@ -960,6 +1121,10 @@ class ChatCompletion:
                 {
                     "index": choice.index,
                     "message": {
+                        "role": choice.message.role,
+                        "content": choice.message.content,
+                        "logprobs": choice.message.logprobs
+                    } if choice.message.logprobs else {
                         "role": choice.message.role,
                         "content": choice.message.content
                     },
@@ -973,6 +1138,7 @@ class ChatCompletion:
                 "total_tokens": self.usage.total_tokens
             }
         }
+
 class InferenceClient:
     """OpenAI SDK Compatible client for local inference with dynamic model support"""
     
@@ -1034,6 +1200,8 @@ class InferenceClient:
                 logit_bias: Optional[Dict[str, float]] = None,
                 user: Optional[str] = None,
                 seed: Optional[int] = None,
+                logprobs: Optional[bool] = None,
+                top_logprobs: Optional[int] = None,
                 **kwargs
             ) -> ChatCompletion:
                 """Create a chat completion with OpenAI-compatible parameters"""
@@ -1059,11 +1227,13 @@ class InferenceClient:
                     "frequency_penalty": frequency_penalty,
                     "stop_sequences": [stop] if isinstance(stop, str) else stop,
                     "seed": seed,
-                    "logit_bias": logit_bias
+                    "logit_bias": logit_bias,
+                    "logprobs": logprobs,
+                    "top_logprobs": top_logprobs
                 }
 
-                # Generate responses - now returns list of responses and token counts
-                responses, token_counts = pipeline.generate(
+                # Generate responses - now handles logprobs
+                responses, token_counts, logprobs_results = pipeline.generate(
                     prompt,
                     generation_params=generation_params
                 )
@@ -1083,11 +1253,12 @@ class InferenceClient:
                             "index": idx,
                             "message": {
                                 "role": "assistant",
-                                "content": response
+                                "content": response,
+                                **({"logprobs": logprob_result} if logprob_result else {})
                             },
                             "finish_reason": "stop"
                         }
-                        for idx, response in enumerate(responses)
+                        for idx, (response, logprob_result) in enumerate(zip(responses, logprobs_results))
                     ],
                     "usage": {
                         "prompt_tokens": prompt_tokens,
@@ -1097,9 +1268,8 @@ class InferenceClient:
                 }
                 
                 self.client.clean_unused_pipelines()
-                # Return ChatCompletion object
                 return ChatCompletion(response_dict)
-        
+                
     class Models:
         """OpenAI-compatible models interface"""
         def list(self):
