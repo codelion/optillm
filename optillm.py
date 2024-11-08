@@ -43,8 +43,13 @@ app = Flask(__name__)
 
 def get_config():
     API_KEY = None
+    if os.environ.get("OPTILLM_API_KEY"):
+        # Use local inference engine
+        from optillm.inference import create_inference_client
+        API_KEY = os.environ.get("OPTILLM_API_KEY")
+        default_client = create_inference_client()
     # OpenAI, Azure, or LiteLLM API configuration
-    if os.environ.get("OPENAI_API_KEY"):
+    elif os.environ.get("OPENAI_API_KEY"):
         API_KEY = os.environ.get("OPENAI_API_KEY")
         base_url = server_config['base_url']
         if base_url != "":
