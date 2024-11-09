@@ -11,6 +11,7 @@ import glob
 import asyncio
 import re
 from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple, Optional, Union, Dict, Any, List
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -83,7 +84,7 @@ def get_config():
 
 # Server configuration
 server_config = {
-    'approach': 'bon',
+    'approach': 'none', 
     'mcts_simulations': 2,
     'mcts_exploration': 0.2,
     'mcts_depth': 1,
@@ -101,10 +102,51 @@ server_config = {
 }
 
 # List of known approaches
-known_approaches = ["mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar",
-                    "cot_reflection", "plansearch", "leap", "re2"]
+known_approaches = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", 
+                   "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
 
 plugin_approaches = {}
+
+def none_approach(
+    client: Any, 
+    model: str,
+    original_messages: List[Dict[str, str]],
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Direct proxy approach that passes through all parameters to the underlying endpoint.
+    
+    Args:
+        system_prompt: System prompt text (unused)
+        initial_query: Initial query/conversation (unused)
+        client: OpenAI client instance
+        model: Model identifier
+        original_messages: Original messages from the request
+        **kwargs: Additional parameters to pass through
+        
+    Returns:
+        Dict[str, Any]: Full OpenAI API response
+    """
+    # Strip 'none-' prefix from model if present
+    if model.startswith('none-'):
+        model = model[5:]
+    
+    try:
+        # Make the direct completion call with original messages and parameters
+        response = client.chat.completions.create(
+            model=model,
+            messages=original_messages,
+            **kwargs
+        )
+        
+        # Convert to dict if it's not already
+        if hasattr(response, 'model_dump'):
+            return response.model_dump()
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in none approach: {str(e)}")
+        raise
 
 def load_plugins():
    # Clear existing plugins first but modify the global dict in place
@@ -163,7 +205,7 @@ def load_plugins():
 
 def parse_combined_approach(model: str, known_approaches: list, plugin_approaches: dict):
     if model == 'auto':
-        return 'SINGLE', ['bon'], model
+        return 'SINGLE', ['none'], model
 
     parts = model.split('-')
     approaches = []
@@ -188,7 +230,7 @@ def parse_combined_approach(model: str, known_approaches: list, plugin_approache
             model_parts.append(part)
 
     if not approaches:
-        approaches = ['bon']
+        approaches = ['none']
         operation = 'SINGLE'
 
     actual_model = '-'.join(model_parts)
@@ -197,8 +239,21 @@ def parse_combined_approach(model: str, known_approaches: list, plugin_approache
     
 def execute_single_approach(approach, system_prompt, initial_query, client, model):
     if approach in known_approaches:
-        # Execute known approaches
-        if approach == 'mcts':
+        if approach == 'none':
+            # Extract kwargs from the request data
+            kwargs = {}
+            if hasattr(request, 'json'):
+                data = request.get_json()
+                messages = data.get('messages', [])
+                # Copy all parameters except 'model' and 'messages'
+                kwargs = {k: v for k, v in data.items() 
+                         if k not in ['model', 'messages', 'optillm_approach']}
+            response = none_approach(original_messages=messages, client=client, model=model, **kwargs)
+            
+            # For none approach, we return the response and a token count of 0
+            # since the full token count is already in the response
+            return response, 0
+        elif approach == 'mcts':
             return chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
                                             server_config['mcts_exploration'], server_config['mcts_depth'])
         elif approach == 'bon':
@@ -329,7 +384,6 @@ def proxy():
     bearer_token = ""
 
     if auth_header and auth_header.startswith("Bearer "):
-        # Extract the bearer token
         bearer_token = auth_header.split("Bearer ")[1].strip()
         logger.debug(f"Intercepted Bearer Token: {bearer_token}")
     
@@ -365,22 +419,37 @@ def proxy():
         client = default_client
 
     try:
+        # Check if any of the approaches is 'none'
+        contains_none = any(approach == 'none' for approach in approaches)
+
+        if operation == 'SINGLE' and approaches[0] == 'none':
+            # For none approach, return the response directly
+            result, _ = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+            logger.debug(f'Direct proxy response: {result}')
+            return jsonify(result), 200
+            
+        elif operation == 'AND' or operation == 'OR':
+            if contains_none:
+                raise ValueError("'none' approach cannot be combined with other approaches")
+
+        # Handle non-none approaches
         if operation == 'SINGLE':
-            final_response, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+            response, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
         elif operation == 'AND':
-            final_response, completion_tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
+            response, completion_tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
         elif operation == 'OR':
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            final_response, completion_tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
+            response, completion_tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
         else:
             raise ValueError(f"Unknown operation: {operation}")
+
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
     if stream:
-        return Response(generate_streaming_response(final_response, model), content_type='text/event-stream')
+        return Response(generate_streaming_response(response, model), content_type='text/event-stream')
     else:
         response_data = {
             'model': model,
@@ -390,13 +459,13 @@ def proxy():
             }
         }
 
-        if isinstance(final_response, list):
-            for index, response in enumerate(final_response):
+        if isinstance(response, list):
+            for index, resp in enumerate(response):
                 response_data['choices'].append({
                     'index': index,
                     'message': {
                         'role': 'assistant',
-                        'content': response,
+                        'content': resp,
                     },
                     'finish_reason': 'stop'
                 })
@@ -405,13 +474,13 @@ def proxy():
                 'index': 0,
                 'message': {
                     'role': 'assistant',
-                    'content': final_response,
+                    'content': response,
                 },
                 'finish_reason': 'stop'
             })
 
-    logger.debug(f'API response: {response_data}')
-    return jsonify(response_data), 200
+        logger.debug(f'API response: {response_data}')
+        return jsonify(response_data), 200
 
 @app.route('/v1/models', methods=['GET'])
 def proxy_models():

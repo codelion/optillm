@@ -28,7 +28,7 @@ class ModelConfig:
     quantization_bits: int = 4
     device_preference: Optional[str] = None
     # Default generation parameters
-    max_new_tokens: int = 512
+    max_new_tokens: int = 4096
     do_sample: bool = True
     top_p: float = 0.9
     top_k: int = 50
@@ -36,6 +36,7 @@ class ModelConfig:
     num_return_sequences: int = 1
     repetition_penalty: float = 1.0
     pad_token_id: Optional[int] = None
+    logprobs: bool = False
     # Advanced parameters
     use_memory_efficient_attention: bool = True
     enable_prompt_caching: bool = True
@@ -769,7 +770,7 @@ class InferencePipeline:
                 })
             else:
                 logprobs_results.append(None)
-                
+        logger.debug(f"Logprobs_results : {logprobs_results}")        
         return responses, token_counts, logprobs_results
     
     def setup_efficient_attention(self):
@@ -1268,6 +1269,7 @@ class InferenceClient:
                 }
                 
                 self.client.clean_unused_pipelines()
+                logger.debug(f"Response : {response_dict}")
                 return ChatCompletion(response_dict)
                 
     class Models:
