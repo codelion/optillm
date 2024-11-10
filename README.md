@@ -48,22 +48,6 @@ python optillm.py
  * Running on http://192.168.10.48:8000
 2024-09-06 07:57:14,212 - INFO - Press CTRL+C to quit
 ```
-
-### Starting the optillm proxy for a local server (e.g. llama.cpp)
-
-- Set the `OPENAI_API_KEY` env variable to a placeholder value
-  - e.g. `export OPENAI_API_KEY="no_key"`
-- Run `./llama-server -c 4096 -m path_to_model` to start the server with the specified model and a context length of 4096 tokens
-- Run `python3 optillm.py --base_url base_url` to start the proxy
-  - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
-
-> [!WARNING]
-> Note that llama-server currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
-> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`.
-
-> [!NOTE]
-> You'll later need to specify a model name in the OpenAI client configuration. Since llama-server was started with a single model, you can choose any name you want.
-
 ## Usage
 
 Once the proxy is running, you can use it as a drop in replacement for an OpenAI client by setting the `base_url` as `http://localhost:8000/v1`.
@@ -155,7 +139,41 @@ In the diagram:
 - `A` is an existing tool (like [oobabooga](https://github.com/oobabooga/text-generation-webui/)), framework (like [patchwork](https://github.com/patched-codes/patchwork))
 or your own code where you want to use the results from optillm. You can use it directly using any OpenAI client sdk.
 - `B` is the optillm service (running directly or in a docker container) that will send requests to the `base_url`.
-- `C` is any service providing an OpenAI API compatible chat completions endpoint. 
+- `C` is any service providing an OpenAI API compatible chat completions endpoint.
+
+### Local inference server
+
+We support loading any HuggingFace model or LoRA directly in optillm. To use the built-in inference server set the `OPTILLM_API_KEY` to any value (e.g. `export OPTILLM_API_KEY="optillm"`)
+and then use the same in your OpenAI client. You can pass any HuggingFace model in model field. If it is a private model make sure you set the `HF_TOKEN` environment variable
+with your HuggingFace key. We also support adding any number of LoRAs on top of the model by using the `+` separator. 
+
+E.g. The following code loads the base model `meta-llama/Llama-3.2-1B-Instruct` and then adds two LoRAs on top - `patched-codes/Llama-3.2-1B-FixVulns` and `patched-codes/Llama-3.2-1B-FastApply`.
+You can specify which LoRA to use using the `active_adapter` param in `extra_args` field of OpenAI SDK client. By default we will load the last specified adapter.
+
+```python
+OPENAI_BASE_URL = "http://localhost:8000/v1"
+OPENAI_KEY = "optillm"
+response = client.chat.completions.create(
+  model="meta-llama/Llama-3.2-1B-Instruct+patched-codes/Llama-3.2-1B-FastApply+patched-codes/Llama-3.2-1B-FixVulns",
+  messages=messages,
+  temperature=0.2,
+  logprobs = True,
+  top_logprobs = 3,
+  extra_body={"active_adapter": "patched-codes/Llama-3.2-1B-FastApply"},
+)
+```
+
+### Starting the optillm proxy with an external server (e.g. llama.cpp or ollama)
+
+- Set the `OPENAI_API_KEY` env variable to a placeholder value
+  - e.g. `export OPENAI_API_KEY="sk-no-key"`
+- Run `./llama-server -c 4096 -m path_to_model` to start the server with the specified model and a context length of 4096 tokens
+- Run `python3 optillm.py --base_url base_url` to start the proxy
+  - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
+
+> [!WARNING]
+> Note that llama-server (and ollama) currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
+> `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`. Use the built-in local inference server to use these approaches.
 
 ## Implemented techniques
 
