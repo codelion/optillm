@@ -40,7 +40,7 @@ class ModelConfig:
     # Advanced parameters
     use_memory_efficient_attention: bool = True
     enable_prompt_caching: bool = True
-    dynamic_temperature: bool = True
+    dynamic_temperature: bool = False
 
 
 @dataclass
@@ -490,6 +490,17 @@ class LoRAManager:
         self.cache_manager = cache_manager
         self.loaded_adapters = {}  # Maps model -> list of loaded adapter_ids
 
+    def _get_adapter_name(self, adapter_id: str) -> str:
+        """Create a valid adapter name from adapter_id by removing invalid characters"""
+        # Replace invalid characters with underscore
+        name = adapter_id.replace('.', '_').replace('-', '_')
+        # Remove any other non-alphanumeric characters
+        name = ''.join(c if c.isalnum() or c == '_' else '' for c in name)
+        # Ensure it starts with a letter or underscore
+        if name[0].isdigit():
+            name = f"adapter_{name}"
+        return name
+
     def validate_adapter(self, adapter_id: str) -> bool:
         """Validate if adapter exists and is compatible"""
         try:
@@ -516,12 +527,20 @@ class LoRAManager:
                 raise ValueError(error_msg)
             
             try:
+                # Generate a consistent name for this adapter
+                adapter_name = self._get_adapter_name(adapter_id)
+
+                config = PeftConfig.from_pretrained(
+                adapter_id,
+                trust_remote_code=True,
+                use_auth_token=os.getenv("HF_TOKEN")  # Support private repos
+                )
                 
                 # Load adapter into existing PeftModel
                 model = base_model
-                model.load_adapter(
-                    adapter_id,
-                    token=os.getenv("HF_TOKEN"),
+                model.add_adapter(
+                    config,
+                    adapter_name = adapter_name,
                 )
                 
                 # Track loaded adapter
@@ -553,9 +572,6 @@ class LoRAManager:
 
     def set_active_adapter(self, model: PeftModel, adapter_id: str = None) -> bool:
         """Set a specific adapter as active with error handling"""
-        if not isinstance(model, PeftModel):
-            logger.warning("Model is not a PeftModel, cannot set adapter")
-            return False
             
         available_adapters = self.loaded_adapters.get(model, [])
         
@@ -570,7 +586,8 @@ class LoRAManager:
         if adapter_id in available_adapters:
             try:
                 model.enable_adapters()
-                model.set_adapter(adapter_id)
+                adapter_name = self._get_adapter_name(adapter_id)
+                model.set_adapter(adapter_name)
                 logger.info(f"Successfully set active adapter to: {adapter_id}")
                 return True
             except Exception as e:
@@ -628,8 +645,7 @@ class InferencePipeline:
                 except Exception as e:
                     logger.error(f"Failed to load adapter {adapter_id}: {e}")
             
-            if isinstance(self.current_model, PeftModel):
-                self.lora_manager.set_active_adapter(self.current_model)
+        self.lora_manager.set_active_adapter(self.current_model)
         
         # Setup optimizations
         if model_config.use_memory_efficient_attention:
@@ -916,6 +932,7 @@ class InferencePipeline:
                 input_length=input_length
             )
         ])
+    
     def process_batch(
         self,
         system_prompts: List[str],
@@ -1203,6 +1220,7 @@ class InferenceClient:
                 seed: Optional[int] = None,
                 logprobs: Optional[bool] = None,
                 top_logprobs: Optional[int] = None,
+                active_adapter: Optional[Dict[str, Any]] = None,
                 **kwargs
             ) -> ChatCompletion:
                 """Create a chat completion with OpenAI-compatible parameters"""
@@ -1210,6 +1228,11 @@ class InferenceClient:
                     raise NotImplementedError("Streaming is not yet supported")
 
                 pipeline = self.client.get_pipeline(model)
+
+                # Set active adapter if specified in extra_body
+                if active_adapter is not None:
+                    logger.info(f"Setting active adapter to: {active_adapter}")
+                    pipeline.lora_manager.set_active_adapter(pipeline.current_model, active_adapter)
                 
                 # Apply chat template to messages
                 prompt = pipeline.tokenizer.apply_chat_template(
