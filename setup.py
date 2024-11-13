@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.0.11",
+    version="0.0.12",
     packages=find_packages(),
     py_modules=['optillm'],
     package_data={
@@ -32,6 +32,7 @@ setup(
         "ipython",
         "ipykernel",
         "peft",
+        "bitsandbytes",
     ],
     entry_points={
         'console_scripts': [
