@@ -15,6 +15,9 @@ from scipy.stats import entropy
 from functools import lru_cache
 import time
 
+from optillm.cot_decoding import cot_decode
+from optillm.entropy_decoding import entropy_decode
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1221,6 +1224,17 @@ class InferenceClient:
                 logprobs: Optional[bool] = None,
                 top_logprobs: Optional[int] = None,
                 active_adapter: Optional[Dict[str, Any]] = None,
+                decoding: Optional[str] = None,
+                # CoT specific params
+                k: int = 10,
+                num_beams: int = 1,
+                length_penalty: float = 1.0,
+                no_repeat_ngram_size: int = 0,
+                early_stopping: bool = False,
+                aggregate_paths: bool = False,
+                # Entropy specific params
+                top_k: int = 27,
+                min_p: float = 0.03,
                 **kwargs
             ) -> ChatCompletion:
                 """Create a chat completion with OpenAI-compatible parameters"""
@@ -1229,71 +1243,145 @@ class InferenceClient:
 
                 pipeline = self.client.get_pipeline(model)
 
-                # Set active adapter if specified in extra_body
+                # Set active adapter if specified
                 if active_adapter is not None:
                     logger.info(f"Setting active adapter to: {active_adapter}")
                     pipeline.lora_manager.set_active_adapter(pipeline.current_model, active_adapter)
-                
-                # Apply chat template to messages
-                prompt = pipeline.tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True
-                )
-                
-                # Set generation parameters
-                generation_params = {
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "num_return_sequences": n,
-                    "max_new_tokens": max_tokens if max_tokens is not None else 4096,
-                    "presence_penalty": presence_penalty,
-                    "frequency_penalty": frequency_penalty,
-                    "stop_sequences": [stop] if isinstance(stop, str) else stop,
-                    "seed": seed,
-                    "logit_bias": logit_bias,
-                    "logprobs": logprobs,
-                    "top_logprobs": top_logprobs
-                }
 
-                # Generate responses - now handles logprobs
-                responses, token_counts, logprobs_results = pipeline.generate(
-                    prompt,
-                    generation_params=generation_params
-                )
-                
-                # Calculate prompt tokens
-                prompt_tokens = len(pipeline.tokenizer.encode(prompt))
-                completion_tokens = sum(token_counts)
-                
-                # Create OpenAI-compatible response format
-                response_dict = {
-                    "id": f"chatcmpl-{int(time.time()*1000)}",
-                    "object": "chat.completion",
-                    "created": int(time.time()),
-                    "model": model,
-                    "choices": [
-                        {
-                            "index": idx,
-                            "message": {
-                                "role": "assistant",
-                                "content": response,
-                                **({"logprobs": logprob_result} if logprob_result else {})
-                            },
-                            "finish_reason": "stop"
+                responses = []
+                logprobs_results = []
+                prompt_tokens = 0
+                completion_tokens = 0
+
+                try:
+                    # Handle specialized decoding approaches
+                    if decoding:
+                        logger.info(f"Using specialized decoding approach: {decoding}")
+                        
+                        if decoding == "cot_decoding":
+                            # Use directly available parameters for CoT
+                            cot_params = {
+                                "k": k,
+                                "num_beams": num_beams,
+                                "max_new_tokens": max_tokens if max_tokens is not None else 4096,
+                                "temperature": temperature,
+                                "top_p": top_p,
+                                "repetition_penalty": 1.0 + frequency_penalty,
+                                "length_penalty": length_penalty,
+                                "no_repeat_ngram_size": no_repeat_ngram_size,
+                                "early_stopping": early_stopping,
+                                "aggregate_paths": aggregate_paths,
+                            }
+                            
+                            result, confidence = cot_decode(
+                                pipeline.current_model,
+                                pipeline.tokenizer,
+                                messages,
+                                **cot_params
+                            )
+                            responses = [result]
+                            logprobs_results = [{"confidence_score": confidence} if confidence is not None else None]
+                            completion_tokens = len(pipeline.tokenizer.encode(result))
+                            
+                        elif decoding == "entropy_decoding":
+                            # Configure generator for entropy decoding
+                            generator = None
+                            if seed is not None:
+                                generator = torch.Generator(device=pipeline.current_model.device)
+                                generator.manual_seed(seed)
+                            
+                            # Use directly available parameters for entropy decoding
+
+                            entropy_params = {
+                                "max_new_tokens": max_tokens if max_tokens is not None else 4096,
+                                "temperature": 0.666,
+                                "top_p": 0.90,
+                                "top_k": top_k,
+                                "min_p": min_p,
+                                "generator": generator
+                            }
+                            
+                            result = entropy_decode(
+                                pipeline.current_model,
+                                pipeline.tokenizer,
+                                messages,
+                                **entropy_params
+                            )
+                            responses = [result]
+                            logprobs_results = [None]
+                            completion_tokens = len(pipeline.tokenizer.encode(result))
+                        
+                        else:
+                            raise ValueError(f"Unknown specialized decoding approach: {decoding}")
+                        
+                        # Calculate prompt tokens for specialized approaches
+                        prompt_text = pipeline.tokenizer.apply_chat_template(messages, tokenize=False)
+                        prompt_tokens = len(pipeline.tokenizer.encode(prompt_text))
+                        
+                    else:
+                        # Standard generation
+                        prompt = pipeline.tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=False,
+                            add_generation_prompt=True
+                        )
+                        
+                        # Set generation parameters
+                        generation_params = {
+                            "temperature": temperature,
+                            "top_p": top_p,
+                            "num_return_sequences": n,
+                            "max_new_tokens": max_tokens if max_tokens is not None else 4096,
+                            "presence_penalty": presence_penalty,
+                            "frequency_penalty": frequency_penalty,
+                            "stop_sequences": [stop] if isinstance(stop, str) else stop,
+                            "seed": seed,
+                            "logit_bias": logit_bias,
+                            "logprobs": logprobs,
+                            "top_logprobs": top_logprobs
                         }
-                        for idx, (response, logprob_result) in enumerate(zip(responses, logprobs_results))
-                    ],
-                    "usage": {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": completion_tokens + prompt_tokens
+
+                        # Generate responses
+                        responses, token_counts, logprobs_results = pipeline.generate(
+                            prompt,
+                            generation_params=generation_params
+                        )
+                        
+                        prompt_tokens = len(pipeline.tokenizer.encode(prompt))
+                        completion_tokens = sum(token_counts)
+
+                    # Create OpenAI-compatible response format
+                    response_dict = {
+                        "id": f"chatcmpl-{int(time.time()*1000)}",
+                        "object": "chat.completion",
+                        "created": int(time.time()),
+                        "model": model,
+                        "choices": [
+                            {
+                                "index": idx,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": response,
+                                    **({"logprobs": logprob_result} if logprob_result else {})
+                                },
+                                "finish_reason": "stop"
+                            }
+                            for idx, (response, logprob_result) in enumerate(zip(responses, logprobs_results))
+                        ],
+                        "usage": {
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": completion_tokens + prompt_tokens
+                        }
                     }
-                }
-                
-                self.client.clean_unused_pipelines()
-                logger.debug(f"Response : {response_dict}")
-                return ChatCompletion(response_dict)
+                    
+                    self.client.clean_unused_pipelines()
+                    logger.debug(f"Response : {response_dict}")
+                    return ChatCompletion(response_dict)
+                    
+                except Exception as e:
+                    logger.error(f"Error in chat completion: {str(e)}")
+                    raise
                 
     class Models:
         """OpenAI-compatible models interface"""
