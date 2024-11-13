@@ -1231,7 +1231,7 @@ class InferenceClient:
                 length_penalty: float = 1.0,
                 no_repeat_ngram_size: int = 0,
                 early_stopping: bool = False,
-                aggregate_paths: bool = False,
+                aggregate_paths: bool = True,
                 # Entropy specific params
                 top_k: int = 27,
                 min_p: float = 0.03,
@@ -1263,10 +1263,10 @@ class InferenceClient:
                             cot_params = {
                                 "k": k,
                                 "num_beams": num_beams,
-                                "max_new_tokens": max_tokens if max_tokens is not None else 4096,
+                                "max_new_tokens": max_tokens if max_tokens is not None else 512,
                                 "temperature": temperature,
                                 "top_p": top_p,
-                                "repetition_penalty": 1.0 + frequency_penalty,
+                                "repetition_penalty": 1.0,
                                 "length_penalty": length_penalty,
                                 "no_repeat_ngram_size": no_repeat_ngram_size,
                                 "early_stopping": early_stopping,
@@ -1293,7 +1293,7 @@ class InferenceClient:
                             # Use directly available parameters for entropy decoding
 
                             entropy_params = {
-                                "max_new_tokens": max_tokens if max_tokens is not None else 4096,
+                                "max_new_tokens": max_tokens if max_tokens is not None else 512,
                                 "temperature": 0.666,
                                 "top_p": 0.90,
                                 "top_k": top_k,
