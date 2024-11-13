@@ -163,6 +163,25 @@ response = client.chat.completions.create(
 )
 ```
 
+You can also use the alternate decoding techniques like `cot_decoding` and `entropy_decoding` directly with the local inference server.
+
+```python
+response = client.chat.completions.create(
+  model="meta-llama/Llama-3.2-1B-Instruct",
+  messages=messages,
+  temperature=0.2,
+  extra_body={
+        "decoding": "cot_decoding",  # or "entropy_decoding"
+        # CoT specific params
+        "k": 10,
+        "aggregate_paths": True,
+        # OR Entropy specific params
+        "top_k": 27,
+        "min_p": 0.03,
+    }
+)
+```
+
 ### Starting the optillm proxy with an external server (e.g. llama.cpp or ollama)
 
 - Set the `OPENAI_API_KEY` env variable to a placeholder value
