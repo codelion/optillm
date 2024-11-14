@@ -12,6 +12,7 @@ import asyncio
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Optional, Union, Dict, Any, List
+from importlib.metadata import version
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -507,6 +508,16 @@ def health():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
+    
+     # Add version argument using importlib.metadata
+    try:
+        package_version = version('optillm')
+    except Exception:
+        package_version = "unknown"  # Fallback if package is not installed
+        
+    parser.add_argument('--version', action='version', 
+                       version=f'%(prog)s {package_version}',
+                       help="Show program's version number and exit")
 
     # Define arguments and their corresponding environment variables
     args_env = [
