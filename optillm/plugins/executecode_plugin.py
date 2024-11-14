@@ -8,6 +8,14 @@ import json
 
 SLUG = "executecode"
 
+EXECUTE_CODE_PROMPT = '''Generate Python code to solve this problem. Put the code in a ```python block. The code:
+1. Should use standard Python libraries (math, itertools, etc.)
+2. Should print the final answer
+3. Should be complete and runnable
+4. Should include example test cases if relevant
+
+The code will be automatically executed when submitted.'''
+
 def extract_python_code(text: str) -> List[str]:
     """Extract Python code blocks from text."""
     # print(f"Extracting code: {text}")
@@ -78,7 +86,7 @@ def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str
     else:
         # Get initial response from the model
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt + EXECUTE_CODE_PROMPT} ,
             {"role": "user", "content": initial_query}
         ]
         
