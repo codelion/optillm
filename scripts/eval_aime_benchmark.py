@@ -3,6 +3,8 @@ import json
 import os
 import logging
 import re
+import time
+
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
 
@@ -121,8 +123,8 @@ def get_llm_response(problem: str, model: str) -> str:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": problem}
+                # {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
             # extra_body={
@@ -224,7 +226,7 @@ def main(model: str):
         save_result(results_file, result)
         
         # Optional: Add delay between requests if needed
-        # time.sleep(5)
+        time.sleep(300)
     
     # Analyze results
     final_results = load_existing_results(results_file)
