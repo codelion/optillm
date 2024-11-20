@@ -522,7 +522,7 @@ def parse_args():
     # Define arguments and their corresponding environment variables
     args_env = [
         ("--optillm-api-key", "OPTILLM_API_KEY", str, "", "Optional API key for client authentication to optillm"),
-        ("--approach", "OPTILLM_APPROACH", str, "auto", "Inference approach to use", known_approaches),
+        ("--approach", "OPTILLM_APPROACH", str, "auto", "Inference approach to use", known_approaches + list(plugin_approaches.keys())),
         ("--mcts-simulations", "OPTILLM_SIMULATIONS", int, 2, "Number of MCTS simulations"),
         ("--mcts-exploration", "OPTILLM_EXPLORATION", float, 0.2, "Exploration weight for MCTS"),
         ("--mcts-depth", "OPTILLM_DEPTH", int, 1, "Simulation depth for MCTS"),
@@ -571,10 +571,10 @@ def parse_args():
 
 def main():
     global server_config
-    args = parse_args()
-
     # Call this function at the start of main()
     load_plugins()
+    args = parse_args()
+
     # Update server_config with all argument values
     server_config.update(vars(args))
 
