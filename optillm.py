@@ -395,6 +395,10 @@ def proxy():
     model = data.get('model', server_config['model'])
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
+    logger.debug(data)
+    server_config['mcts_depth'] = data.get('mcts_depth', server_config['mcts_depth'])
+    server_config['mcts_exploration' ] = data.get('mcts_exploration', server_config['mcts_exploration'])
+    server_config['mcts_simulations'] = data.get('mcts_simulations', server_config['mcts_simulations'])
 
     system_prompt, initial_query, message_optillm_approach = parse_conversation(messages)
 
