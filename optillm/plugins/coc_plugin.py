@@ -18,6 +18,7 @@ MAX_FIX_ATTEMPTS = 3
 # List of allowed modules for execution
 ALLOWED_MODULES = {
     'math': math,
+    'numpy': 'numpy',  # String indicates module should be imported in execution context
 }
 
 # Initial code generation prompt
@@ -60,22 +61,21 @@ Return only the fixed code in a code block:
 
 # Simulation prompt
 SIMULATION_PROMPT = '''
-The following Python code could not be executed after several attempts. 
-Please simulate its execution and determine the final value that would be in the 'answer' variable.
+The following Python code could not be executed directly. Analyze the code and determine what the answer would be.
+Pay special attention to:
+1. The core computational logic, ignoring any visualization or display code
+2. The key mathematical operations that determine the final answer
+3. Any logic that affects the 'answer' variable
 
-Code to simulate:
+Code to analyze:
 ```python
 {code}
 ```
 
-Last error encountered:
+Runtime error encountered:
 {error}
 
-Important:
-1. Follow the logic of the code exactly
-2. Perform all calculations carefully
-3. Return ONLY the final numeric or string value, no explanations
-4. If the code contains semantic functions (like text analysis), use your judgment to simulate them
+Return ONLY the final value that would be in the 'answer' variable. Return just the value, no explanations.
 '''
 
 def extract_code_blocks(text: str) -> List[str]:
@@ -93,12 +93,25 @@ def sanitize_code(code: str) -> str:
     # Add standard imports
     imports = "\n".join(f"import {mod}" for mod in ALLOWED_MODULES)
     
+    # Remove or modify problematic visualization code
+    lines = code.split('\n')
+    safe_lines = []
+    for line in lines:
+        # Skip matplotlib-related imports and plotting commands
+        if any(x in line.lower() for x in ['matplotlib', 'plt.', '.plot(', '.show(', 'figure', 'subplot']):
+            continue
+        # Keep the line if it's not visualization-related
+        safe_lines.append(line)
+    
+    safe_code = '\n'.join(safe_lines)
+    
     # Add safety wrapper
     wrapper = f"""
 {imports}
 
 def safe_execute():
-    {code.replace('\n', '\n    ')}
+    import numpy as np  # Always allow numpy
+    {safe_code.replace('\n', '\n    ')}
     return answer if 'answer' in locals() else None
 
 result = safe_execute()
@@ -111,22 +124,25 @@ def execute_code(code: str) -> Tuple[Any, str]:
     logger.info("Attempting to execute code")
     logger.info(f"Code:\n{code}")
     
-    execution_env = {}
     try:
-        sanitized_code = sanitize_code(code)
-        exec(sanitized_code, execution_env)
-        answer = execution_env.get('answer')
+        # Create a clean environment
+        execution_env = {}
         
-        if answer is not None:
+        # Execute the code as-is
+        exec(code, execution_env)
+        
+        # Look for answer variable
+        if 'answer' in execution_env:
+            answer = execution_env['answer']
             logger.info(f"Execution successful. Answer: {answer}")
             return answer, None
         else:
-            error = "Code executed but did not produce an answer"
+            error = "Code executed but did not produce an answer variable"
             logger.warning(error)
             return None, error
             
     except Exception as e:
-        error = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+        error = str(e)
         logger.error(f"Execution failed: {error}")
         return None, error
 
