@@ -218,6 +218,7 @@ response = client.chat.completions.create(
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
 | Router                  | `router`           | Uses the [optillm-bert-uncased](https://huggingface.co/codelion/optillm-bert-uncased) model to route requests to different approaches based on the user prompt |
+| Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
 | Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
 | Privacy                 | `privacy`          | Anonymize PII data in request and deanonymize it back to original value in response            |
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
@@ -290,6 +291,20 @@ Authorization: Bearer your_secret_api_key
 ```
 ## SOTA results on benchmarks with optillm
 
+### coc-claude-3-5-sonnet-20241022 on AIME 2024 pass@1 (Nov 2024)
+
+| Model | Score |
+|-------|-----:|
+| o1-mini | 56.67 |
+| coc-claude-3-5-sonnet-20241022 | 46.67 |
+| coc-gemini/gemini-exp-1121 | 46.67 |
+| o1-preview | 40.00 |
+| f1-preview | 40.00 | 
+| gemini-exp-1114 | 36.67 |
+| claude-3-5-sonnet-20241022 | 20.00 |
+| gemini-1.5-pro-002 | 20.00 |
+| gemini-1.5-flash-002 | 16.67 |
+
 ### readurls&memory-gpt-4o-mini on Google FRAMES Benchmark (Oct 2024)
 | Model | Accuracy | 
 | ----- | -------- |
@@ -324,6 +339,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## References
 
+- [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/plugins/coc_plugin.py)
 - [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/entropy_decoding.py)
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](https://github.com/codelion/optillm/blob/main/scripts/eval_frames_benchmark.py)
 - [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906) - [Inspired the implementation of the memory plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/memory_plugin.py)
