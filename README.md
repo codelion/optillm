@@ -299,7 +299,6 @@ Authorization: Bearer your_secret_api_key
 | coc-claude-3-5-sonnet-20241022 | 46.67 |
 | coc-gemini/gemini-exp-1121 | 46.67 |
 | o1-preview | 40.00 |
-| f1-preview | 40.00 | 
 | gemini-exp-1114 | 36.67 |
 | claude-3-5-sonnet-20241022 | 20.00 |
 | gemini-1.5-pro-002 | 20.00 |
