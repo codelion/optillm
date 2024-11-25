@@ -211,7 +211,7 @@ response = client.chat.completions.create(
 | Monte Carlo Tree Search | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
 | PV Game                 | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
 | CoT Decoding            |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
-| Entropy Decoding        |  N/A for proxy     | Implements adaptive sampling based on the uncertainy of tokens during generation               |
+| Entropy Decoding        |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
 
 ## Implemented plugins
 
