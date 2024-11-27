@@ -1,0 +1,56 @@
+[
+  {
+    "index": 0,
+    "prompt": "If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name? ",
+    "ground_truth": "Jane Ballou",
+    "llm_response": "Based on the margin notes provided, the first name of the 15th First Lady of the United States' mother is Mary, and the surname of the second assassinated president's mother (Abraham Lincoln) is Hanks. Therefore, if your future wife has the same first name as Harriet Lane's mother (Mary) and the same surname as Abraham Lincoln's mother's maiden name (Hanks), her name would be Mary Hanks.",
+    "evaluation_decision": "FALSE",
+    "evaluation_explanation": "The \"Predicted Answer\" states that the future wife's name would be \"Mary Hanks,\" derived from the first name of the 15th First Lady of the United States' mother (Mary) and the surname of Abraham Lincoln's mother's maiden name (Hanks). However, the \"Ground Truth Answer\" is \"Jane Ballou,\" which does not match the name derived in the \"Predicted Answer.\" The key information and vital facts leading to the correct name are not present in the \"Predicted Answer,\" as it provides a different name entirely.",
+    "reasoning_type": "Multiple constraints"
+  },
+  {
+    "index": 1,
+    "prompt": "Imagine there is a building called Bronte tower whose height in feet is the same number as the dewey decimal classification for the Charlotte Bronte book that was published in 1847. Where would this building rank among tallest buildings in New York City, as of August 2024?",
+    "ground_truth": "37th",
+    "llm_response": "The Dewey Decimal classification for \"Jane Eyre,\" published in 1847, is 823.8. The height of the Bronte Tower, according to the information provided, would be 824 feet.\n\nAs of March 2024, a building that is 824 feet tall would rank at 52nd place among the tallest buildings in New York City, sharing that rank with several other buildings of the same height.\n\nSince the question refers to August 2024, it can be inferred that the rankings have not dramatically changed in that time period unless there have been significant new constructions or demolitions, which the provided information does not indicate. Therefore, it is reasonable to conclude that the Bronte Tower at 824 feet would still rank at around the same place.\n\nThus, the Bronte Tower would likely still rank at 52nd place among the tallest buildings in New York City as of August 2024.",
+    "evaluation_decision": "FALSE",
+    "evaluation_explanation": "The Predicted Answer states that the Bronte Tower would rank at 52nd place among the tallest buildings in New York City as of August 2024. In contrast, the Ground Truth Answer indicates that the ranking should be 37th. The two answers provide different rankings, and the Predicted Answer does not support the Ground Truth Answer in terms of the building's rank. Therefore, the essential information regarding the ranking of the Bronte Tower is not aligned between the two answers.",
+    "reasoning_type": "Numerical reasoning | Tabular reasoning | Multiple constraints"
+  },
+  {
+    "index": 2,
+    "prompt": "How many years earlier would Punxsutawney Phil have to be canonically alive to have made a Groundhog Day prediction in the same state as the US capitol?",
+    "ground_truth": "87",
+    "llm_response": "To answer your question, we need to know both the canonical year of Punxsutawney Phil's first prediction and the year when Groundhog Day was declared an established tradition in Punxsutawney, Pennsylvania, compared to when Washington, D.C. became the capital of the United States.\n\nGroundhog Day has been celebrated in Punxsutawney since 1887. The establishment of the city of Washington, D.C., as the capital was solidified with the Residence Act of 1790, although the city was formally founded in 1791.\n\nIf we take 1887, the year Phil's predictions began, and 1790 as the year Washington became the capital, the difference in years is:\n\n1887 - 1790 = 97 years.\n\nThus, to have made a Groundhog Day prediction in the same state as the U.S. capital, Punxsutawney Phil would have to canonically be alive 97 years earlier, specifically from 1887.",
+    "evaluation_decision": "FALSE",
+    "evaluation_explanation": "The \"Predicted Answer\" provides a calculation based on the years when Groundhog Day began (1887) and when Washington, D.C. was established as the capital (1790). It correctly calculates the difference as 97 years. However, the \"Ground Truth Answer\" states that the answer is 87 years, which is incorrect based on the provided historical context. The \"Predicted Answer\" does not contain the correct answer of 87 years, and instead provides a different calculation of 97 years. Therefore, the meaning and vital facts of the \"Ground Truth Answer\" are not present in the \"Predicted Answer.\"",
+    "reasoning_type": "Numerical reasoning | Multiple constraints | Temporal reasoning"
+  },
+  {
+    "index": 3,
+    "prompt": "As of August 1, 2024, which country were holders of the FIFA World Cup the last time the UEFA Champions League was won by a club from London?",
+    "ground_truth": "France",
+    "llm_response": "As of August 1, 2024, the last time the UEFA Champions League was won by a club from London was in 2021, when Chelsea FC won the title. The FIFA World Cup held before that date was in 2018, and the holder of the FIFA World Cup at that time was France, who won the tournament in Russia. Therefore, holders of the FIFA World Cup as of August 1, 2024, were France.",
+    "evaluation_decision": "TRUE",
+    "evaluation_explanation": "The \"Predicted Answer\" states that the holders of the FIFA World Cup as of August 1, 2024, were France, which directly matches the \"Ground Truth Answer\" of \"France.\" The meaning and vital facts are present in the \"Predicted Answer,\" confirming that France was the holder of the FIFA World Cup at the relevant time.",
+    "reasoning_type": "Tabular reasoning | Multiple constraints | Temporal reasoning"
+  },
+  {
+    "index": 4,
+    "prompt": "What is the name of the vocalist from the first band to make it in the top 200 under the record label that produced the third studio album for Dismal Euphony?",
+    "ground_truth": "Jens Kidman",
+    "llm_response": "The name of the vocalist is Jens Kidman, who is from the band Meshuggah.",
+    "evaluation_decision": "TRUE",
+    "evaluation_explanation": "The \"Predicted Answer\" identifies Jens Kidman as the vocalist, which directly matches the \"Ground Truth Answer\" that simply states \"Jens Kidman.\" The essential information regarding the name of the vocalist is present in the \"Predicted Answer,\" even though it includes additional context about the band Meshuggah. Since the core fact that Jens Kidman is the name of the vocalist is included, the meaning is preserved.",
+    "reasoning_type": "Multiple constraints"
+  },
+  {
+    "index": 5,
+    "prompt": "According to the 2000 United States census, what was the 2000 population of the birth city of the only 21st-century mayor of Austin, Texas who also served as mayor in the 1990s? Round your answer to the nearest thousand.",
+    "ground_truth": "506000",
+    "llm_response": "According to the note, the birth city of Kirk Watson, the only 21st-century mayor of Austin who also served as mayor in the 1990s, is Oklahoma City. The 2000 population of Oklahoma City, as stated in the note, was 506,132. \n\nRounding this number to the nearest thousand gives us **506,000**.",
+    "evaluation_decision": "TRUE",
+    "evaluation_explanation": "The Predicted Answer provides the birth city of Kirk Watson, the only 21st-century mayor of Austin who also served in the 1990s, as Oklahoma City. It also states the 2000 population of Oklahoma City as 506,132 and correctly rounds it to 506,000. The Ground Truth Answer is simply the rounded population figure, which matches the rounding provided in the Predicted Answer. Since the essential information and the final rounded population figure are present and accurate in the Predicted Answer, it aligns with the Ground Truth Answer.",
+    "reasoning_type": "Numerical reasoning | Tabular reasoning | Multiple constraints"
+  }
+]

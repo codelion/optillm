@@ -44,6 +44,7 @@ def get_llm_response(prompt: str, model: str) -> str:
         n=1,
         stop=None,
         temperature=0.7,
+        extra_body={"optillm_approach": "readurls&memory"}
     )
     return response.choices[0].message.content.strip()
 
