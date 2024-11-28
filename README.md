@@ -308,7 +308,7 @@ Authorization: Bearer your_secret_api_key
 | Model | Accuracy | 
 | ----- | -------- |
 | readurls&memory-gpt-4o-mini | 61.29 | 
-| gpt-4o-mini | 50.0 |
+| gpt-4o-mini | 50.61 |
 | readurls&memory-Gemma2-9b | 30.1 |
 | Gemma2-9b | 5.1 |
 | Gemma2-27b | 30.8 |
