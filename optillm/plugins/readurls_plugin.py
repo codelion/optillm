@@ -25,7 +25,7 @@ def extract_urls(text: str) -> List[str]:
 def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
     try:
         headers = {
-            'User-Agent': 'optillm/0.0.1 (hhttps://github.com/codelion/optillm)'
+            'User-Agent': 'optillm/0.0.1 (https://github.com/codelion/optillm)'
         }
         
         response = requests.get(url, headers=headers, timeout=10)
@@ -45,15 +45,42 @@ def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
         for tag in ['article', 'main', 'div[role="main"]', '.main-content']:
             content = soup.select_one(tag)
             if content:
-                text_elements.extend(content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']))
+                text_elements.extend(content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'table']))
                 break
         
-        # If no main content found, fall back to all headers and paragraphs
+        # If no main content found, fall back to all headers, paragraphs, and tables
         if not text_elements:
-            text_elements = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'])
+            text_elements = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'table'])
         
-        # Extract text from elements
-        text = ' '.join(element.get_text(strip=True) for element in text_elements)
+        # Process all elements including tables
+        content_parts = []
+        
+        for element in text_elements:
+            if element.name == 'table':
+                # Process table
+                table_content = []
+                
+                # Get headers
+                headers = element.find_all('th')
+                if headers:
+                    header_text = ' | '.join(header.get_text(strip=True) for header in headers)
+                    table_content.append(header_text)
+                
+                # Get rows
+                for row in element.find_all('tr'):
+                    cells = row.find_all(['td', 'th'])
+                    if cells:
+                        row_text = ' | '.join(cell.get_text(strip=True) for cell in cells)
+                        table_content.append(row_text)
+                
+                # Add table content with proper spacing
+                content_parts.append('\n' + '\n'.join(table_content) + '\n')
+            else:
+                # Process regular text elements
+                content_parts.append(element.get_text(strip=False))
+        
+        # Join all content
+        text = ' '.join(content_parts)
         
         # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text).strip()
