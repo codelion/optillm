@@ -4,10 +4,8 @@ import os
 import logging
 import re
 import time
-
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
-
 from openai import OpenAI
 from datasets import load_dataset
 from tqdm import tqdm
@@ -17,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"),  base_url="http://localhost:8000/v1")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="http://localhost:8888/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -48,50 +46,30 @@ def extract_answer(response: str) -> Optional[int]:
     """
     Extract the numerical answer from a math solution response.
     Handles various formats of boxed answers and falls back to last number if needed.
-    
-    Args:
-        response (str): The complete response text from the model
-        
-    Returns:
-        Optional[int]: The extracted answer as an integer, or None if no valid answer found
     """
     if not response:
         return None
         
-    # Clean the response: normalize whitespace and handle potential Unicode
+    # Clean the response
     response = ' '.join(response.split())
     
-    # List of regex patterns to try, in order of preference
     patterns = [
-        # $n=\boxed{X}$ format
         r'\$n=\\boxed{(\d+)}\$',
-        
-        # LaTeX display style answer: \[\boxed{X}\] or \[\boxed{X}.\]
         r'\\\[\\boxed{(\d+)}\\\]',
         r'\\\[\\boxed{(\d+)}\.\\\]',
-        
-        # Inline LaTeX \boxed{X}
         r'\\boxed{(\d+)}',
-        
-        # Common variations
         r'\$\\boxed{(\d+)}\$',
         r'boxed{(\d+)}',
-        
-        # Less strict patterns
         r'\\boxed\s*{\s*(\d+)\s*}',
         r'\bboxed\s*{\s*(\d+)\s*}',
-        
-        # Plain text answer indicators
         r'final answer is[^\d]*(\d+)',
         r'answer is[^\d]*(\d+)',
         r'answer:[^\d]*(\d+)',
         r'= ?(\d+)$'
     ]
     
-    # Try each pattern in order
     for pattern in patterns:
         matches = re.finditer(pattern, response, re.IGNORECASE)
-        # Get the last match for this pattern (in case there are multiple)
         last_match = None
         for match in matches:
             last_match = match
@@ -102,17 +80,13 @@ def extract_answer(response: str) -> Optional[int]:
             except (ValueError, IndexError):
                 continue
     
-    # Fallback: Extract all numbers and take the last one
-    # This is our last resort, assuming the answer typically comes last
     numbers = re.findall(r'(\d+)', response)
     if numbers:
         try:
-            # Convert to int and return the last number found
             return int(numbers[-1])
         except ValueError:
             pass
             
-    # If all methods fail, return None
     return None
 
 def get_llm_response(problem: str, model: str) -> str:
@@ -120,29 +94,56 @@ def get_llm_response(problem: str, model: str) -> str:
     Get response from the LLM for a given problem.
     """
     try:
-        response = client.chat.completions.create(
+        response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
             messages=[
-                # {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
-            # extra_body={
-            #     "decoding": "entropy_decoding",
-            # }
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Error getting LLM response: {e}")
         return ""
 
-def evaluate_response(predicted_answer: Optional[int], correct_answer: int) -> bool:
+def make_n_attempts(problem: str, model: str, n: int) -> List[Dict]:
     """
-    Evaluate if the predicted answer matches the correct answer.
+    Make n attempts to solve a problem and return all responses and predictions.
+    
+    Args:
+        problem (str): The problem text
+        model (str): The model identifier
+        n (int): Number of attempts to make
+        
+    Returns:
+        List[Dict]: List of dictionaries containing response and predicted answer for each attempt
     """
-    if predicted_answer is None:
-        return False
-    return predicted_answer == correct_answer
+    attempts = []
+    for i in range(n):
+        response = get_llm_response(problem, model)
+        predicted_answer = extract_answer(response)
+        attempts.append({
+            "attempt_number": i + 1,
+            "response": response,
+            "predicted_answer": predicted_answer
+        })
+    return attempts
+
+def evaluate_pass_at_n(attempts: List[Dict], correct_answer: int) -> Tuple[bool, Optional[int]]:
+    """
+    Evaluate if any of the n attempts got the correct answer.
+    
+    Args:
+        attempts (List[Dict]): List of attempt results
+        correct_answer (int): The correct answer
+        
+    Returns:
+        Tuple[bool, Optional[int]]: (whether any attempt was correct, first correct attempt number)
+    """
+    for attempt in attempts:
+        if attempt["predicted_answer"] == correct_answer:
+            return True, attempt["attempt_number"]
+    return False, None
 
 def load_existing_results(filename: str) -> List[Dict]:
     """Load existing results from file if it exists."""
@@ -165,42 +166,56 @@ def get_last_processed_index(results: List[Dict]) -> int:
         return -1
     return max(int(r.get('index', -1)) for r in results)
 
-def analyze_results(results: List[Dict]):
-    """Analyze and print summary statistics of the results."""
+def analyze_results(results: List[Dict], n: int):
+    """
+    Analyze and print summary statistics of the results.
+    
+    Args:
+        results (List[Dict]): List of evaluation results
+        n (int): Number of attempts per problem
+    """
     total = len(results)
     correct = sum(1 for r in results if r['is_correct'])
     accuracy = correct / total if total > 0 else 0
     
     print("\n=== Results Summary ===")
+    print(f"Evaluation mode: pass@{n}")
     print(f"Total problems: {total}")
     print(f"Correct answers: {correct}")
     print(f"Accuracy: {accuracy:.2%}")
     
-    # Print incorrect problems for analysis
-    print("\n=== Incorrect Answers ===")
+    # Calculate attempt statistics
+    successful_attempts = [r['first_correct_attempt'] for r in results if r['is_correct']]
+    if successful_attempts:
+        avg_attempts = sum(successful_attempts) / len(successful_attempts)
+        print(f"\nFor correct solutions:")
+        print(f"Average attempts needed: {avg_attempts:.2f}")
+        print(f"Attempt distribution:")
+        for i in range(1, n + 1):
+            count = sum(1 for x in successful_attempts if x == i)
+            print(f"  Attempt {i}: {count} problems")
+    
+    print("\n=== Incorrect Problems ===")
     for r in results:
         if not r['is_correct']:
             print(f"Problem {r['index']}:")
             print(f"Expected: {r['correct_answer']}")
-            print(f"Predicted: {r['predicted_answer']}")
+            print("Predicted answers across attempts:", [
+                attempt['predicted_answer'] for attempt in r['attempts']
+            ])
             print("---")
 
-def main(model: str):
+def main(model: str, n_attempts: int):
     """Main evaluation function."""
-    # Create results directory if it doesn't exist
     os.makedirs("results", exist_ok=True)
     
-    # Setup results file
-    results_file = f"evaluation_results_{model.replace('/', '_')}.json"
+    # Include n_attempts in filename to keep separate results for different n values
+    results_file = f"evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}.json"
     
-    # Load dataset
     dataset = load_2024_dataset()
-    
-    # Load existing results
     existing_results = load_existing_results(results_file)
     last_processed_index = get_last_processed_index(existing_results)
     
-    # Process problems
     for idx, item in enumerate(tqdm(dataset, desc="Evaluating problems")):
         if idx <= last_processed_index:
             continue
@@ -208,33 +223,27 @@ def main(model: str):
         problem_text = item['problem']
         correct_answer = int(item['answer'])
         
-        # Get model response
-        response = get_llm_response(problem_text, model)
-        logger.debug(f"Response: {response}")
-        predicted_answer = extract_answer(response)
-        is_correct = evaluate_response(predicted_answer, correct_answer)
+        # Make n attempts for each problem
+        attempts = make_n_attempts(problem_text, model, n_attempts)
+        is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
         
-        # Save result
         result = {
             "index": idx,
             "problem": problem_text,
-            "model_response": response,
-            "predicted_answer": predicted_answer,
+            "attempts": attempts,
             "correct_answer": correct_answer,
-            "is_correct": is_correct
+            "is_correct": is_correct,
+            "first_correct_attempt": first_correct
         }
         save_result(results_file, result)
-        
-        # Optional: Add delay between requests if needed
-        time.sleep(300)
     
-    # Analyze results
     final_results = load_existing_results(results_file)
-    analyze_results(final_results)
+    analyze_results(final_results, n_attempts)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME 2024 problems")
     parser.add_argument("--model", type=str, required=True, help="OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)")
+    parser.add_argument("--n", type=int, default=1, help="Number of attempts per problem (for pass@n evaluation)")
     args = parser.parse_args()
     
-    main(args.model)
+    main(args.model, args.n)

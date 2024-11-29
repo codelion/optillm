@@ -306,6 +306,52 @@ async def execute_parallel_approaches(approaches, system_prompt, initial_query, 
     responses, tokens = zip(*results)
     return list(responses), sum(tokens)
 
+def execute_n_times(n: int, approaches, operation: str, system_prompt: str, initial_query: str, client: Any, model: str) -> Tuple[Union[str, List[str]], int]:
+    """
+    Execute the pipeline n times and return n responses.
+    
+    Args:
+        n (int): Number of times to run the pipeline
+        approaches (list): List of approaches to execute
+        operation (str): Operation type ('SINGLE', 'AND', or 'OR')
+        system_prompt (str): System prompt
+        initial_query (str): Initial query
+        client: OpenAI client instance
+        model (str): Model identifier
+        
+    Returns:
+        Tuple[Union[str, List[str]], int]: List of responses and total token count
+    """
+    responses = []
+    total_tokens = 0
+    
+    for _ in range(n):
+        if operation == 'SINGLE':
+            response, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+        elif operation == 'AND':
+            response, tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
+        elif operation == 'OR':
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response, tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
+            loop.close()
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
+            
+        # If response is already a list (from OR operation), extend responses
+        # Otherwise append the single response
+        if isinstance(response, list):
+            responses.extend(response)
+        else:
+            responses.append(response)
+        total_tokens += tokens
+        
+    # If n=1 and we got a single response, return it as is
+    # Otherwise return the list of responses
+    if n == 1 and len(responses) == 1:
+        return responses[0], total_tokens
+    return responses, total_tokens
+
 def generate_streaming_response(final_response, model):
     # Yield the final response
     if isinstance(final_response, list):
@@ -393,11 +439,12 @@ def proxy():
     stream = data.get('stream', False)
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
+    n = data.get('n', server_config['n'])  # Get n value from request or config
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
     server_config['mcts_depth'] = data.get('mcts_depth', server_config['mcts_depth'])
-    server_config['mcts_exploration' ] = data.get('mcts_exploration', server_config['mcts_exploration'])
+    server_config['mcts_exploration'] = data.get('mcts_exploration', server_config['mcts_exploration'])
     server_config['mcts_simulations'] = data.get('mcts_simulations', server_config['mcts_simulations'])
 
     system_prompt, initial_query, message_optillm_approach = parse_conversation(messages)
@@ -428,8 +475,17 @@ def proxy():
         contains_none = any(approach == 'none' for approach in approaches)
 
         if operation == 'SINGLE' and approaches[0] == 'none':
-            # For none approach, return the response directly
-            result, _ = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+            # For none approach with n>1, make n separate calls
+            if n > 1:
+                responses = []
+                completion_tokens = 0
+                for _ in range(n):
+                    result, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+                    responses.append(result)
+                    completion_tokens += tokens
+                result = responses
+            else:
+                result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
             logger.debug(f'Direct proxy response: {result}')
             return jsonify(result), 200
             
@@ -437,17 +493,8 @@ def proxy():
             if contains_none:
                 raise ValueError("'none' approach cannot be combined with other approaches")
 
-        # Handle non-none approaches
-        if operation == 'SINGLE':
-            response, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
-        elif operation == 'AND':
-            response, completion_tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
-        elif operation == 'OR':
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response, completion_tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        # Handle non-none approaches with n attempts
+        response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model)
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
