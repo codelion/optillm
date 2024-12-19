@@ -28,7 +28,7 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
-from optillm.cepo import cepo
+from optillm.cepo import cepo, CepoConfig, init_cepo_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -293,7 +293,9 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
         elif approach == 'cepo':
-            return cepo(system_prompt, initial_query, client, model)
+            # build the cepo config based on the cmd line arguments and the 
+            logger.debug(f"Calling with {cepo_config}")
+            return cepo(system_prompt, initial_query, client, model, cepo_config)
     elif approach in plugin_approaches:
         return plugin_approaches[approach](system_prompt, initial_query, client, model)
     else:
@@ -620,6 +622,13 @@ def parse_args():
     parser.add_argument("--base-url", "--base_url", dest="base_url", type=str, default=base_url_default,
                         help="Base url for OpenAI compatible endpoint")
 
+    # Special handling of all the Cepo Configurations
+    for key, value in CepoConfig.__dict__.items():
+        if not key.startswith('__'):
+            parser.add_argument(f"--cepo_{key}", dest=f"cepo_{key}", type=type(value), default=None, help=f"CePO configuration for {key}")
+
+    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default=None, help="Path to CePO configuration file")
+
     args = parser.parse_args()
 
     # Convert argument names to match server_config keys
@@ -633,6 +642,7 @@ def parse_args():
 
 def main():
     global server_config
+    global cepo_config
     # Call this function at the start of main()
     load_plugins()
     args = parse_args()
@@ -646,6 +656,11 @@ def main():
     logging_level = server_config['log']
     if logging_level in logging_levels.keys():
         logger.setLevel(logging_levels[logging_level])
+    
+    # set and log the cepo configs
+    cepo_config = init_cepo_config(server_config)
+    if args.approach == 'cepo':
+        logger.info(f"CePO Config: {cepo_config}")
     
     logger.info(f"Starting server with approach: {server_config['approach']}")
     server_config_clean = server_config.copy()
