@@ -11,7 +11,7 @@ class CepoConfig:
     bestofn_n: int = 3
     bestofn_temperature: int = 0.1
     bestofn_max_tokens: int = 4096
-    bestofn_rating_type: str = "pairwise" #"absolute"  # or "pairwise"
+    bestofn_rating_type: str = "absolute"  # or "pairwise"
     planning_n: int = 3
     planning_m: int = 6
     planning_temperature_step1: int = 0.55
