@@ -36,7 +36,7 @@ def init_cepo_config(cmd_line_args: dict) -> CepoConfig:
 
     # get the yaml file arguments
     cepo_config_yaml = {}
-    if "cepo_config_file" in cmd_line_args.keys():
+    if cmd_line_args["cepo_config_file"]:
         with open(cmd_line_args["cepo_config_file"], "r") as yaml_file:
             cepo_config_yaml = yaml.safe_load(yaml_file)
 
