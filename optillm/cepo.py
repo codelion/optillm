@@ -241,12 +241,11 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client, mo
             rating_response = "0"
 
         try:
-            rating = float(rating_response)
-            ratings.append(rating)
+            ratings.append(float(rating_response))
         except ValueError:
             ratings.append(0)
         
-        rating_messages = rating_messages[:-2]
+        rating_messages = rating_messages[:-2]  # remove the last two messages
     
     best_index = ratings.index(max(ratings))
     cb_log["ratings"] = ratings
