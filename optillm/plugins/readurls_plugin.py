@@ -25,7 +25,7 @@ def extract_urls(text: str) -> List[str]:
 def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
     try:
         headers = {
-            'User-Agent': 'optillm/0.0.1 (https://github.com/codelion/optillm)'
+            'User-Agent': 'optillm/0.0.17 (https://github.com/codelion/optillm)'
         }
         
         response = requests.get(url, headers=headers, timeout=10)
