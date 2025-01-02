@@ -400,6 +400,43 @@ def parse_conversation(messages):
     initial_query = "\n".join(conversation)
     return system_prompt, initial_query, optillm_approach
 
+def tagged_conversation_to_messages(response_text):
+    """Convert a tagged conversation string or list of strings into a list of messages.
+    
+    Args:
+        response_text: Either a string containing "User:" and "Assistant:" tags,
+                      or a list of such strings.
+    
+    Returns:
+        If input is a string: A list of message dictionaries.
+        If input is a list: A list of lists of message dictionaries.
+    """
+    def process_single_response(text):
+        messages = []
+        # Split on "User:" or "Assistant:" while keeping the delimiter
+        parts = re.split(r'(?=(User:|Assistant:))', text.strip())
+        # Remove empty strings
+        parts = [p for p in parts if p.strip()]
+        
+        for part in parts:
+            part = part.strip()
+            if part.startswith('User:'):
+                messages.append({
+                    'role': 'user',
+                    'content': part[5:].strip()
+                })
+            elif part.startswith('Assistant:'):
+                messages.append({
+                    'role': 'assistant',
+                    'content': part[10:].strip()
+                })
+        return messages
+
+    if isinstance(response_text, list):
+        return [process_single_response(text) for text in response_text]
+    else:
+        return process_single_response(response_text)
+
 def extract_optillm_approach(content):
     match = re.search(r'<optillm_approach>(.*?)</optillm_approach>', content)
     if match:
@@ -499,6 +536,15 @@ def proxy():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
+    # Convert tagged conversation to messages format if needed
+    if isinstance(response, list):
+        response = [msg[-1]['content'] if isinstance(msg, list) and msg else msg 
+                   for msg in tagged_conversation_to_messages(response)]
+    else:
+        messages = tagged_conversation_to_messages(response)
+        if messages:  # Only take the last message if we have any
+            response = messages[-1]['content']
     
     if stream:
         return Response(generate_streaming_response(response, model), content_type='text/event-stream')
