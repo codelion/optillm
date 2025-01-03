@@ -381,8 +381,7 @@ def extract_contents(response_obj):
             response['choices'][0]['message'].get('content')):
             contents.append(response['choices'][0]['message']['content'])
     
-    # Return single string if only one content, otherwise return list
-    return contents[0] if len(contents) == 1 else contents
+    return contents
 
 def parse_conversation(messages):
     system_prompt = ""
