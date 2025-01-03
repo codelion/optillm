@@ -246,11 +246,10 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
             if hasattr(request, 'json'):
                 data = request.get_json()
                 messages = data.get('messages', [])
-                # Copy all parameters except 'model' and 'messages'
+                # Copy all parameters except 'stream', 'model' , 'n' and 'messages'
                 kwargs = {k: v for k, v in data.items() 
-                         if k not in ['model', 'messages', 'optillm_approach']}
+                         if k not in ['model', 'messages', 'stream', 'n', 'optillm_approach']}
             response = none_approach(original_messages=messages, client=client, model=model, **kwargs)
-            
             # For none approach, we return the response and a token count of 0
             # since the full token count is already in the response
             return response, 0
@@ -368,6 +367,22 @@ def generate_streaming_response(final_response, model):
 
     # Yield the final message to indicate the stream has ended
     yield "data: [DONE]\n\n"
+
+def extract_contents(response_obj):
+    contents = []
+    # Handle both single response and list of responses
+    responses = response_obj if isinstance(response_obj, list) else [response_obj]
+    
+    for response in responses:
+        # Extract content from first choice if it exists
+        if (response.get('choices') and 
+            len(response['choices']) > 0 and 
+            response['choices'][0].get('message') and 
+            response['choices'][0]['message'].get('content')):
+            contents.append(response['choices'][0]['message']['content'])
+    
+    # Return single string if only one content, otherwise return list
+    return contents[0] if len(contents) == 1 else contents
 
 def parse_conversation(messages):
     system_prompt = ""
@@ -523,8 +538,13 @@ def proxy():
                 result = responses
             else:
                 result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+            
             logger.debug(f'Direct proxy response: {result}')
-            return jsonify(result), 200
+
+            if stream:
+                return Response(generate_streaming_response(extract_contents(result), model), content_type='text/event-stream') 
+            else :
+                return jsonify(result), 200
             
         elif operation == 'AND' or operation == 'OR':
             if contains_none:
@@ -545,7 +565,7 @@ def proxy():
         messages = tagged_conversation_to_messages(response)
         if messages:  # Only take the last message if we have any
             response = messages[-1]['content']
-    
+
     if stream:
         return Response(generate_streaming_response(response, model), content_type='text/event-stream')
     else:
