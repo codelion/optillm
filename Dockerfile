@@ -6,7 +6,10 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  gcc libc6-dev \
+  build-essential \
+  python3-dev \
+  gcc \
+  g++ \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy only the requirements file first to leverage Docker cache
@@ -44,4 +47,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Run the application
-ENTRYPOINT ["python", "optillm.py"]
+CMD ["optillm"]
