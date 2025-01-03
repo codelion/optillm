@@ -6,15 +6,18 @@ services:
       dockerfile: Dockerfile
       tags:
         - optillm:latest
+      args:
+        - PORT=${OPTILLM_PORT:-8000}
     image: optillm:latest
     container_name: *name
     hostname: *name
     ports:
-      - "8000:8000"
+      - "${OPTILLM_PORT:-8000}:${OPTILLM_PORT:-8000}"
     env_file:
       - .env
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-""}
+      OPTILLM_PORT: ${OPTILLM_PORT:-8000}
       # OPTILLM_BASE_URL: ${OPENAI_BASE_URL:-"https://openrouter.ai/api/v1"} # can be set to any OpenAI API compatible endpoint
       # OPTILLM_API_KEY: ${OPTILLM_API_KEY:-} # optionally sets an API key for Optillm clients
       # Uncomment and set values for other arguments (prefixed with OPTILLM_) as needed, e.g.:
@@ -29,11 +32,10 @@ services:
       # OPTILLM_RSTAR_C: 1.4
       # OPTILLM_N: 1
       # OPTILLM_RETURN_FULL_RESPONSE: false
-      # OPTILLM_PORT: 8000
     restart: on-failure
     stop_grace_period: 2s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:${OPTILLM_PORT:-8000}/health"]
       interval: 30s
       timeout: 5s
       retries: 3
