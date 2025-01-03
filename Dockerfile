@@ -1,6 +1,11 @@
 # Build stage
 FROM python:3.12-slim AS builder
 
+# Define build argument with default value
+ARG PORT=8000
+# Make it available as env variable at runtime
+ENV OPTILLM_PORT=$PORT
+
 # Set working directory
 WORKDIR /app
 
@@ -43,8 +48,8 @@ USER appuser
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Use the ARG in EXPOSE
+EXPOSE ${PORT}
 
 # Run the application
-CMD ["optillm"]
+ENTRYPOINT ["python", "optillm.py"]
