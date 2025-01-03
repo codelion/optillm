@@ -18,6 +18,16 @@ optillm
 2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
 ```
 
+### Using docker
+
+```bash
+docker pull ghcr.io/codelion/optillm:latest
+docker run -p 8000:8000 ghcr.io/codelion/optillm:latest
+2024-10-22 07:45:05,612 - INFO - Loaded plugin: privacy
+2024-10-22 07:45:06,293 - INFO - Loaded plugin: memory
+2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
+```
+
 ### Install from source
 
 Clone the repository with `git` and use `pip install` to setup the dependencies.
