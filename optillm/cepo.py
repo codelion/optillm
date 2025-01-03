@@ -235,17 +235,14 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client, mo
 
         pattern = r"Rating: \[\[(\d+)\]\]"
         match = re.search(pattern, rating_response)
-        if match:
-            rating_response = match.group(1)
-        else:
-            rating_response = "0"
+        rating_response = match.group(1) if match else "0"
 
         try:
             ratings.append(float(rating_response))
         except ValueError:
             ratings.append(0)
         
-        rating_messages = rating_messages[:-2]  # remove the last two messages
+        rating_messages = rating_messages[:-2]  # clear the last two messages to start over in the next iteration
     
     best_index = ratings.index(max(ratings))
     cb_log["ratings"] = ratings
@@ -325,10 +322,12 @@ def cepo(system_prompt: str, initial_query: str, client, model: str, cepo_config
     
     # Rate the completions
     if cepo_config.bestofn_rating_type == "absolute":
-        best_completion, completion_tokens_rating, cb_log = rate_completions_absolute(system_prompt, initial_query, client, model, completions, cepo_config, cb_log)
+        rate_completions_fn = rate_completions_absolute
     elif cepo_config.bestofn_rating_type == "pairwise":
-        best_completion, completion_tokens_rating, cb_log = rate_completions_pairwise(system_prompt, initial_query, client, model, completions, cepo_config, cb_log)
+        rate_completions_fn = rate_completions_pairwise
     else:
         raise ValueError("Invalid rating type in cepo_config")
+
+    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, model, completions, cepo_config, cb_log)
     
     return best_completion, completion_tokens_planning + completion_tokens_rating
