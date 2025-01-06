@@ -293,7 +293,6 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
         elif approach == 'cepo':
-            # build the cepo config based on the cmd line arguments and the 
             logger.debug(f"Calling with {cepo_config}")
             return cepo(system_prompt, initial_query, client, model, cepo_config)
     elif approach in plugin_approaches:
