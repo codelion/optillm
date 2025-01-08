@@ -649,7 +649,8 @@ def parse_args():
         ("--n", "OPTILLM_N", int, 1, "Number of final responses to be returned"),
         ("--return-full-response", "OPTILLM_RETURN_FULL_RESPONSE", bool, False, "Return the full response including the CoT with <thinking> tags"),
         ("--port", "OPTILLM_PORT", int, 8000, "Specify the port to run the proxy"),
-        ("--log", "OPTILLM_LOG", str, "info", "Specify the logging level", list(logging_levels.keys()))
+        ("--log", "OPTILLM_LOG", str, "info", "Specify the logging level", list(logging_levels.keys())),
+        ("--launch-gui", "OPTILLM_LAUNCH_GUI", bool, False, "Launch a Gradio chat interface")
     ]
 
     for arg, env, type_, default, help_text, *extra in args_env:
@@ -688,8 +689,8 @@ def parse_args():
 def main():
     global server_config
     # Call this function at the start of main()
-    load_plugins()
     args = parse_args()
+    load_plugins()
 
     # Update server_config with all argument values
     server_config.update(vars(args))
@@ -706,6 +707,32 @@ def main():
     if server_config_clean['optillm_api_key']:
         server_config_clean['optillm_api_key'] = '[REDACTED]'
     logger.info(f"Server configuration: {server_config_clean}")
+
+    # Launch GUI if requested
+    if server_config.get('launch_gui'):
+        try:
+            import gradio as gr
+            # Start server in a separate thread
+            import threading
+            server_thread = threading.Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': port})
+            server_thread.daemon = True
+            server_thread.start()
+            
+            # Configure the base URL for the Gradio interface
+            base_url = f"http://localhost:{port}/v1"
+            logger.info(f"Launching Gradio interface connected to {base_url}")
+            
+            # Launch Gradio interface
+            demo = gr.load_chat(
+                base_url,
+                model=server_config['model'],
+                token=None
+            )
+            demo.launch(server_name="0.0.0.0", share=False)
+        except ImportError:
+            logger.error("Gradio is required for GUI. Install it with: pip install gradio")
+            return
+        
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
