@@ -21,3 +21,4 @@ ipython
 ipykernel
 peft
 bitsandbytes
+gradio
