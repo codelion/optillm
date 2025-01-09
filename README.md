@@ -1,3 +1,27 @@
+# Cerebras Planning and Optimization (CePO)
+
+## Results
+
+### Comparison of CePO with default settings and base model
+
+| Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX |
+| -------------------------- | ------- | --------------- | ---- | ---- |
+| Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |
+| Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |
+| CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |
+
+### Ablation studies
+
+| bestofn_n | planning_n | planning_m | bestofn_rating_type | Math-L5 | MMLU-Pro (Math) | GPQA  | CRUX  | Comments       |
+| --------- | ---------- | ---------- | ------------------- | ------- | --------------- | ----- | ----- | -------------- |
+|     3     |      3     |      6     |       absolute      |  69.6   |      84.8       | 55.5  | 80.1  | Default config |
+|     3     |      3     |      6     |       pairwise      |  67.7   |      83.5       | 55.6  | 79.8  |                |
+|     3     |      2     |      5     |       absolute      |  67.1   |      85.1       | 55.1  | 79.0  |                |
+|     3     |      5     |      8     |       absolute      |  69.4   |      84.3       | 55.6  | 81.1  |                |
+|     5     |      3     |      6     |       absolute      |  68.7   |      85.4       | 54.8  | 79.9  |                |
+|     7     |      3     |      6     |       absolute      |  69.6   |      82.8       | 54.7  | 78.4  |                |
+|     9     |      3     |      6     |       absolute      |  68.9   |      83.4       | 55.7  | 80.6  |                |
+
 # optillm
 
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
@@ -344,28 +368,6 @@ Authorization: Bearer your_secret_api_key
 ### moa-gpt-4o-mini on Arena-Hard-Auto (Aug 2024)
 
 ![Results showing Mixture of Agents approach using gpt-4o-mini on Arena Hard Auto Benchmark](https://raw.githubusercontent.com/codelion/optillm/main/moa-results.png)
-
-## CePO Results
-
-### Comparison of CePO with default settings and base model
-
-| Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX |
-| -------------------------- | ------- | --------------- | ---- | ---- |
-| Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |
-| Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |
-| CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |
-
-### Ablation studies
-
-| bestofn_n | planning_n | planning_m | bestofn_rating_type | Math-L5 | MMLU-Pro (Math) | GPQA  | CRUX  | Comments       |
-| --------- | ---------- | ---------- | ------------------- | ------- | --------------- | ----- | ----- | -------------- |
-|     3     |      3     |      6     |       absolute      |  69.6   |      84.8       | 55.5  | 80.1  | Default config |
-|     3     |      3     |      6     |       pairwise      |  67.7   |      83.5       | 55.6  | 79.8  |                |
-|     3     |      2     |      5     |       absolute      |  67.1   |      85.1       | 55.1  | 79.0  |                |
-|     3     |      5     |      8     |       absolute      |  69.4   |      84.3       | 55.6  | 81.1  |                |
-|     5     |      3     |      6     |       absolute      |  68.7   |      85.4       | 54.8  | 79.9  |                |
-|     7     |      3     |      6     |       absolute      |  69.6   |      82.8       | 54.7  | 78.4  |                |
-|     9     |      3     |      6     |       absolute      |  68.9   |      83.4       | 55.7  | 80.6  |                |
 
 ### optillm with Patchwork (July 2024)
 
