@@ -9,20 +9,20 @@ import yaml
 
 @dataclass
 class CepoConfig:
-    bestofn_n: int = 3
-    bestofn_temperature: float = 0.1
-    bestofn_max_tokens: int = 4096
-    bestofn_rating_type: Literal["absolute", "pairwise"] = "absolute"
-    planning_n: int = 3
-    planning_m: int = 6
-    planning_temperature_step1: float = 0.55
-    planning_temperature_step2: float = 0.25
-    planning_temperature_step3: float = 0.1
-    planning_temperature_step4: float = 0
-    planning_max_tokens_step1: int = 4096
-    planning_max_tokens_step2: int = 4096
-    planning_max_tokens_step3: int = 4096
-    planning_max_tokens_step4: int = 4096
+    bestofn_n: int
+    bestofn_temperature: float
+    bestofn_max_tokens: int
+    bestofn_rating_type: Literal["absolute", "pairwise"]
+    planning_n: int
+    planning_m: int
+    planning_temperature_step1: float
+    planning_temperature_step2: float
+    planning_temperature_step3: float
+    planning_temperature_step4: float
+    planning_max_tokens_step1: int
+    planning_max_tokens_step2: int
+    planning_max_tokens_step3: int
+    planning_max_tokens_step4: int
 
 
 # given command line arguments which includes a yaml file path, initialize a CePO configuration
@@ -40,27 +40,9 @@ def init_cepo_config(cmd_line_args: dict) -> CepoConfig:
         with open(cmd_line_args["cepo_config_file"], "r") as yaml_file:
             cepo_config_yaml = yaml.safe_load(yaml_file)
 
-    # check if any of the keys overlap, and if they do, error out
-    for key in cepo_config_yaml.keys():
-        if key in cepo_args.keys():
-            raise RuntimeError(f"Key {key} is found in both yaml file and command line arguments")
-
-    # if not, then we take both of them and add them to the cepo config
-    cepo_config = CepoConfig()
-    cepo_attrs = [key for key, _ in cepo_config.__dict__.items() if not key.startswith('__')]
-
-    # add command line arguments
-    for key, value in cepo_args.items():
-        # this assert should not be raised as the cli parser should catch this
-        assert key in cepo_attrs, f"Command line argument {key} is not found in CepoConfig"
-        setattr(cepo_config, key, value)
-
-    # add yaml arguments
-    for key, value in cepo_config_yaml.items():
-        assert key in cepo_attrs, f"Yaml argument {key} is not found in CepoConfig"
-        setattr(cepo_config, key, value)
-
-    return cepo_config
+    # merge cepo args from command line and yaml file, args from command line will overwrite the ones from yaml file
+    cepo_args = {**cepo_config_yaml, **cepo_args}
+    return CepoConfig(**cepo_args)
 
 def extract_question_only(task: str) -> str:
     """We noticed that sometimes if the task includes specific formatting instructions, they may interfere with the reasoning flow. This

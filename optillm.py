@@ -14,6 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Optional, Union, Dict, Any, List
 from importlib.metadata import version
+from dataclasses import fields
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -133,7 +134,7 @@ def none_approach(
         model: Model identifier
         original_messages: Original messages from the request
         **kwargs: Additional parameters to pass through
-        
+    
     Returns:
         Dict[str, Any]: Full OpenAI API response
     """
@@ -621,12 +622,11 @@ def parse_args():
     parser.add_argument("--base-url", "--base_url", dest="base_url", type=str, default=base_url_default,
                         help="Base url for OpenAI compatible endpoint")
 
-    # Special handling of all the Cepo Configurations
-    for key, value in CepoConfig.__dict__.items():
-        if not key.startswith('__'):
-            parser.add_argument(f"--cepo_{key}", dest=f"cepo_{key}", type=type(value), default=None, help=f"CePO configuration for {key}")
+    # Special handling of all the CePO Configurations
+    for field in fields(CepoConfig):
+        parser.add_argument(f"--cepo_{field.name}", dest=f"cepo_{field.name}", type=field.type, default=None, help=f"CePO configuration for {field.name}")
 
-    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default=None, help="Path to CePO configuration file")
+    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default="./configs/cepo_config.yaml", help="Path to CePO configuration file")
 
     args = parser.parse_args()
 
