@@ -9,21 +9,20 @@ import yaml
 
 @dataclass
 class CepoConfig:
-    bestofn_n: int
-    bestofn_temperature: float
-    bestofn_max_tokens: int
-    bestofn_rating_type: Literal["absolute", "pairwise"]
-    planning_n: int
-    planning_m: int
-    planning_temperature_step1: float
-    planning_temperature_step2: float
-    planning_temperature_step3: float
-    planning_temperature_step4: float
-    planning_max_tokens_step1: int
-    planning_max_tokens_step2: int
-    planning_max_tokens_step3: int
-    planning_max_tokens_step4: int
-
+    bestofn_n: int  # number of responses to be generated in best of n stage
+    bestofn_temperature: float  # temperature for verifier in best of n stage
+    bestofn_max_tokens: int  # maximum number of tokens for verifier in best of n stage
+    bestofn_rating_type: Literal["absolute", "pairwise"]  # type of rating in best of n stage
+    planning_n: int  # number of plans generated in planning stage
+    planning_m: int  # number of attempts to generate n plans in planning stage
+    planning_temperature_step1: float  # temperature for generator in step 1 of planning stage
+    planning_temperature_step2: float  # temperature for generator in step 2 of planning stage
+    planning_temperature_step3: float  # temperature for generator in step 3 of planning stage
+    planning_temperature_step4: float  # temperature for generator in step 4 of planning stage
+    planning_max_tokens_step1: int  # maximum number of tokens in step 1 of planning stage
+    planning_max_tokens_step2: int  # maximum number of tokens in step 2 of planning stage
+    planning_max_tokens_step3: int  # maximum number of tokens in step 3 of planning stage
+    planning_max_tokens_step4: int  # maximum number of tokens in step 4 of planning stage
 
 # given command line arguments which includes a yaml file path, initialize a CePO configuration
 def init_cepo_config(cmd_line_args: dict) -> CepoConfig:
