@@ -22,9 +22,10 @@ from optillm.reread import re2_approach
 SLUG = "router"
 
 # Constants
-MAX_LENGTH = 512
+MAX_LENGTH = 1024
 APPROACHES = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
-MODEL_NAME = "codelion/optillm-bert-uncased"
+BASE_MODEL = "answerdotai/ModernBERT-large"
+OPTILLM_MODEL_NAME = "codelion/optillm-modernbert-large"
 
 class OptILMClassifier(nn.Module):
     def __init__(self, base_model, num_labels):
@@ -49,16 +50,16 @@ class OptILMClassifier(nn.Module):
 def load_optillm_model():
     device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     # Load the base model
-    base_model = AutoModel.from_pretrained("google-bert/bert-large-uncased")
+    base_model = AutoModel.from_pretrained(BASE_MODEL)
     # Create the OptILMClassifier
     model = OptILMClassifier(base_model, num_labels=len(APPROACHES))  
     model.to(device)
     # Download the safetensors file
-    safetensors_path = hf_hub_download(repo_id=MODEL_NAME, filename="model.safetensors")
+    safetensors_path = hf_hub_download(repo_id=OPTILLM_MODEL_NAME, filename="model.safetensors")
     # Load the state dict from the safetensors file
     load_model(model, safetensors_path)
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(OPTILLM_MODEL_NAME)
     return model, tokenizer, device
 
 def preprocess_input(tokenizer, system_prompt, initial_query):

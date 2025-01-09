@@ -624,12 +624,11 @@ def health():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run LLM inference with various approaches.")
-    
-     # Add version argument using importlib.metadata
+
     try:
-        package_version = version('optillm')
-    except Exception:
-        package_version = "unknown"  # Fallback if package is not installed
+        from optillm import __version__ as package_version
+    except ImportError:
+        package_version = "unknown"
         
     parser.add_argument('--version', action='version', 
                        version=f'%(prog)s {package_version}',
