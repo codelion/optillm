@@ -15,7 +15,7 @@ import numpy as np
 
 # Constants
 APPROACHES = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
-MAX_LENGTH = 512
+MAX_LENGTH = 1024
 
 # Device selection
 device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
@@ -233,6 +233,18 @@ def inference(model, tokenizer, prompt, effort_levels):
     return results
 
 def main(args):
+
+    if args.push_to_hub:
+        base_model = AutoModel.from_pretrained(args.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        # best_model = OptILMClassifier(base_model, num_labels=len(APPROACHES))
+        # best_model.to(device)
+        # load_model(best_model, "best_model.safetensors")
+        # we just push the base model and then upload the safetensors file manually as OptILMClassifier class doesn't have a push_to_hub method.
+        base_model.push_to_hub(args.hub_model_id)
+        tokenizer.push_to_hub(args.hub_model_id)
+        return
+    
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     dataset = load_and_preprocess_data(tokenizer)
 
@@ -272,15 +284,6 @@ def main(args):
             save_model(model, "best_model.safetensors")
 
     print(f"\nBest performing model was from fold {best_fold} with validation accuracy {best_val_accuracy:.4f}")
-
-    if args.push_to_hub:
-        base_model = AutoModel.from_pretrained(args.model_name)
-        # best_model = OptILMClassifier(base_model, num_labels=len(APPROACHES))
-        # best_model.to(device)
-        # load_model(best_model, "best_model.safetensors")
-        # we just push the base model and then upload the safetensors file manually as OptILMClassifier class doesn't have a push_to_hub method.
-        base_model.push_to_hub(args.hub_model_id)
-        tokenizer.push_to_hub(args.hub_model_id)
 
     # Load the best model for inference
     base_model = AutoModel.from_pretrained(args.model_name)
