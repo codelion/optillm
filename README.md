@@ -4,7 +4,7 @@ CePO is an inference-time computation method designed to enhance the accuracy of
 
 ## Methodology
 
-In CePO, the Best of N technique is applied to `bestoofn_n` solution candidates. Each solution is generated through the following four steps:
+In CePO, the Best of N technique is applied to `bestofn_n` solution candidates. Each solution is generated through the following four steps:
 
 **Step 1**: Plan Generation
 The model generates a detailed, step-by-step plan to solve the problem, along with its confidence level for each step.
@@ -23,7 +23,7 @@ The model uses the refined plan from Step 3 to produce the final answer.
 
 ## Current Status
 
-This project is a work in progress, and the provided code is in an early experimental stage. While promising, the method may require further development and testing to optimize its performance across different tasks.
+This project is a work in progress, and the provided code is in an early experimental stage. While the proposed approach works well across the benchmarks we tested, further improvements can be achieved by task-specific customizations to prompts.
 
 ## Results
 
@@ -31,11 +31,16 @@ This project is a work in progress, and the provided code is in an early experim
 
 | Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX |
 | -------------------------- | ------- | --------------- | ---- | ---- |
+| Llama 3.1 70B              |  41.6   |      72.9       | 41.7 | 64.2 |
 | Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |
 | Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |
 | CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |
 
 ### Ablation studies
+
+We conducted ablation studies to evaluate the impact of various hyperparameters in the CePO framework. Our results indicate that the chosen hyperparameter settings strike a good balance between computational cost and accuracy.
+
+Interestingly, the self-critique and quality improvement capabilities of existing off-the-shelf models do not always scale proportionally with increased inference compute. Addressing this limitation remains a key focus, and we plan to explore custom model fine-tuning as a potential solution in the future.
 
 | bestofn_n | planning_n | planning_m | bestofn_rating_type | Math-L5 | MMLU-Pro (Math) | GPQA  | CRUX  | Comments       |
 | --------- | ---------- | ---------- | ------------------- | ------- | --------------- | ----- | ----- | -------------- |
@@ -47,7 +52,7 @@ This project is a work in progress, and the provided code is in an early experim
 |     7     |      3     |      6     |       absolute      |  69.6   |      82.8       | 54.7  | 78.4  |                |
 |     9     |      3     |      6     |       absolute      |  68.9   |      83.4       | 55.7  | 80.6  |                |
 
-# optillm
+# Implemented with OptiLLM
 
 optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
 
