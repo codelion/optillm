@@ -4,7 +4,7 @@ import os
 import logging
 import re
 import time
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 from datetime import datetime
 from openai import OpenAI
 from datasets import load_dataset
@@ -89,9 +89,17 @@ def extract_answer(response: str) -> Optional[int]:
             
     return None
 
-def get_llm_response(problem: str, model: str) -> str:
+def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
     """
     Get response from the LLM for a given problem.
+    If multiple choices are returned, formats them as attempt dictionaries.
+    
+    Args:
+        problem (str): The problem text
+        model (str): The model identifier
+        
+    Returns:
+        Union[str, List[Dict]]: Either a string response or list of attempt dictionaries
     """
     try:
         response = client.with_options(timeout=1000.0).chat.completions.create(
@@ -101,7 +109,23 @@ def get_llm_response(problem: str, model: str) -> str:
             ],
             max_tokens=8192,
         )
+        
+        # If there's more than one choice, format as attempts
+        if len(response.choices) > 1:
+            attempts = []
+            for i, choice in enumerate(response.choices):
+                response_text = choice.message.content.strip()
+                predicted_answer = extract_answer(response_text)
+                attempts.append({
+                    "attempt_number": i + 1,
+                    "response": response_text,
+                    "predicted_answer": predicted_answer
+                })
+            return attempts
+            
+        # If single choice, return as before
         return response.choices[0].message.content.strip()
+        
     except Exception as e:
         logger.error(f"Error getting LLM response: {e}")
         return ""
@@ -119,14 +143,25 @@ def make_n_attempts(problem: str, model: str, n: int) -> List[Dict]:
         List[Dict]: List of dictionaries containing response and predicted answer for each attempt
     """
     attempts = []
-    for i in range(n):
+    remaining_attempts = n
+    
+    while remaining_attempts > 0:
         response = get_llm_response(problem, model)
-        predicted_answer = extract_answer(response)
-        attempts.append({
-            "attempt_number": i + 1,
-            "response": response,
-            "predicted_answer": predicted_answer
-        })
+        
+        # If response is already formatted as attempts
+        if isinstance(response, list):
+            attempts.extend(response[:remaining_attempts])  # Only take what we need
+            remaining_attempts -= len(response)
+        else:
+            # Process single response as before
+            predicted_answer = extract_answer(response)
+            attempts.append({
+                "attempt_number": len(attempts) + 1,
+                "response": response,
+                "predicted_answer": predicted_answer
+            })
+            remaining_attempts -= 1
+    
     return attempts
 
 def evaluate_pass_at_n(attempts: List[Dict], correct_answer: int) -> Tuple[bool, Optional[int]]:
