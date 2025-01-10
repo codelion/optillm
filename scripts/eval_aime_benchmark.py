@@ -150,8 +150,8 @@ def make_n_attempts(problem: str, model: str, n: int) -> List[Dict]:
         
         # If response is already formatted as attempts
         if isinstance(response, list):
-            attempts.extend(response[:remaining_attempts])  # Only take what we need
-            remaining_attempts -= len(response)
+            attempts.extend(response)
+            remaining_attempts = n - len(attempts)
         else:
             # Process single response as before
             predicted_answer = extract_answer(response)
