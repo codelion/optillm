@@ -29,12 +29,12 @@ This project is a work in progress, and the provided code is in an early experim
 
 ### Comparison of CePO with default settings and base model
 
-| Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX |
-| -------------------------- | ------- | --------------- | ---- | ---- |
-| Llama 3.1 70B              |  41.6   |      72.9       | 41.7 | 64.2 |
-| Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |
-| Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |
-| CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |
+| Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX | LiveCodeBench (pass@1) | Simple QA |
+| -------------------------: | :-----: | :-------------: | :--: | :--: | :--------------------: | :-------: |
+| Llama 3.1 70B              |  41.6   |      72.9       | 41.7 | 64.2 |          24.5          |    14.7   |
+| Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |          27.1          |    20.9   |
+| Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |          31.8          |    13.5   |
+| CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |          31.9          |    22.6   |
 
 ### Ablation studies
 
@@ -43,7 +43,7 @@ We conducted ablation studies to evaluate the impact of various hyperparameters 
 Interestingly, the self-critique and quality improvement capabilities of existing off-the-shelf models do not always scale proportionally with increased inference compute. Addressing this limitation remains a key focus, and we plan to explore custom model fine-tuning as a potential solution in the future.
 
 | bestofn_n | planning_n | planning_m | bestofn_rating_type | Math-L5 | MMLU-Pro (Math) | GPQA  | CRUX  | Comments       |
-| --------- | ---------- | ---------- | ------------------- | ------- | --------------- | ----- | ----- | -------------- |
+| :-------: | :--------: | :--------: | :-----------------: | :-----: | :-------------: | :---: | :---: | :------------- |
 |     3     |      3     |      6     |       absolute      |  69.6   |      84.8       | 55.5  | 80.1  | Default config |
 |     3     |      3     |      6     |       pairwise      |  67.7   |      83.5       | 55.6  | 79.8  |                |
 |     3     |      2     |      5     |       absolute      |  67.1   |      85.1       | 55.1  | 79.0  |                |
