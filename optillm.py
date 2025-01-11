@@ -416,16 +416,23 @@ def parse_conversation(messages):
 
 def tagged_conversation_to_messages(response_text):
     """Convert a tagged conversation string or list of strings into a list of messages.
+    If the input doesn't contain User:/Assistant: tags, return it as is.
     
     Args:
         response_text: Either a string containing "User:" and "Assistant:" tags,
                       or a list of such strings.
     
     Returns:
-        If input is a string: A list of message dictionaries.
-        If input is a list: A list of lists of message dictionaries.
+        If input has tags: A list of message dictionaries.
+        If input has no tags: The original input.
     """
+    def has_conversation_tags(text):
+        return "User:" in text or "Assistant:" in text
+    
     def process_single_response(text):
+        if not has_conversation_tags(text):
+            return text
+            
         messages = []
         # Split on "User:" or "Assistant:" while keeping the delimiter
         parts = re.split(r'(?=(User:|Assistant:))', text.strip())
@@ -447,7 +454,11 @@ def tagged_conversation_to_messages(response_text):
         return messages
 
     if isinstance(response_text, list):
-        return [process_single_response(text) for text in response_text]
+        processed = [process_single_response(text) for text in response_text]
+        # If none of the responses had tags, return original list
+        if all(isinstance(p, str) for p in processed):
+            return response_text
+        return processed
     else:
         return process_single_response(response_text)
 
@@ -555,14 +566,18 @@ def proxy():
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
+
     # Convert tagged conversation to messages format if needed
     if isinstance(response, list):
-        response = [msg[-1]['content'] if isinstance(msg, list) and msg else msg 
-                   for msg in tagged_conversation_to_messages(response)]
+        processed_response = tagged_conversation_to_messages(response)
+        # If processed_response is a list of message lists, extract last message content
+        if processed_response != response:  # Only process if format changed
+            response = [msg[-1]['content'] if isinstance(msg, list) and msg else msg 
+                    for msg in processed_response]
+        # Otherwise keep original response
     else:
         messages = tagged_conversation_to_messages(response)
-        if messages:  # Only take the last message if we have any
+        if isinstance(messages, list) and messages:  # Only process if format changed
             response = messages[-1]['content']
 
     if stream:
