@@ -364,3 +364,17 @@ called patchflows. We saw huge performance gains across all the supported patchf
 - [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699) - [Inspired the implementation of rto](https://github.com/codelion/optillm/blob/main/optillm/rto.py)
 - [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/moa.py)
 - [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/rto.py)
+
+## Citation
+
+If you use this library in your research, please cite:
+
+```bibtex
+@software{optillm,
+  title = {Optillm: Optimizing inference proxy for LLMs},
+  author = {Asankhaya Sharma},
+  year = {2024},
+  publisher = {GitHub},
+  url = {https://github.com/codelion/optillm}
+}
+```
