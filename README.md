@@ -227,7 +227,7 @@ response = client.chat.completions.create(
 
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Router                  | `router`           | Uses the [optillm-bert-uncased](https://huggingface.co/codelion/optillm-bert-uncased) model to route requests to different approaches based on the user prompt |
+| Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
 | Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
 | Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
 | Privacy                 | `privacy`          | Anonymize PII data in request and deanonymize it back to original value in response            |
