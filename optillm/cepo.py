@@ -3,9 +3,12 @@ import cerebras
 import openai
 
 from dataclasses import dataclass
-from typing import Optional, Literal
+from typing import Optional, Literal, Any
+from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
+from openai import BadRequestError as OpenAIBadRequestError
 
 import yaml
+
 
 @dataclass
 class CepoConfig:
@@ -24,6 +27,7 @@ class CepoConfig:
     planning_max_tokens_step3: int  # maximum number of tokens in step 3 of planning stage
     planning_max_tokens_step4: int  # maximum number of tokens in step 4 of planning stage
 
+
 # given command line arguments which includes a yaml file path, initialize a CePO configuration
 def init_cepo_config(cmd_line_args: dict) -> CepoConfig:
     # get the command line arguments
@@ -35,13 +39,14 @@ def init_cepo_config(cmd_line_args: dict) -> CepoConfig:
 
     # get the yaml file arguments
     cepo_config_yaml = {}
-    if cmd_line_args["cepo_config_file"]:
+    if cmd_line_args.get("cepo_config_file", None):
         with open(cmd_line_args["cepo_config_file"], "r") as yaml_file:
             cepo_config_yaml = yaml.safe_load(yaml_file)
 
     # merge cepo args from command line and yaml file, args from command line will overwrite the ones from yaml file
     cepo_args = {**cepo_config_yaml, **cepo_args}
     return CepoConfig(**cepo_args)
+
 
 def extract_question_only(task: str) -> str:
     """We noticed that sometimes if the task includes specific formatting instructions, they may interfere with the reasoning flow. This
@@ -52,7 +57,20 @@ def extract_question_only(task: str) -> str:
     return question_only
 
 
-def generate_completion(system_prompt: str, task: str, client, model: str, cepo_config: CepoConfig) -> str:
+def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig) -> str:
+    """
+    Generates a completion based on the provided system prompt and task.
+
+    Parameters:
+        system_prompt (str): The system prompt to guide the model.
+        task (str): The task or question to be addressed.
+        client (Any): The client instance for interacting with the AI model.
+        model (str): The model name to be used for generating completions.
+        cepo_config (CepoConfig): Configuration parameters for CePO flow.
+
+    Returns:
+        Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
+    """
     completion_tokens = 0
     question_only = extract_question_only(task)
     cb_log = {}
@@ -128,7 +146,7 @@ def generate_completion(system_prompt: str, task: str, client, model: str, cepo_
         )
         final_solution = response.choices[0].message.content
         completion_tokens += response.usage.completion_tokens
-    except (cerebras.cloud.sdk.BadRequestError, openai.BadRequestError) as e:
+    except (CerebrasBadRequestError, OpenAIBadRequestError) as e:
         # In case of an error, take the first plan as the final solution
         final_solution = plans[0]
         messages = []
@@ -150,7 +168,20 @@ def generate_completion(system_prompt: str, task: str, client, model: str, cepo_
     return response.choices[0].message.content, completion_tokens, cb_log
 
 
-def generate_n_completions(system_prompt: str, initial_query: str, client, model: str, cepo_config: CepoConfig) -> tuple[list[str], int, dict]:
+def generate_n_completions(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig) -> tuple[list[str], int, dict]:
+    """
+    Generates n completions for the Best of N step of CePO.
+
+    Parameters:
+        system_prompt (str): The system prompt to guide the model.
+        initial_query (str): The task or question to be addressed.
+        client (Any): The client instance for interacting with the AI model.
+        model (str): The model name to be used for generating completions.
+        cepo_config (CepoConfig): Configuration parameters for CePO flow.
+
+    Returns:
+        Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
+    """
     completion_tokens = 0
     cb_log = {}
     completions = []
@@ -166,7 +197,21 @@ def generate_n_completions(system_prompt: str, initial_query: str, client, model
     return completions, completion_tokens, cb_log
 
 
-def rate_completions_absolute(system_prompt: str, initial_query: str, client, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+def rate_completions_absolute(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+    """
+    Rates completions for the Best of N step of CePO. Each completion is rated on a scale of 1 to 10 individually.
+
+    Parameters:
+        system_prompt (str): The system prompt to guide the model.
+        initial_query (str): The task or question to be addressed.
+        client (Any): The client instance for interacting with the AI model.
+        model (str): The model name to be used for generating completions.
+        completions (list[str]): List of completions to be rated.
+        cepo_config (CepoConfig): Configuration parameters for CePO flow.
+
+    Returns:
+        Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
+    """
     completion_tokens = 0
     rating_messages = [{"role": "system", "content": system_prompt},
                        {"role": "user", "content": initial_query}]
@@ -231,7 +276,21 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client, mo
     return completions[best_index], completion_tokens, cb_log
 
 
-def rate_completions_pairwise(system_prompt: str, initial_query: str, client, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+def rate_completions_pairwise(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+    """
+    Rates completions for the Best of N step of CePO. Completions are rated pairwise against each other in both orders (A vs B and B vs A).
+
+    Parameters:
+        system_prompt (str): The system prompt to guide the model.
+        initial_query (str): The task or question to be addressed.
+        client (Any): The client instance for interacting with the AI model.
+        model (str): The model name to be used for generating completions.
+        completions (list[str]): List of completions to be rated.
+        cepo_config (CepoConfig): Configuration parameters for CePO flow.
+
+    Returns:
+        Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
+    """
     completion_tokens = 0
     rating_messages = [{"role": "system", "content": system_prompt},
                        {"role": "user", "content": initial_query}]
@@ -294,9 +353,30 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client, mo
     return completions[best_index], completion_tokens, cb_log
 
 
-def cepo(system_prompt: str, initial_query: str, client, model: str, cepo_config: Optional[CepoConfig] = None) -> tuple[str, int, dict]:
-    if cepo_config is None:
-        cepo_config = CepoConfig()
+def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: Optional[CepoConfig]) -> tuple[str, int]:
+    """
+    Applies CePO reasoning flow for the given task. First, it generates multiple completions, and then rates them to select the best one.
+    Each completion is generated as follows:
+    
+    Generate `planning_n` solution proposals:
+        Step 1: Plan Generation - The model generates a detailed, step-by-step plan to solve the problem, along with its confidence level for 
+                each step.
+        Step 2: Initial Solution - Using the plan from Step 1, the model produces an initial solution.
+    
+    Step 3: Plan Refinement - The model reviews all generated solution proposals and their associated plans, identifying inconsistencies.
+            Based on this analysis, a refined, final step-by-step plan is constructed.
+    Step 4: Final Solution - The model uses the refined plan from Step 3 to produce the final answer.
+    
+    Parameters:
+        system_prompt (str): The system prompt to guide the model.
+        initial_query (str): The task or question to be addressed.
+        client (Any): The client instance for interacting with the AI model.
+        model (str): The model name to be used for generating completions.
+        cepo_config (CepoConfig): Configuration parameters for CePO flow.
+
+    Returns:
+        Tuple[str, int, dict]: The generated completion, number of tokens used
+    """
     
     # Generate completions
     completions, completion_tokens_planning, cb_log = generate_n_completions(system_prompt, initial_query, client, model, cepo_config)  # cb_log is a dictionary for debugging purposes
