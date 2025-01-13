@@ -294,7 +294,7 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client, mo
     return completions[best_index], completion_tokens, cb_log
 
 
-def cepo(system_prompt: str, initial_query: str, client, model: str, cepo_config: Optional[CepoConfig] = None) -> list[str, int, dict]:
+def cepo(system_prompt: str, initial_query: str, client, model: str, cepo_config: Optional[CepoConfig] = None) -> tuple[str, int, dict]:
     if cepo_config is None:
         cepo_config = CepoConfig()
     
