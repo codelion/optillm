@@ -13,7 +13,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 Initial change: 
 Adding Cerebras Planning and Optimization (CePO). CePO is a method to empower Llama with reasoning, via test-time compute. [Learn more in the blog](https://cerebras.ai/blog/cepo)
 
-At a high-level, in CePO, we make m attempts to generate n step-by-step plans, refine the plans, check inconsistencies between them, use the above feedback to generate the final plan and produce the answer. This process is them repeated N times in a classical best of n manner.
+At a high-level, in CePO, we make m attempts to generate n step-by-step plans, refine the plans, check inconsistencies between them, use the above feedback to generate the final plan and produce the answer. This process is then repeated N times in a classical best of n manner.
 
 Ongoing Apache-licensed contributions:
 * Added the implementation of CePO
