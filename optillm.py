@@ -1,3 +1,4 @@
+# Apache license 2 - modified after the fork to add the Cerebras API option and CePO as a test-time compute method
 import argparse
 import logging
 import os
