@@ -18,5 +18,7 @@ At a high-level, in CePO, we make m attempts to generate n step-by-step plans, r
 Ongoing Apache-licensed contributions:
 * Added the implementation of CePO
 * Integrated CePO with optillm
+See updated files [here](https://github.com/codelion/optillm/compare/main...CerebrasResearch:cb_optillm:cepo)
+
 
 Last updated: 01/14/2025
