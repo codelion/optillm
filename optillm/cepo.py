@@ -354,7 +354,7 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
     return completions[best_index], completion_tokens, cb_log
 
 
-def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: Optional[CepoConfig]) -> tuple[str, int]:
+def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig) -> tuple[str, int]:
     """
     Applies CePO reasoning flow for the given task. First, it generates multiple completions, and then rates them to select the best one.
     Each completion is generated as follows:
