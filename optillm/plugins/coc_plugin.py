@@ -104,14 +104,17 @@ def sanitize_code(code: str) -> str:
         safe_lines.append(line)
     
     safe_code = '\n'.join(safe_lines)
+    safe_code = safe_code.replace('\n', '\n    ')
     
     # Add safety wrapper
     wrapper = f"""
 {imports}
+
 def safe_execute():
     import numpy as np  # Always allow numpy
-    {safe_code.replace('\\n', '\\n    ')}
+    {safe_code}
     return answer if 'answer' in locals() else None
+
 result = safe_execute()
 answer = result
 """
