@@ -22,3 +22,4 @@ ipykernel
 peft
 bitsandbytes
 gradio
+protobuf==3.20.3
