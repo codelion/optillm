@@ -17,7 +17,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client (only used for chat completions now)
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+client = OpenAI(base_url="http://localhost:8000/v1", api_key=os.environ.get("OPENAI_API_KEY"))
+# client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 @dataclass
 class RTCConfig:
@@ -58,8 +59,7 @@ def get_llm_response(messages: List[Dict], model: str) -> Optional[str]:
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1000
+                max_tokens=4096
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
