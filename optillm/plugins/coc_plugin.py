@@ -108,12 +108,10 @@ def sanitize_code(code: str) -> str:
     # Add safety wrapper
     wrapper = f"""
 {imports}
-
 def safe_execute():
     import numpy as np  # Always allow numpy
-    {safe_code.replace('\n', '\n    ')}
+    {safe_code.replace('\\n', '\\n    ')}
     return answer if 'answer' in locals() else None
-
 result = safe_execute()
 answer = result
 """
