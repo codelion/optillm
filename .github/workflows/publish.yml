@@ -71,3 +71,29 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Extract metadata for slim image
+      - name: Extract metadata for proxy_only Docker
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: |
+            suffix=-slim
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            latest
+      
+      # Build and push slim image
+      - name: Build and push proxy_only Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.proxy_only
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          cache-from: type=gha,scope=proxy
+          cache-to: type=gha,scope=proxy,mode=max
