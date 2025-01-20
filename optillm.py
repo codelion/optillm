@@ -158,7 +158,7 @@ def load_plugins():
    package_plugin_dir = os.path.join(os.path.dirname(optillm.__file__), 'plugins')
    
    # Get local project plugins directory
-   current_dir = os.getcwd()
+   current_dir = os.getcwd() if server_config.get("plugins_dir", "") == "" else server_config["plugins_dir"]
    local_plugin_dir = os.path.join(current_dir, 'optillm', 'plugins')
    
    plugin_dirs = []
@@ -664,7 +664,8 @@ def parse_args():
         ("--return-full-response", "OPTILLM_RETURN_FULL_RESPONSE", bool, False, "Return the full response including the CoT with <thinking> tags"),
         ("--port", "OPTILLM_PORT", int, 8000, "Specify the port to run the proxy"),
         ("--log", "OPTILLM_LOG", str, "info", "Specify the logging level", list(logging_levels.keys())),
-        ("--launch-gui", "OPTILLM_LAUNCH_GUI", bool, False, "Launch a Gradio chat interface")
+        ("--launch-gui", "OPTILLM_LAUNCH_GUI", bool, False, "Launch a Gradio chat interface"),
+        ("--plugins-dir", "OPTILLM_PLUGINS_DIR", str, "", "Path to the plugins directory"),
     ]
 
     for arg, env, type_, default, help_text, *extra in args_env:
@@ -704,10 +705,10 @@ def main():
     global server_config
     # Call this function at the start of main()
     args = parse_args()
-    load_plugins()
-
     # Update server_config with all argument values
     server_config.update(vars(args))
+
+    load_plugins()
 
     port = server_config['port']
 
