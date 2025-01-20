@@ -58,7 +58,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           flavor: |
-            suffix=-slim
+            suffix=-proxy
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
