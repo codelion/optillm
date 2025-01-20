@@ -1,12 +1,15 @@
 # Apache license 2 - added after the fork for the CePO method
 import re
+import yaml
+import logging
 
 from dataclasses import dataclass
 from typing import Literal, Any
 from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
 from openai import BadRequestError as OpenAIBadRequestError
 
-import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,11 +114,13 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         if response.choices[0].finish_reason == "length":
             messages.append({"role": "assistant", "content": response.choices[0].message.content})
             cb_log[f"messages_planning_{i}_rejected_due_to_length"] = messages
+            logger.debug(f"Plan proposal rejected due to length. Attempt {i + 1} out of {cepo_config.planning_m}.\nMessages: {messages}")
             continue
 
         plans.append(response.choices[0].message.content)
         messages.append({"role": "assistant", "content": response.choices[0].message.content})
         cb_log[f"messages_planning_{i}"] = messages
+        logger.debug(f"Plan proposal generated. Attempt {i + 1} out of {cepo_config.planning_m}.\nMessages: {messages}")
         
         if len(plans) == cepo_config.planning_n:
             break
@@ -125,6 +130,7 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         plans.append(response.choices[0].message.content)
         messages.append({"role": "assistant", "content": response.choices[0].message.content})
         cb_log[f"messages_planning_{i}_no_plans_so_taking_the_last_one"] = messages
+        logger.debug(f"No plans generated successfully. Taking the last one from rejected due to length.\nMessages: {messages}")
 
     # Step 3 - Review and address inconsistencies
     try:
@@ -164,6 +170,7 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     completion_tokens += response.usage.completion_tokens
 
     cb_log["messages"] = messages
+    logger.debug(f"Answer generated.\nMessages: {messages}")
     return response.choices[0].message.content, completion_tokens, cb_log
 
 
@@ -186,6 +193,7 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
     completions = []
 
     for i in range(cepo_config.bestofn_n):
+        logger.debug(f"Generating completion {i + 1} out of {cepo_config.bestofn_n}")
         response_i, completion_tokens_i, cb_log_i = generate_completion(system_prompt, initial_query, client, model, cepo_config)
         completions.append(response_i)
         completion_tokens += completion_tokens_i
@@ -257,6 +265,7 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
         
         rating_response = rating_response.choices[0].message.content.strip()
         cb_log[f"rating_response_{i}"] = rating_response
+        logger.debug(f"Rating response for completion {i}: {rating_response}")
 
         pattern = r"Rating: \[\[(\d+)\]\]"
         match = re.search(pattern, rating_response)
@@ -272,6 +281,7 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
     best_index = ratings.index(max(ratings))
     cb_log["ratings"] = ratings
     cb_log["best_index"] = best_index
+    logger.debug(f"Finished rating completions. Ratings: {ratings}, best completion index: {best_index}")
     return completions[best_index], completion_tokens, cb_log
 
 
@@ -331,6 +341,7 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
         
         rating_response = rating_response.choices[0].message.content.strip()
         cb_log[f"rating_response_for_pair_{pair[0]}_{pair[1]}"] = rating_response
+        logger.debug(f"Rating response for pair {pair}: {rating_response}")
 
         pattern = r"Better Response: \[\[(\d+)\]\]"
         match = re.search(pattern, rating_response)
@@ -349,6 +360,7 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
     best_index = ratings.index(max(ratings))
     cb_log["ratings"] = ratings
     cb_log["best_index"] = best_index
+    logger.debug(f"Finished rating completions. Ratings: {ratings}, best completion index: {best_index}")
     return completions[best_index], completion_tokens, cb_log
 
 
@@ -376,7 +388,7 @@ def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_c
     Returns:
         Tuple[str, int, dict]: The generated completion, number of tokens used
     """
-    
+
     # Generate completions
     completions, completion_tokens_planning, cb_log = generate_n_completions(system_prompt, initial_query, client, model, cepo_config)  # cb_log is a dictionary for debugging purposes
     
