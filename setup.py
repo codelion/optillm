@@ -33,8 +33,7 @@ setup(
         "ipykernel",
         "peft",
         "bitsandbytes",
-        "gradio",
-        "protobuf"
+        "gradio"
     ],
     entry_points={
         'console_scripts': [

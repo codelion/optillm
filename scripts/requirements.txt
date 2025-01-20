@@ -1,4 +1,3 @@
 datasets
 accelerate
 huggingface_hub
-git+https://github.com/huggingface/transformers.git
