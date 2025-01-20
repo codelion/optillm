@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="http://localhost:8000/v1")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://ot7nh9nqf4l7b43s.us-east-1.aws.endpoints.huggingface.cloud/v1/")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -104,10 +104,11 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
     try:
         response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
+            temperature=0.2,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=8192,
+            max_tokens=40000,
         )
         
         # If there's more than one choice, format as attempts
@@ -241,18 +242,21 @@ def analyze_results(results: List[Dict], n: int):
             print("---")
 
 def main(model: str, n_attempts: int):
-    """Main evaluation function."""
+    """Main evaluation function that handles gaps in processed indexes."""
     os.makedirs("results", exist_ok=True)
     
-    # Include n_attempts in filename to keep separate results for different n values
     results_file = f"evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}.json"
     
     dataset = load_2024_dataset()
     existing_results = load_existing_results(results_file)
-    last_processed_index = get_last_processed_index(existing_results)
     
-    for idx, item in enumerate(tqdm(dataset, desc="Evaluating problems")):
-        if idx <= last_processed_index:
+    # Create a set of already processed indexes for efficient lookup
+    processed_indexes = {result['index'] for result in existing_results}
+    
+    for _, item in enumerate(tqdm(dataset, desc="Evaluating problems")):
+        id = int(item['id'])
+        # Skip if this index has already been processed
+        if id in processed_indexes:
             continue
             
         problem_text = item['problem']
@@ -263,7 +267,7 @@ def main(model: str, n_attempts: int):
         is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
         
         result = {
-            "index": idx,
+            "index": id,
             "problem": problem_text,
             "attempts": attempts,
             "correct_answer": correct_answer,
@@ -274,6 +278,7 @@ def main(model: str, n_attempts: int):
     
     final_results = load_existing_results(results_file)
     analyze_results(final_results, n_attempts)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME 2024 problems")
