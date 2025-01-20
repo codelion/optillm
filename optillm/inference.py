@@ -402,107 +402,42 @@ class DeviceManager:
         self.device_stats = {device: {'memory_used': 0, 'active_models': 0} for device in self.available_devices}
 
     def _detect_devices(self) -> List[str]:
-        """Detect available compute devices including AMD GPUs via ROCm"""
         devices = ['cpu']
-        
-        # Check for CUDA (NVIDIA) GPUs
         if torch.cuda.is_available():
-            backend = torch.cuda.get_device_properties(0).platform
-            if backend == 'ROCm':
-                # AMD GPUs via ROCm
-                devices.extend([f'cuda:{i}' for i in range(torch.cuda.device_count())])
-                logging.info("Detected AMD GPU(s) using ROCm backend")
-            else:
-                # NVIDIA GPUs
-                devices.extend([f'cuda:{i}' for i in range(torch.cuda.device_count())])
-                logging.info("Detected NVIDIA GPU(s)")
-                
-        # Check for Apple M-series GPU
+            devices.extend([f'cuda:{i}' for i in range(torch.cuda.device_count())])
         if torch.backends.mps.is_available():
             devices.append('mps')
-            logging.info("Detected Apple M-series GPU")
-            
         return devices
 
     def get_optimal_device(self, model_size: int = 0) -> str:
-        """Select the optimal device considering AMD GPU support"""
         if not self.available_devices:
             return 'cpu'
 
-        # Get CUDA devices (both NVIDIA and AMD via ROCm)
+        # Prefer CUDA devices if available
         cuda_devices = [d for d in self.available_devices if 'cuda' in d]
-        
         if cuda_devices:
-            # Find device with most free memory
+            # Find CUDA device with most free memory
             max_free_memory = 0
             optimal_device = cuda_devices[0]
             
-            try:
-                for device in cuda_devices:
-                    idx = int(device.split(':')[1])
-                    # Get memory info safely handling both NVIDIA and AMD
-                    try:
-                        total_memory = torch.cuda.get_device_properties(idx).total_memory
-                        used_memory = torch.cuda.memory_allocated(idx)
-                        free_memory = total_memory - used_memory
-                    except Exception as e:
-                        logging.warning(f"Error getting memory info for device {device}: {e}")
-                        continue
-                        
-                    if free_memory > max_free_memory:
-                        max_free_memory = free_memory
-                        optimal_device = device
-                        
-                logging.info(f"Selected optimal CUDA device: {optimal_device} with {max_free_memory/1e9:.2f}GB free memory")
-                return optimal_device
-                
-            except Exception as e:
-                logging.error(f"Error selecting optimal CUDA device: {e}")
-                # Fall back to first CUDA device if memory query fails
-                return cuda_devices[0]
+            for device in cuda_devices:
+                idx = int(device.split(':')[1])
+                free_memory = torch.cuda.get_device_properties(idx).total_memory - torch.cuda.memory_allocated(idx)
+                if free_memory > max_free_memory:
+                    max_free_memory = free_memory
+                    optimal_device = device
+            
+            return optimal_device
         
         # Fall back to MPS if available
         if 'mps' in self.available_devices:
             return 'mps'
         
-        # Final fallback to CPU
-        logging.info("No GPU detected, using CPU")
         return 'cpu'
 
     def track_device_usage(self, device: str, memory_delta: int):
-        """Track memory usage for the device"""
         if device in self.device_stats:
             self.device_stats[device]['memory_used'] += memory_delta
-            
-    def get_device_info(self, device: str) -> Dict[str, Any]:
-        """Get detailed information about a device"""
-        info = {
-            'type': 'cpu',
-            'memory_total': None,
-            'memory_used': None,
-            'memory_free': None
-        }
-        
-        if 'cuda' in device:
-            try:
-                idx = int(device.split(':')[1])
-                props = torch.cuda.get_device_properties(idx)
-                info.update({
-                    'type': 'gpu',
-                    'name': props.name,
-                    'backend': 'ROCm' if hasattr(props, 'platform') and props.platform == 'ROCm' else 'CUDA',
-                    'compute_capability': f"{props.major}.{props.minor}",
-                    'memory_total': props.total_memory,
-                    'memory_used': torch.cuda.memory_allocated(idx),
-                    'memory_free': props.total_memory - torch.cuda.memory_allocated(idx)
-                })
-            except Exception as e:
-                logging.warning(f"Error getting device info for {device}: {e}")
-                
-        elif device == 'mps':
-            info['type'] = 'mps'
-            
-        return info
 
 class ModelManager:
     def __init__(self, cache_manager: CacheManager, device_manager: DeviceManager):
