@@ -104,11 +104,10 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
     try:
         response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
-            temperature=0.2,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=40000,
+            max_tokens=8192,
         )
         
         # If there's more than one choice, format as attempts
