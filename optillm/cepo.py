@@ -1,10 +1,8 @@
 # Apache license 2 - added after the fork for the CePO method
 import re
-import cerebras
-import openai
 
 from dataclasses import dataclass
-from typing import Optional, Literal, Any
+from typing import Literal, Any
 from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
 from openai import BadRequestError as OpenAIBadRequestError
 
