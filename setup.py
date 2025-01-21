@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.0.27",
+    version="0.0.28",
     packages=find_packages(),
     py_modules=['optillm'],
     package_data={
@@ -33,7 +33,9 @@ setup(
         "ipykernel",
         "peft",
         "bitsandbytes",
-        "gradio"
+        "gradio",
+        # Constrain spacy version to avoid blis build issues on ARM64
+        "spacy<3.8.0",
     ],
     entry_points={
         'console_scripts': [

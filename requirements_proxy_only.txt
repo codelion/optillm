@@ -17,3 +17,5 @@ nbconvert
 ipython
 ipykernel
 gradio
+# Constrain spacy version to avoid blis build issues on ARM64
+spacy<3.8.0
