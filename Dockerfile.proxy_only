@@ -10,12 +10,14 @@ ENV OPTILLM_PORT=$PORT
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential \
-  python3-dev \
-  gcc \
-  g++ \
-  && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy only the requirements file first to leverage Docker cache
 COPY requirements_proxy_only.txt .
@@ -31,9 +33,11 @@ LABEL org.opencontainers.image.description="OptiLLM proxy-only image for API rou
 LABEL org.opencontainers.image.licenses=Apache-2.0
 
 # Install curl for the healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  curl && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
