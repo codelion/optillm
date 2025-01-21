@@ -33,7 +33,9 @@ setup(
         "ipykernel",
         "peft",
         "bitsandbytes",
-        "gradio"
+        "gradio",
+        # Constrain spacy version to avoid blis build issues on ARM64
+        "spacy<3.8.0",
     ],
     entry_points={
         'console_scripts': [
