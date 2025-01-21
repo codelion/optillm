@@ -28,6 +28,12 @@ docker run -p 8000:8000 ghcr.io/codelion/optillm:latest
 2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
 ```
 
+To use optillm without local inference and only as a proxy you can add the `-proxy` suffix.
+
+```bash
+docker pull ghcr.io/codelion/optillm:latest-proxy
+```
+
 ### Install from source
 
 Clone the repository with `git` and use `pip install` to setup the dependencies.
@@ -299,6 +305,7 @@ When the API key is set, clients must include it in their requests using the `Au
 ```plain
 Authorization: Bearer your_secret_api_key
 ```
+
 ## SOTA results on benchmarks with optillm
 
 ### coc-claude-3-5-sonnet-20241022 on AIME 2024 pass@1 (Nov 2024)
@@ -348,7 +355,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## References
 
-- [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/plugins/coc_plugin.py)
+- [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/coc_plugin.py)
 - [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/entropy_decoding.py)
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](https://github.com/codelion/optillm/blob/main/scripts/eval_frames_benchmark.py)
 - [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906) - [Inspired the implementation of the memory plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/memory_plugin.py)
