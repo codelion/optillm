@@ -1,5 +1,3 @@
-# Apache license 2 - modified after the fork to add VS code 
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
