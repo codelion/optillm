@@ -62,7 +62,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            latest
+            type=raw,value=latest
       
       # Build and push proxy image
       - name: Build and push proxy_only Docker image
@@ -76,6 +76,16 @@ jobs:
           labels: ${{ steps.meta-proxy.outputs.labels }}
           cache-from: type=gha,scope=proxy
           cache-to: type=gha,scope=proxy,mode=max
+      
+      # Add cleanup steps after proxy build
+      - name: Clean up disk space after proxy build
+        run: |
+          # Remove all unused docker data including stopped containers, unused networks, dangling images, and build cache
+          docker system prune -af
+          # Remove all unused build cache
+          docker builder prune -af
+          # Optional: If you need more aggressive cleanup
+          rm -rf /tmp/*
       
       - name: Extract metadata for Docker
         id: meta
