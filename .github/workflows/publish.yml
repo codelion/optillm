@@ -63,6 +63,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
+          labels: |
+            org.opencontainers.image.description=OptiLLM proxy-only image for API routing without model serving capabilities
       
       # Build and push proxy image
       - name: Build and push proxy_only Docker image
@@ -74,6 +76,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-proxy.outputs.tags }}
           labels: ${{ steps.meta-proxy.outputs.labels }}
+          annotations: |
+            org.opencontainers.image.description=OptiLLM proxy-only image for API routing without model serving capabilities
           cache-from: type=gha,scope=proxy
           cache-to: type=gha,scope=proxy,mode=max
       
@@ -96,7 +100,9 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             latest
-      
+          labels: |
+            org.opencontainers.image.description=OptiLLM full image with model serving and API routing capabilities
+              
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -105,5 +111,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: |
+            org.opencontainers.image.description=OptiLLM full image with model serving amd API routing capabilities
           cache-from: type=gha
           cache-to: type=gha,mode=max
