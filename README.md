@@ -331,6 +331,7 @@ optillm supports various command-line arguments and environment variables for co
 | `--cepo_planning_max_tokens_step2`  | Maximum number of tokens in step 2 of planning stage            | 4096            |
 | `--cepo_planning_max_tokens_step3`  | Maximum number of tokens in step 3 of planning stage            | 4096            |
 | `--cepo_planning_max_tokens_step4`  | Maximum number of tokens in step 4 of planning stage            | 4096            |
+| `--cepo_print_output`               | Whether to print the output of each stage                       | False           |
 | `--cepo_config_file`                | Path to CePO configuration file                                 | None            |
 
 When using Docker, these can be set as environment variables prefixed with `OPTILLM_`.
