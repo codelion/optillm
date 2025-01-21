@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://ot7nh9nqf4l7b43s.us-east-1.aws.endpoints.huggingface.cloud/v1/")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 

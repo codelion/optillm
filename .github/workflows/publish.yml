@@ -84,8 +84,8 @@ jobs:
           docker system prune -af
           # Remove all unused build cache
           docker builder prune -af
-          # Optional: If you need more aggressive cleanup
-          rm -rf /tmp/*
+          # Clean only user-owned files in /tmp, ignore permission errors
+          find /tmp -type f -user $(id -u) -exec rm -f {} + 2>/dev/null || true
       
       - name: Extract metadata for Docker
         id: meta
