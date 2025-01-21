@@ -10,13 +10,13 @@ ENV OPTILLM_PORT=$PORT
 WORKDIR /app
 
 # Install system dependencies
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
     gcc \
     g++ \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only the requirements file first to leverage Docker cache
@@ -34,10 +34,10 @@ LABEL org.opencontainers.image.description="OptiLLM full image with model servin
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install curl for the healthcheck
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     curl \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
