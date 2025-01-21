@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.0.33",
+    version="0.0.34",
     packages=find_packages(),
     py_modules=['optillm'],
     package_data={
