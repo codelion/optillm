@@ -1,3 +1,7 @@
+LABEL org.opencontainers.image.source=https://github.com/codelion/optillm
+LABEL org.opencontainers.image.description="OptiLLM full image with model serving and API routing capabilitiese"
+LABEL org.opencontainers.image.licenses=Apache-2.0
+
 # Build stage
 FROM python:3.12-slim AS builder
 
