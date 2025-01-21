@@ -10,12 +10,14 @@ ENV OPTILLM_PORT=$PORT
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential \
-  python3-dev \
-  gcc \
-  g++ \
-  && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy only the requirements file first to leverage Docker cache
 COPY requirements.txt .
@@ -27,14 +29,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM python:3.12-slim
 
 # Add labels for the final image
-LABEL org.opencontainers.image.source=https://github.com/codelion/optillm
+LABEL org.opencontainers.image.source="https://github.com/codelion/optillm"
 LABEL org.opencontainers.image.description="OptiLLM full image with model serving and API routing capabilities"
-LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install curl for the healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  curl && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
