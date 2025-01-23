@@ -29,7 +29,7 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
-from optillm.cepo import cepo, CepoConfig, init_cepo_config
+from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -706,7 +706,7 @@ def parse_args():
     for field in fields(CepoConfig):
         parser.add_argument(f"--cepo_{field.name}", dest=f"cepo_{field.name}", type=field.type, default=None, help=f"CePO configuration for {field.name}")
 
-    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default="./configs/cepo_config.yaml", help="Path to CePO configuration file")
+    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default="./optillm/cepo/configs/cepo_config.yaml", help="Path to CePO configuration file")
 
     args = parser.parse_args()
 
