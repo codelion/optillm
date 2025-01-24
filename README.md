@@ -254,40 +254,51 @@ response = client.chat.completions.create(
 
 optillm supports various command-line arguments and environment variables for configuration.
 
-| Parameter                           | Description                                                     | Default Value   |
-|-------------------------------------|-----------------------------------------------------------------|-----------------|
-| `--approach`                        | Inference approach to use                                       | `"auto"`        |
-| `--simulations`                     | Number of MCTS simulations                                      | 2               |
-| `--exploration`                     | Exploration weight for MCTS                                     | 0.2             |
-| `--depth`                           | Simulation depth for MCTS                                       | 1               |
-| `--best-of-n`                       | Number of samples for best_of_n approach                        | 3               |
-| `--model`                           | OpenAI model to use                                             | `"gpt-4o-mini"` |
-| `--base-url`                        | Base URL for OpenAI compatible endpoint                         | `""`            |
-| `--rstar-max-depth`                 | Maximum depth for rStar algorithm                               | 3               |
-| `--rstar-num-rollouts`              | Number of rollouts for rStar algorithm                          | 5               |
-| `--rstar-c`                         | Exploration constant for rStar algorithm                        | 1.4             |
-| `--n`                               | Number of final responses to be returned                        | 1               |
-| `--return-full-response`            | Return the full response including the CoT with <thinking> tags | `False`         |
-| `--port`                            | Specify the port to run the proxy                               | 8000            |
-| `--optillm-api-key`                 | Optional API key for client authentication to optillm           | `""`            |
-| `--cepo_bestofn_n`                  | Number of responses to be generated in best of n stage          | 3               |
-| `--cepo_bestofn_temperature`        | Temperature for verifier in best of n stage                     | 0.1             |
-| `--cepo_bestofn_max_tokens`         | Maximum number of tokens for verifier in best of n stage        | 4096            |
-| `--cepo_bestofn_rating_type`        | Type of rating in best of n stage ("absolute" or "pairwise")    | `"absolute"`    |
-| `--cepo_planning_n`                 | Number of plans generated in planning stage                     | 3               |
-| `--cepo_planning_m`                 | Number of attempts to generate n plans in planning stage        | 6               |
-| `--cepo_planning_temperature_step1` | Temperature for generator in step 1 of planning stage           | 0.55            |
-| `--cepo_planning_temperature_step2` | Temperature for generator in step 2 of planning stage           | 0.25            |
-| `--cepo_planning_temperature_step3` | Temperature for generator in step 3 of planning stage           | 0.1             |
-| `--cepo_planning_temperature_step4` | Temperature for generator in step 4 of planning stage           | 0               |
-| `--cepo_planning_max_tokens_step1`  | Maximum number of tokens in step 1 of planning stage            | 4096            |
-| `--cepo_planning_max_tokens_step2`  | Maximum number of tokens in step 2 of planning stage            | 4096            |
-| `--cepo_planning_max_tokens_step3`  | Maximum number of tokens in step 3 of planning stage            | 4096            |
-| `--cepo_planning_max_tokens_step4`  | Maximum number of tokens in step 4 of planning stage            | 4096            |
-| `--cepo_print_output`               | Whether to print the output of each stage                       | `False`         |
-| `--cepo_config_file`                | Path to CePO configuration file                                 | None            |
+## Available parameters
 
-When using Docker, these can be set as environment variables prefixed with `OPTILLM_`.
+optillm supports various command-line arguments for configuration. When using Docker, these can also be set as environment variables prefixed with `OPTILLM_`.
+
+| Parameter                | Description                                                     | Default Value   |
+|--------------------------|-----------------------------------------------------------------|-----------------|
+| `--approach`             | Inference approach to use                                       | `"auto"`        |
+| `--simulations`          | Number of MCTS simulations                                      | 2               |
+| `--exploration`          | Exploration weight for MCTS                                     | 0.2             |
+| `--depth`                | Simulation depth for MCTS                                       | 1               |
+| `--best-of-n`            | Number of samples for best_of_n approach                        | 3               |
+| `--model`                | OpenAI model to use                                             | `"gpt-4o-mini"` |
+| `--base-url`             | Base URL for OpenAI compatible endpoint                         | `""`            |
+| `--rstar-max-depth`      | Maximum depth for rStar algorithm                               | 3               |
+| `--rstar-num-rollouts`   | Number of rollouts for rStar algorithm                          | 5               |
+| `--rstar-c`              | Exploration constant for rStar algorithm                        | 1.4             |
+| `--n`                    | Number of final responses to be returned                        | 1               |
+| `--return-full-response` | Return the full response including the CoT with <thinking> tags | `False`         |
+| `--port`                 | Specify the port to run the proxy                               | 8000            |
+| `--optillm-api-key`      | Optional API key for client authentication to optillm           | `""`            |
+| `--cepo_*` | See CePO Parameters section below for detailed configuration options | Various |
+
+<details>
+<summary><strong>CePO Parameters</strong></summary>
+
+| Parameter | Description | Default Value |
+|-----------|-------------|---------------|
+| `--cepo_bestofn_n` | Number of responses to be generated in best of n stage | 3 |
+| `--cepo_bestofn_temperature` | Temperature for verifier in best of n stage | 0.1 |
+| `--cepo_bestofn_max_tokens` | Maximum number of tokens for verifier in best of n stage | 4096 |
+| `--cepo_bestofn_rating_type` | Type of rating in best of n stage ("absolute" or "pairwise") | `"absolute"` |
+| `--cepo_planning_n` | Number of plans generated in planning stage | 3 |
+| `--cepo_planning_m` | Number of attempts to generate n plans in planning stage | 6 |
+| `--cepo_planning_temperature_step1` | Temperature for generator in step 1 of planning stage | 0.55 |
+| `--cepo_planning_temperature_step2` | Temperature for generator in step 2 of planning stage | 0.25 |
+| `--cepo_planning_temperature_step3` | Temperature for generator in step 3 of planning stage | 0.1 |
+| `--cepo_planning_temperature_step4` | Temperature for generator in step 4 of planning stage | 0 |
+| `--cepo_planning_max_tokens_step1` | Maximum number of tokens in step 1 of planning stage | 4096 |
+| `--cepo_planning_max_tokens_step2` | Maximum number of tokens in step 2 of planning stage | 4096 |
+| `--cepo_planning_max_tokens_step3` | Maximum number of tokens in step 3 of planning stage | 4096 |
+| `--cepo_planning_max_tokens_step4` | Maximum number of tokens in step 4 of planning stage | 4096 |
+| `--cepo_print_output` | Whether to print the output of each stage | `False` |
+| `--cepo_config_file` | Path to CePO configuration file | None |
+
+</details>
 
 ## Running with Docker
 
