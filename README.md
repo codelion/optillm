@@ -1,6 +1,8 @@
 # optillm
 
-optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time. A good example of how to combine such techniques together is the [CePO approach](optillm/cepo) from Cerebras.
+optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. 
+
+It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time. A good example of how to combine such techniques together is the [CePO approach](optillm/cepo) from Cerebras.
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
@@ -46,15 +48,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-We support all major LLM providers and models for inference. You just need to set the correct environment variable and the proxy will pick the corresponding client.
+We support all major LLM providers and models for inference. You need to set the correct environment variable and the proxy will pick the corresponding client.
 
 | Provider | Required Environment Variables | Additional Notes |
 |----------|-------------------------------|------------------|
-| OptiLLM | `OPTILLM_API_KEY` | Uses the inbuilt local server for inference. Supports logprobs and decoding techniques like `cot_decoding` & `entropy_decoding` | 
-| OpenAI | `OPENAI_API_KEY` | - |
-| Cerebras | `CEREBRAS_API_KEY` | - |
+| OptiLLM | `OPTILLM_API_KEY` | Uses the inbuilt local server for inference, supports logprobs and decoding techniques like `cot_decoding` & `entropy_decoding` | 
+| OpenAI | `OPENAI_API_KEY` | You can use this with any OpenAI compatible endpoint (e.g. OpenRouter) by setting the `base_url` |
+| Cerebras | `CEREBRAS_API_KEY` | You can use this for fast inference with supported models, see [docs for details](https://inference-docs.cerebras.ai/introduction) |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY`<br>`AZURE_API_VERSION`<br>`AZURE_API_BASE` | - |
-| Azure OpenAI (Managed Identity) | `AZURE_API_VERSION`<br>`AZURE_API_BASE` | Login required using `az login`. See [docs for details](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity) |
+| Azure OpenAI (Managed Identity) | `AZURE_API_VERSION`<br>`AZURE_API_BASE` | Login required using `az login`, see [docs for details](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity) |
 | LiteLLM | depends on the model | See [docs for details](https://docs.litellm.ai/docs/providers) |
 
 You can then run the optillm proxy as follows.
@@ -387,23 +389,23 @@ called patchflows. We saw huge performance gains across all the supported patchf
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
 ## References
-
-- [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/coc_plugin.py)
-- [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/entropy_decoding.py)
-- [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](https://github.com/codelion/optillm/blob/main/scripts/eval_frames_benchmark.py)
-- [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906) - [Inspired the implementation of the memory plugin](https://github.com/codelion/optillm/blob/main/optillm/plugins/memory_plugin.py)
-- [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/cot_decoding.py)
-- [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/reread.py)
-- [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/leap.py)
-- [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/plansearch.py)
-- [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/self_consistency.py)
-- [Mutual Reasoning Makes Smaller LLMs Stronger Problem-Solvers](https://arxiv.org/abs/2408.06195) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/rstar.py)
-- [Mixture-of-Agents Enhances Large Language Model Capabilities](https://arxiv.org/abs/2406.04692) - [Inspired the implementation of moa](https://github.com/codelion/optillm/blob/main/optillm/moa.py)
-- [Prover-Verifier Games improve legibility of LLM outputs](https://arxiv.org/abs/2407.13692) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/pvg.py)
-- [Monte Carlo Tree Search Boosts Reasoning via Iterative Preference Learning](https://arxiv.org/abs/2405.00451) - [Inspired the implementation of mcts](https://github.com/codelion/optillm/blob/main/optillm/mcts.py)
-- [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699) - [Inspired the implementation of rto](https://github.com/codelion/optillm/blob/main/optillm/rto.py)
-- [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/moa.py)
-- [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](https://github.com/codelion/optillm/blob/main/optillm/rto.py)
+- [CePO: Empowering Llama with Reasoning using Test-Time Compute](https://cerebras.ai/blog/cepo) - [Implementation](optillm/cepo)
+- [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](optillm/plugins/coc_plugin.py)
+- [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](optillm/entropy_decoding.py)
+- [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](scripts/eval_frames_benchmark.py)
+- [Writing in the Margins: Better Inference Pattern for Long Context Retrieval](https://www.arxiv.org/abs/2408.14906) - [Inspired the implementation of the memory plugin](optillm/plugins/memory_plugin.py)
+- [Chain-of-Thought Reasoning Without Prompting](https://arxiv.org/abs/2402.10200) - [Implementation](optillm/cot_decoding.py)
+- [Re-Reading Improves Reasoning in Large Language Models](https://arxiv.org/abs/2309.06275) - [Implementation](optillm/reread.py)
+- [In-Context Principle Learning from Mistakes](https://arxiv.org/abs/2402.05403) - [Implementation](optillm/leap.py)
+- [Planning In Natural Language Improves LLM Search For Code Generation](https://arxiv.org/abs/2409.03733) - [Implementation](optillm/plansearch.py)
+- [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171) - [Implementation](optillm/self_consistency.py)
+- [Mutual Reasoning Makes Smaller LLMs Stronger Problem-Solvers](https://arxiv.org/abs/2408.06195) - [Implementation](optillm/rstar.py)
+- [Mixture-of-Agents Enhances Large Language Model Capabilities](https://arxiv.org/abs/2406.04692) - [Inspired the implementation of moa](optillm/moa.py)
+- [Prover-Verifier Games improve legibility of LLM outputs](https://arxiv.org/abs/2407.13692) - [Implementation](optillm/pvg.py)
+- [Monte Carlo Tree Search Boosts Reasoning via Iterative Preference Learning](https://arxiv.org/abs/2405.00451) - [Inspired the implementation of mcts](optillm/mcts.py)
+- [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699) - [Inspired the implementation of rto](optillm/rto.py)
+- [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](optillm/moa.py)
+- [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](ptillm/rto.py)
 
 ## Citation
 
