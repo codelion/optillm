@@ -7,19 +7,20 @@ from typing import List, Dict
 import logging
 from openai import OpenAI
 
-from litellm_wrapper import LiteLLMWrapper
+from optillm.litellm_wrapper import LiteLLMWrapper
 from optillm.mcts import chat_with_mcts
 from optillm.bon import best_of_n_sampling
 from optillm.moa import mixture_of_agents
 from optillm.rto import round_trip_optimization
 from optillm.self_consistency import advanced_self_consistency_approach
 from optillm.pvg import inference_time_pv_game
-from optillm.z3_solver import Z3SolverSystem
+from optillm.z3_solver import Z3SymPySolverSystem
 from optillm.rstar import RStar
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
+from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,12 +45,13 @@ APPROACHES = {
     'rto': round_trip_optimization,
     'self_consistency': advanced_self_consistency_approach,
     'pvg': inference_time_pv_game,
-    'z3': lambda s, q, c, m: Z3SolverSystem(s, c, m).process_query(q),
+    'z3': lambda s, q, c, m: Z3SymPySolverSystem(s, c, m).process_query(q),
     'rstar': lambda s, q, c, m: RStar(s, c, m).solve(q),
     'cot_reflection': cot_reflection,
     'plansearch': plansearch,
     'leap': leap,
     're2': re2_approach,
+    'cepo': lambda s, q, c, m: cepo(s,q,c,m,init_cepo_config({'cepo_config_file': './optillm/cepo/configs/cepo_config.yaml'})),
 }
 
 def load_test_cases(file_path: str) -> List[Dict]:
