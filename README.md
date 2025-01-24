@@ -252,10 +252,6 @@ response = client.chat.completions.create(
 
 ## Available parameters
 
-optillm supports various command-line arguments and environment variables for configuration.
-
-## Available parameters
-
 optillm supports various command-line arguments for configuration. When using Docker, these can also be set as environment variables prefixed with `OPTILLM_`.
 
 | Parameter                | Description                                                     | Default Value   |
