@@ -7,6 +7,7 @@ setup(
     py_modules=['optillm'],
     package_data={
         'optillm': ['plugins/*.py'],  # Include plugin files
+        'optillm': ['cepo/configs/*.yaml'],  # Include yaml files in the package
     },
     include_package_data=True,  # This is important
     install_requires=[
