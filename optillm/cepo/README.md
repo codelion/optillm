@@ -2,7 +2,7 @@
 
 CePO is an inference-time computation method designed to enhance the accuracy of large language models (LLMs) on tasks requiring reasoning and planning, such as solving math or coding problems. It integrates several advanced techniques, including Best of N, Chain of Thought (CoT), Self-Reflection, Self-Improvement, and Prompt Engineering.
 
-If you have any questions or want to contribute, please reach out to us on [cerebras.ai/discord](cerebras.ai/discord)
+If you have any questions or want to contribute, please reach out to us on [cerebras.ai/discord](https://cerebras.ai/discord)
 
 ## CePO Methodology
 

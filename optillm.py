@@ -214,6 +214,26 @@ def load_plugins():
    if not plugin_approaches:
        logger.warning("No plugins loaded from any location")
 
+def get_config_path():
+    # Get installed package config directory
+    import optillm
+    package_config_dir = os.path.join(os.path.dirname(optillm.__file__), 'cepo', 'configs')
+    package_config_path = os.path.join(package_config_dir, 'cepo_config.yaml')
+    
+    # Get local project config directory
+    current_dir = os.getcwd() if server_config.get("config_dir", "") == "" else server_config["config_dir"]
+    local_config_dir = os.path.join(current_dir, 'optillm', 'cepo', 'configs')
+    local_config_path = os.path.join(local_config_dir, 'cepo_config.yaml')
+    
+    # If local config exists and is different from package config, use local
+    if os.path.exists(local_config_path) and local_config_path != package_config_path:
+        logger.debug(f"Using local config from: {local_config_path}")
+        return local_config_path
+    
+    # Otherwise use package config
+    logger.debug(f"Using package config from: {package_config_path}")
+    return package_config_path
+
 def parse_combined_approach(model: str, known_approaches: list, plugin_approaches: dict):
     if model == 'auto':
         return 'SINGLE', ['none'], model
@@ -701,13 +721,24 @@ def parse_args():
     base_url_default = os.environ.get("OPTILLM_BASE_URL", "")
     parser.add_argument("--base-url", "--base_url", dest="base_url", type=str, default=base_url_default,
                         help="Base url for OpenAI compatible endpoint")
+    
+    # Use the function to get the default path
+    default_config_path = get_config_path()
 
     # Special handling of all the CePO Configurations
     for field in fields(CepoConfig):
-        parser.add_argument(f"--cepo_{field.name}", dest=f"cepo_{field.name}", type=field.type, default=None, help=f"CePO configuration for {field.name}")
+        parser.add_argument(f"--cepo_{field.name}", 
+                        dest=f"cepo_{field.name}", 
+                        type=field.type, 
+                        default=None, 
+                        help=f"CePO configuration for {field.name}")
 
-    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default="./optillm/cepo/configs/cepo_config.yaml", help="Path to CePO configuration file")
-
+    parser.add_argument("--cepo_config_file", 
+                    dest="cepo_config_file", 
+                    type=str, 
+                    default=default_config_path,
+                    help="Path to CePO configuration file")
+    
     args = parser.parse_args()
 
     # Convert argument names to match server_config keys

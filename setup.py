@@ -2,11 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.0.36",
+    version="0.1.0",
     packages=find_packages(),
     py_modules=['optillm'],
     package_data={
         'optillm': ['plugins/*.py'],  # Include plugin files
+        'optillm': ['cepo/configs/*.yaml'],  # Include yaml files in the package
     },
     include_package_data=True,  # This is important
     install_requires=[
@@ -36,6 +37,7 @@ setup(
         "gradio",
         # Constrain spacy version to avoid blis build issues on ARM64
         "spacy<3.8.0",
+        "cerebras_cloud_sdk",
     ],
     entry_points={
         'console_scripts': [
