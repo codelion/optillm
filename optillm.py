@@ -3,6 +3,7 @@ import logging
 import os
 import secrets
 from flask import Flask, request, jsonify
+from cerebras.cloud.sdk import Cerebras
 from openai import AzureOpenAI, OpenAI
 from flask import Response
 import json
@@ -13,6 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Optional, Union, Dict, Any, List
 from importlib.metadata import version
+from dataclasses import fields
 
 # Import approach modules
 from optillm.mcts import chat_with_mcts
@@ -27,6 +29,7 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
+from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -50,7 +53,14 @@ def get_config():
         from optillm.inference import create_inference_client
         API_KEY = os.environ.get("OPTILLM_API_KEY")
         default_client = create_inference_client()
-    # OpenAI, Azure, or LiteLLM API configuration
+    # Cerebras, OpenAI, Azure, or LiteLLM API configuration
+    elif os.environ.get("CEREBRAS_API_KEY"):
+        API_KEY = os.environ.get("CEREBRAS_API_KEY")
+        base_url = server_config['base_url']
+        if base_url != "":
+            default_client = Cerebras(api_key=API_KEY, base_url=base_url)
+        else:
+            default_client = Cerebras(api_key=API_KEY)
     elif os.environ.get("OPENAI_API_KEY"):
         API_KEY = os.environ.get("OPENAI_API_KEY")
         base_url = server_config['base_url']
@@ -104,7 +114,7 @@ server_config = {
 
 # List of known approaches
 known_approaches = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", 
-                   "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2"]
+                   "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2", "cepo"]
 
 plugin_approaches = {}
 
@@ -124,7 +134,7 @@ def none_approach(
         model: Model identifier
         original_messages: Original messages from the request
         **kwargs: Additional parameters to pass through
-        
+    
     Returns:
         Dict[str, Any]: Full OpenAI API response
     """
@@ -282,6 +292,8 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
             return leap(system_prompt, initial_query, client, model)
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
+        elif approach == 'cepo':
+            return cepo(system_prompt, initial_query, client, model, cepo_config)
     elif approach in plugin_approaches:
         return plugin_approaches[approach](system_prompt, initial_query, client, model)
     else:
@@ -690,6 +702,12 @@ def parse_args():
     parser.add_argument("--base-url", "--base_url", dest="base_url", type=str, default=base_url_default,
                         help="Base url for OpenAI compatible endpoint")
 
+    # Special handling of all the CePO Configurations
+    for field in fields(CepoConfig):
+        parser.add_argument(f"--cepo_{field.name}", dest=f"cepo_{field.name}", type=field.type, default=None, help=f"CePO configuration for {field.name}")
+
+    parser.add_argument(f"--cepo_config_file", dest=f"cepo_config_file", type=str, default="./optillm/cepo/configs/cepo_config.yaml", help="Path to CePO configuration file")
+
     args = parser.parse_args()
 
     # Convert argument names to match server_config keys
@@ -703,6 +721,7 @@ def parse_args():
 
 def main():
     global server_config
+    global cepo_config
     # Call this function at the start of main()
     args = parse_args()
     # Update server_config with all argument values
@@ -716,6 +735,11 @@ def main():
     logging_level = server_config['log']
     if logging_level in logging_levels.keys():
         logger.setLevel(logging_levels[logging_level])
+    
+    # set and log the cepo configs
+    cepo_config = init_cepo_config(server_config)
+    if args.approach == 'cepo':
+        logger.info(f"CePO Config: {cepo_config}")
     
     logger.info(f"Starting server with approach: {server_config['approach']}")
     server_config_clean = server_config.copy()
