@@ -1,6 +1,6 @@
 # optillm
 
-optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time.
+optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time. A good example of how to combine such techniques together is the [CePO approach](optillm/cepo) from Cerebras.
 
 [![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/codelion/optillm)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1SpuUb8d9xAoTh32M-9wJsB50AOH54EaH?usp=sharing)
@@ -46,9 +46,16 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Set up the `OPENAI_API_KEY` environment variable (for OpenAI) 
-or the `AZURE_OPENAI_API_KEY`, `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables (for Azure OpenAI)
-or the `AZURE_API_VERSION` and `AZURE_API_BASE` environment variables and login using `az login` for Azure OpenAI with managed identity (see [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity)).
+We support all major LLM providers and models for inference. You just need to set the correct environment variable and the proxy will pick the corresponding client.
+
+| Provider | Required Environment Variables | Additional Notes |
+|----------|-------------------------------|------------------|
+| OptiLLM | `OPTILLM_API_KEY` | Uses the inbuilt local server for inference. Supports logprobs and decoding techniques like `cot_decoding` & `entropy_decoding` | 
+| OpenAI | `OPENAI_API_KEY` | - |
+| Cerebras | `CEREBRAS_API_KEY` | - |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY`<br>`AZURE_API_VERSION`<br>`AZURE_API_BASE` | - |
+| Azure OpenAI (Managed Identity) | `AZURE_API_VERSION`<br>`AZURE_API_BASE` | Login required using `az login`. See [docs for details](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity) |
+| LiteLLM | depends on the model | See [docs for details](https://docs.litellm.ai/docs/providers) |
 
 You can then run the optillm proxy as follows.
 
@@ -325,7 +332,7 @@ Authorization: Bearer your_secret_api_key
 
 ## SOTA results on benchmarks with optillm
 
-### CePO on math and code benchmarks
+### CePO on math and code benchmarks (Jan 2025)
 
 | Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX | LiveCodeBench (pass@1) | Simple QA |
 | -------------------------: | :-----: | :-------------: | :--: | :--: | :--------------------: | :-------: |
