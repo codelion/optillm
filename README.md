@@ -216,7 +216,7 @@ response = client.chat.completions.create(
   - e.g. for llama.cpp, run `python3 optillm.py --base_url http://localhost:8080/v1`
 
 > [!WARNING]
-> Note that the Anthropic API, llama-server (and ollama) currently does not support sampling multiple responses from a model, which limits the available approaches to the following:
+> The Anthropic API, llama.cpp-server, and ollama currently do not support sampling multiple responses from a model, which limits the available approaches to the following:
 > `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`. For models on HuggingFace, you can use the built-in local inference server as it supports multiple responses.
 
 ## Implemented techniques
