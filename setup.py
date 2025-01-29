@@ -1,18 +1,10 @@
+import os
 from setuptools import setup, find_packages
-
-def read_version():
-    version_dict = {}
-    try:
-        with open('optillm/__init__.py', 'r') as f:
-            exec(f.read(), version_dict)
-        return version_dict.get('__version__', 'unknown')
-    except Exception:
-        return 'unknown'
 
 setup(
     name="optillm",
-    version="0.1.2",
-    packages=find_packages(),
+    version="0.1.4",
+    packages=find_packages(include=['optillm', 'optillm.*']),  # This ensures all subpackages are included
     py_modules=['optillm'],
     package_data={
         'optillm': [
