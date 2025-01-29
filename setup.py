@@ -1,5 +1,14 @@
 from setuptools import setup, find_packages
 
+def read_version():
+    version_dict = {}
+    try:
+        with open('optillm/__init__.py', 'r') as f:
+            exec(f.read(), version_dict)
+        return version_dict.get('__version__', 'unknown')
+    except Exception:
+        return 'unknown'
+
 setup(
     name="optillm",
     version="0.1.2",
