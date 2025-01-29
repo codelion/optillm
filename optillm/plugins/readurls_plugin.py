@@ -4,24 +4,9 @@ import requests
 import os
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+from optillm import __version__
 
 SLUG = "readurls"
-
-def get_version():
-    try:
-        # Get path to setup.py relative to this file
-        current_dir = os.path.dirname(__file__)
-        package_root = os.path.dirname(os.path.dirname(current_dir))
-        setup_path = os.path.join(package_root, 'setup.py')
-        
-        with open(setup_path, 'r') as f:
-            content = f.read()
-            version_match = re.search(r'version=["\']([^"\']+)["\']', content)
-            if version_match:
-                return version_match.group(1)
-    except Exception:
-        pass
-    return "unknown"
 
 def extract_urls(text: str) -> List[str]:
     # Updated regex pattern to be more precise
@@ -41,9 +26,8 @@ def extract_urls(text: str) -> List[str]:
 
 def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
     try:
-        version = get_version()
         headers = {
-            'User-Agent': f'optillm/{version} (https://github.com/codelion/optillm)'
+            'User-Agent': f'optillm/{__version__} (https://github.com/codelion/optillm)'
         }
         
         response = requests.get(url, headers=headers, timeout=10)

@@ -1,18 +1,8 @@
 from importlib import util
 import os
-import re
 
-def get_version_from_setup():
-    try:
-        setup_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'setup.py')
-        with open(setup_path, 'r') as f:
-            content = f.read()
-            version_match = re.search(r'version=["\']([^"\']+)["\']', content)
-            if version_match:
-                return version_match.group(1)
-    except Exception:
-        pass
-    return "unknown"
+# Version information
+__version__ = "0.1.3"
 
 # Get the path to the root optillm.py
 spec = util.spec_from_file_location(
@@ -45,9 +35,6 @@ execute_parallel_approaches = module.execute_parallel_approaches
 
 # Export streaming response generation
 generate_streaming_response = module.generate_streaming_response
-
-# Version information
-__version__ = get_version_from_setup()
 
 # List of exported symbols
 __all__ = [
