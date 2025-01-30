@@ -547,13 +547,29 @@ def proxy():
     n = data.get('n', server_config['n'])  # Get n value from request or config
     # Extract response_format if present
     response_format = data.get("response_format", None)
-    
+
     # Create request config with all parameters
     request_config = {
         "stream": stream,
         "n": n,
         "response_format": response_format  # Add response_format to config
     }
+
+    # Extract ThinkDeeper specific configurations
+    thinkdeeper_config = {
+        "replacements": data.get("thinkdeeper_replacements", None),
+        "min_thinking_tokens": data.get("thinkdeeper_min_thinking_tokens", None),
+        "prefill": data.get("thinkdeeper_prefill", None),
+        "start_think_token" : data.get("thinkdeeper_start_think_token", None),
+        "end_think_token" : data.get("thinkdeeper_end_think_token", None),
+    }
+    
+    # Remove None values
+    thinkdeeper_config = {k: v for k, v in thinkdeeper_config.items() if v is not None}
+    
+    # Add to request_config if there are any ThinkDeeper settings
+    if thinkdeeper_config:
+        request_config["thinkdeeper_config"] = thinkdeeper_config
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
