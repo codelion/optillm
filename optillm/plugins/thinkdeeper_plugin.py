@@ -14,7 +14,7 @@ SLUG = "thinkdeeper"
 # Default configurations
 DEFAULT_CONFIG = {
     "replacements": ["\nWait, but", "\nHmm", "\nSo"],
-    "min_thinking_tokens": 128,
+    "min_thinking_tokens": 16384,
     "prefill": "",
     "start_think_token": "<think>",
     "end_think_token": "</think>"
@@ -59,8 +59,10 @@ class ThinkDeeperProcessor:
         kv = DynamicCache()
         n_thinking_tokens = 0
         
-        # Store response chunks
-        response_chunks = [self.tokenizer.decode(list(tokens[0]))]
+        # Initialize generation tracking
+        initial_prompt_length = tokens.shape[1]
+        response_chunks = []
+        generated_tokens = []
         
         while True:
             out = self.model(input_ids=tokens, past_key_values=kv, use_cache=True)
@@ -68,6 +70,7 @@ class ThinkDeeperProcessor:
                 torch.softmax(out.logits[0, -1, :], dim=-1), 1
             ).item()
             kv = out.past_key_values
+            generated_tokens.append(next_token)
 
             if (
                 next_token in (self.end_think_token, self.model.config.eos_token_id)
@@ -85,6 +88,7 @@ class ThinkDeeperProcessor:
                 n_thinking_tokens += 1
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
 
+        # Join all response chunks
         return "".join(response_chunks)
 
 def run(system_prompt: str, initial_query: str, client, model: str, request_config: Dict[str, Any] = None) -> Tuple[str, int]:
