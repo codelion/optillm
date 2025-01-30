@@ -47,7 +47,7 @@ class ThinkDeeperProcessor:
         Returns:
             The generated response with enhanced thinking
         """
-        tokens = self.tokenizer.apply_chat_template(
+        initial_tokens = self.tokenizer.apply_chat_template(
             [
                 {"role": "user", "content": question},
                 {"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"},
@@ -55,13 +55,12 @@ class ThinkDeeperProcessor:
             continue_final_message=True,
             return_tensors="pt"
         )
-        tokens = tokens.to(self.model.device)
+        tokens = initial_tokens.to(self.model.device)
         kv = DynamicCache()
         n_thinking_tokens = 0
         
-        # Initialize generation tracking
-        generated_tokens = []
-        n_thinking_tokens = 0
+        # Store response chunks
+        response_chunks = []
         
         while True:
             out = self.model(input_ids=tokens, past_key_values=kv, use_cache=True)
@@ -75,19 +74,19 @@ class ThinkDeeperProcessor:
                 and n_thinking_tokens < self.config["min_thinking_tokens"]
             ):
                 replacement = random.choice(self.config["replacements"])
+                response_chunks.append(replacement)
                 replacement_tokens = self.tokenizer.encode(replacement)
-                generated_tokens.extend(replacement_tokens)
                 n_thinking_tokens += len(replacement_tokens)
                 tokens = torch.tensor([replacement_tokens]).to(tokens.device)
             elif next_token == self.model.config.eos_token_id:
                 break
             else:
-                generated_tokens.append(next_token)
+                response_chunks.append(self.tokenizer.decode([next_token]))
                 n_thinking_tokens += 1
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
 
-        # Only decode the generated tokens at the end
-        return self.tokenizer.decode(generated_tokens)
+        # Return only the generated response
+        return "".join(response_chunks)
 
 def run(system_prompt: str, initial_query: str, client, model: str, request_config: Dict[str, Any] = None) -> Tuple[str, int]:
     """
