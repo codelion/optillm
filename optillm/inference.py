@@ -1448,7 +1448,8 @@ def parse_model_string(model: str) -> ModelConfig:
     return ModelConfig(
         base_model_id=base_model_id,
         adapter_ids=adapter_ids,
-        use_memory_efficient_attention=True,
-        enable_prompt_caching=True,
+        use_memory_efficient_attention=False,
+        quantization_bits=0,
+        enable_prompt_caching=False,
         dynamic_temperature=False,
     )
