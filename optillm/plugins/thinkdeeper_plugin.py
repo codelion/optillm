@@ -106,7 +106,8 @@ class ThinkDeeperProcessor:
                 logger.debug(f"Added token to response. Total thinking tokens: {n_thinking_tokens}")
 
         # Join all chunks and trim off the initial prompt
-        full_response = "".join(response_chunks)
+        response = "".join(response_chunks)
+        full_response = f"{self.config['start_think_token']}\n{self.config['prefill']}{response}"
         
         logger.debug(f"Final response length: {len(full_response)} chars")
         return full_response
