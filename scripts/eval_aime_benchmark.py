@@ -46,10 +46,14 @@ def extract_answer(response: str) -> Optional[int]:
     """
     Extract the numerical answer from a math solution response.
     Handles various formats of boxed answers and falls back to last number if needed.
+    Removes any content within <think> tags before processing.
     """
     if not response:
         return None
-        
+    
+    # Remove content within <think> tags
+    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+    
     # Clean the response
     response = ' '.join(response.split())
     
@@ -104,10 +108,11 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
     try:
         response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
+            temperature=0.6,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=8192,
+            max_tokens=32768, # for thinking models, we need to use a lot more tokens
         )
         
         # If there's more than one choice, format as attempts
