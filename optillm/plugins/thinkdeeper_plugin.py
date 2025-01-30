@@ -90,6 +90,10 @@ class ThinkDeeperProcessor:
                 replacement_tokens = self.tokenizer.encode(replacement)
                 n_thinking_tokens += len(replacement_tokens)
                 tokens = torch.tensor([replacement_tokens]).to(tokens.device)
+                # Reset seen_end_think as we're starting a new thinking sequence
+                seen_end_think = False
+                logger.debug("Reset seen_end_think flag after replacement")
+                
                 
             elif next_token == self.model.config.eos_token_id and seen_end_think:
                 logger.debug("Reached EOS after end think token - stopping generation")
