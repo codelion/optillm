@@ -60,9 +60,8 @@ class ThinkDeeperProcessor:
         n_thinking_tokens = 0
         
         # Initialize generation tracking
-        initial_prompt_length = tokens.shape[1]
-        response_chunks = []
         generated_tokens = []
+        n_thinking_tokens = 0
         
         while True:
             out = self.model(input_ids=tokens, past_key_values=kv, use_cache=True)
@@ -70,26 +69,25 @@ class ThinkDeeperProcessor:
                 torch.softmax(out.logits[0, -1, :], dim=-1), 1
             ).item()
             kv = out.past_key_values
-            generated_tokens.append(next_token)
 
             if (
                 next_token in (self.end_think_token, self.model.config.eos_token_id)
                 and n_thinking_tokens < self.config["min_thinking_tokens"]
             ):
                 replacement = random.choice(self.config["replacements"])
-                response_chunks.append(replacement)
                 replacement_tokens = self.tokenizer.encode(replacement)
+                generated_tokens.extend(replacement_tokens)
                 n_thinking_tokens += len(replacement_tokens)
                 tokens = torch.tensor([replacement_tokens]).to(tokens.device)
             elif next_token == self.model.config.eos_token_id:
                 break
             else:
-                response_chunks.append(self.tokenizer.decode([next_token]))
+                generated_tokens.append(next_token)
                 n_thinking_tokens += 1
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
 
-        # Join all response chunks
-        return "".join(response_chunks)
+        # Only decode the generated tokens at the end
+        return self.tokenizer.decode(generated_tokens)
 
 def run(system_prompt: str, initial_query: str, client, model: str, request_config: Dict[str, Any] = None) -> Tuple[str, int]:
     """
