@@ -14,7 +14,7 @@ SLUG = "thinkdeeper"
 # Default configurations
 DEFAULT_CONFIG = {
     "replacements": ["\nWait, but", "\nHmm", "\nSo"],
-    "min_thinking_tokens": 16384,
+    "min_thinking_tokens": 128,
     "prefill": "",
     "start_think_token": "<think>",
     "end_think_token": "</think>"
@@ -27,14 +27,13 @@ class ThinkDeeperProcessor:
         self.config = {**DEFAULT_CONFIG, **config}
         self.tokenizer = tokenizer
         self.model = model
-
+        
         # Get the actual token IDs for think markers
-        start_tokens = self.tokenizer.encode(self.config['start_think_token'])
-        end_tokens = self.tokenizer.encode(self.config['end_think_token'])
-        # Take the last token of start marker and first token of end marker 
-        # in case they get split into multiple tokens
-        self._start_think_token = start_tokens[-1]
-        self.end_think_token = end_tokens[0]
+        tokens = self.tokenizer.encode(f"{self.config['start_think_token']}{self.config['end_think_token']}")
+        self._start_think_token = tokens[1]  # Start token is second token
+        self.end_think_token = tokens[2]     # End token is third token
+        logger.debug(f"Think token IDs - Start: {self._start_think_token} ({self.tokenizer.decode([self._start_think_token])}), End: {self.end_think_token} ({self.tokenizer.decode([self.end_think_token])})")
+        
 
     @torch.inference_mode()
     def reasoning_effort(self, question: str) -> str:
@@ -47,7 +46,8 @@ class ThinkDeeperProcessor:
         Returns:
             The generated response with enhanced thinking
         """
-        initial_tokens = self.tokenizer.apply_chat_template(
+        logger.debug(f"Starting generation for question: {question}")
+        tokens = self.tokenizer.apply_chat_template(
             [
                 {"role": "user", "content": question},
                 {"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"},
@@ -55,11 +55,15 @@ class ThinkDeeperProcessor:
             continue_final_message=True,
             return_tensors="pt"
         )
-        tokens = initial_tokens.to(self.model.device)
+        tokens = tokens.to(self.model.device)
+        initial_prompt = self.tokenizer.decode(tokens[0])
+        initial_prompt_len = len(initial_prompt) - len(f"{self.config['start_think_token']}\n{self.config['prefill']}")
+        logger.debug(f"Initial prompt length: {initial_prompt_len} chars")
+        logger.debug(f"Initial prompt: {initial_prompt}")
+        
         kv = DynamicCache()
         n_thinking_tokens = 0
-        
-        # Store response chunks
+        seen_end_think = False
         response_chunks = []
         
         while True:
@@ -68,25 +72,45 @@ class ThinkDeeperProcessor:
                 torch.softmax(out.logits[0, -1, :], dim=-1), 1
             ).item()
             kv = out.past_key_values
+            
+            next_str = self.tokenizer.decode([next_token])
+            logger.debug(f"Generated token {next_token} -> '{next_str}'")
 
-            if (
-                next_token in (self.end_think_token, self.model.config.eos_token_id)
-                and n_thinking_tokens < self.config["min_thinking_tokens"]
-            ):
+            # Track if we've seen the end think token
+            if next_token == self.end_think_token:
+                seen_end_think = True
+                logger.debug("Found end think token")
+
+            # Need to continue generating if:
+            # 1. We hit end think/eos before min tokens OR
+            # 2. We hit eos without seeing end think token
+            if ((next_token in (self.end_think_token, self.model.config.eos_token_id) 
+                 and n_thinking_tokens < self.config["min_thinking_tokens"]) 
+                or (next_token == self.model.config.eos_token_id and not seen_end_think)):
+                
                 replacement = random.choice(self.config["replacements"])
+                logger.debug(f"Inserting replacement: '{replacement}' (tokens: {n_thinking_tokens}, seen_end_think: {seen_end_think})")
                 response_chunks.append(replacement)
                 replacement_tokens = self.tokenizer.encode(replacement)
                 n_thinking_tokens += len(replacement_tokens)
                 tokens = torch.tensor([replacement_tokens]).to(tokens.device)
-            elif next_token == self.model.config.eos_token_id:
+                
+            elif next_token == self.model.config.eos_token_id and seen_end_think:
+                logger.debug("Reached EOS after end think token - stopping generation")
                 break
+                
             else:
-                response_chunks.append(self.tokenizer.decode([next_token]))
+                response_chunks.append(next_str)
                 n_thinking_tokens += 1
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
+                logger.debug(f"Added token to response. Total thinking tokens: {n_thinking_tokens}")
 
-        # Return only the generated response
-        return "".join(response_chunks)
+        # Join all chunks and trim off the initial prompt
+        full_response = "".join(response_chunks)
+        final_response = full_response[initial_prompt_len:]
+        
+        logger.debug(f"Final response length: {len(final_response)} chars")
+        return final_response
 
 def run(system_prompt: str, initial_query: str, client, model: str, request_config: Dict[str, Any] = None) -> Tuple[str, int]:
     """
@@ -113,17 +137,19 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
             if key in thinkdeeper_config:
                 config[key] = thinkdeeper_config[key]
     
-    try:
-         # Load tokenizer and model
+    try:      
+        # Load tokenizer and model
         tokenizer = AutoTokenizer.from_pretrained(model)
-        model = AutoModelForCausalLM.from_pretrained(model, device_map="auto")
+        llm = AutoModelForCausalLM.from_pretrained(model, device_map="auto")
+        logger.info("Model and tokenizer loaded successfully")
         
         # Create processor and generate response
-        processor = ThinkDeeperProcessor(config, tokenizer, model)
+        processor = ThinkDeeperProcessor(config, tokenizer, llm)
         response = processor.reasoning_effort(initial_query)
         
         # Calculate actual completion tokens
-        completion_tokens = len(processor.tokenizer.encode(response))
+        completion_tokens = len(tokenizer.encode(response))
+        logger.info(f"Generation complete. Used {completion_tokens} completion tokens")
         
         return response, completion_tokens
         
