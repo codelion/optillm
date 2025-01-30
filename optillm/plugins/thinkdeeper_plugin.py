@@ -56,11 +56,16 @@ class ThinkDeeperProcessor:
             return_tensors="pt"
         )
         tokens = tokens.to(self.model.device)
-        initial_prompt = self.tokenizer.decode(tokens[0])
-        initial_prompt_len = len(initial_prompt) - len(f"{self.config['start_think_token']}\n{self.config['prefill']}")
-        logger.debug(f"Initial prompt length: {initial_prompt_len} chars")
-        logger.debug(f"Initial prompt: {initial_prompt}")
-        
+        # First get the template up to assistant's message
+        template_prefix = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": question}],
+            continue_final_message=False,
+            return_tensors="pt"
+        )
+        # Get the length of just the template and user message
+        template_prefix_text = self.tokenizer.decode(template_prefix[0])
+        prefix_len = len(template_prefix_text)
+
         kv = DynamicCache()
         n_thinking_tokens = 0
         seen_end_think = False
@@ -107,7 +112,7 @@ class ThinkDeeperProcessor:
 
         # Join all chunks and trim off the initial prompt
         full_response = "".join(response_chunks)
-        final_response = full_response[initial_prompt_len:]
+        final_response = full_response[prefix_len:]
         
         logger.debug(f"Final response length: {len(final_response)} chars")
         return final_response
