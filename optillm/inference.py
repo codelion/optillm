@@ -1347,7 +1347,7 @@ class InferenceClient:
                                 pipeline.current_model,
                                 pipeline.tokenizer,
                                 messages,
-                                **thinkdeeper_config
+                                thinkdeeper_config
                                 )
                         else:
                             raise ValueError(f"Unknown specialized decoding approach: {decoding}")
