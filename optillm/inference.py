@@ -1349,6 +1349,9 @@ class InferenceClient:
                                 messages,
                                 thinkdeeper_config
                                 )
+                            responses = [result]
+                            logprobs_results = [None]
+                            completion_tokens = len(pipeline.tokenizer.encode(result))
                         else:
                             raise ValueError(f"Unknown specialized decoding approach: {decoding}")
                         
