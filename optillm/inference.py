@@ -14,6 +14,7 @@ import bitsandbytes as bnb
 from scipy.stats import entropy
 from functools import lru_cache
 import time
+import threading
 
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
@@ -358,44 +359,96 @@ class DynamicTemperature:
         return np.clip(optimal_temperature, 0.1, 2.0)
 
 class CacheManager:
-    """Enhanced cache manager with advanced features"""
+    """Thread-safe singleton cache manager for model caching"""
+    
+    _instance = None
+    _lock = threading.Lock()  # Class level lock for thread safety
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:  # Double-checked locking pattern
+                if cls._instance is None:  # Check again after acquiring lock
+                    cls._instance = super(CacheManager, cls).__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self, max_size: int = 5):
-        self.max_size = max_size
-        self.model_cache = OrderedDict()
-        self.adapter_cache = OrderedDict()
-        self.prompt_cache = PromptCache()
-        self.cache_stats = defaultdict(lambda: {"hits": 0, "misses": 0})
+        # Only initialize once
+        if not self._initialized:
+            with self._lock:
+                if not self._initialized:
+                    self.max_size = max_size
+                    self.model_cache = OrderedDict()
+                    self.adapter_cache = OrderedDict()
+                    self.prompt_cache = PromptCache()
+                    self.cache_stats = defaultdict(lambda: {"hits": 0, "misses": 0})
+                    self._initialized = True
+                    logger.info("Initialized singleton CacheManager")
     
     def _cleanup_cache(self, cache: OrderedDict):
-        while len(cache) > self.max_size:
-            _, model = cache.popitem(last=False)
-            if hasattr(model, 'cpu'):
-                model.cpu()
-            torch.cuda.empty_cache()
+        """Thread-safe cache cleanup"""
+        with self._lock:
+            while len(cache) > self.max_size:
+                _, model = cache.popitem(last=False)
+                if hasattr(model, 'cpu'):
+                    model.cpu()
+                torch.cuda.empty_cache()
+                logger.info(f"Cleaned up cache. New size: {len(cache)}")
     
     def get_or_load_model(self, model_key: str, loader_fn) -> Any:
-        """Get or load model with enhanced caching"""
-        if model_key in self.model_cache:
-            self.cache_stats[model_key]["hits"] += 1
-            self.model_cache.move_to_end(model_key)
-            return self.model_cache[model_key]
-        
-        self.cache_stats[model_key]["misses"] += 1
-        model = loader_fn()
-        self.model_cache[model_key] = model
-        self._cleanup_cache(self.model_cache)
-        return model
+        """Thread-safe model loading with caching"""
+        with self._lock:
+            if model_key in self.model_cache:
+                self.cache_stats[model_key]["hits"] += 1
+                self.model_cache.move_to_end(model_key)
+                logger.debug(f"Cache hit for model: {model_key}")
+                return self.model_cache[model_key]
+            
+            self.cache_stats[model_key]["misses"] += 1
+            logger.info(f"Loading model into cache: {model_key}")
+            model = loader_fn()
+            self.model_cache[model_key] = model
+            self._cleanup_cache(self.model_cache)
+            return model
     
     def get_or_load_adapter(self, adapter_key: str, loader_fn):
-        if adapter_key in self.adapter_cache:
-            self.adapter_cache.move_to_end(adapter_key)
-            return self.adapter_cache[adapter_key]
-        
-        adapter = loader_fn()
-        self.adapter_cache[adapter_key] = adapter
-        self._cleanup_cache(self.adapter_cache)
-        return adapter
+        """Thread-safe adapter loading with caching"""
+        with self._lock:
+            if adapter_key in self.adapter_cache:
+                self.adapter_cache.move_to_end(adapter_key)
+                logger.debug(f"Cache hit for adapter: {adapter_key}")
+                return self.adapter_cache[adapter_key]
+            
+            logger.info(f"Loading adapter into cache: {adapter_key}")
+            adapter = loader_fn()
+            self.adapter_cache[adapter_key] = adapter
+            self._cleanup_cache(self.adapter_cache)
+            return adapter
+    
+    def clear_caches(self):
+        """Thread-safe cache clearing"""
+        with self._lock:
+            self.model_cache.clear()
+            self.adapter_cache.clear()
+            torch.cuda.empty_cache()
+            logger.info("Cleared all caches")
+    
+    def get_cache_stats(self):
+        """Get current cache statistics"""
+        with self._lock:
+            stats = {
+                "model_cache_size": len(self.model_cache),
+                "adapter_cache_size": len(self.adapter_cache),
+                "cache_stats": dict(self.cache_stats)
+            }
+            return stats
+    
+    @classmethod
+    def get_instance(cls, max_size: int = 5) -> 'CacheManager':
+        """Get or create singleton instance"""
+        if cls._instance is None:
+            return cls(max_size)
+        return cls._instance
 
 class DeviceManager:
     def __init__(self):
@@ -1165,7 +1218,7 @@ class InferenceClient:
     """OpenAI SDK Compatible client for local inference with dynamic model support"""
     
     def __init__(self):
-        self.cache_manager = CacheManager(max_size=10)
+        self.cache_manager = CacheManager.get_instance(max_size=4)
         self.device_manager = DeviceManager()
         self.model_manager = ModelManager(self.cache_manager, self.device_manager)
         self.lora_manager = LoRAManager(self.cache_manager)
