@@ -37,7 +37,7 @@ class ThinkDeeperProcessor:
         
 
     @torch.inference_mode()
-    def reasoning_effort(self, question: str) -> str:
+    def reasoning_effort(self, messages) -> str:
         """
         Generate an enhanced thinking response with extended reasoning.
         
@@ -47,12 +47,11 @@ class ThinkDeeperProcessor:
         Returns:
             The generated response with enhanced thinking
         """
-        logger.debug(f"Starting generation for question: {question}")
+
+        messages.append({"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"})
+
         tokens = self.tokenizer.apply_chat_template(
-            [
-                {"role": "user", "content": question},
-                {"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"},
-            ],
+            messages,
             continue_final_message=True,
             return_tensors="pt"
         )
@@ -113,7 +112,7 @@ class ThinkDeeperProcessor:
         logger.debug(f"Final response length: {len(full_response)} chars")
         return full_response
 
-def thinkdeeper_decode(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, messages: List[Dict[str, str]], request_config: Dict[str, Any] = None) -> Tuple[str, int]:
+def thinkdeeper_decode(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, messages: List[Dict[str, str]], request_config: Dict[str, Any] = None) -> str:
     """
     Main plugin execution function.
     
@@ -131,33 +130,23 @@ def thinkdeeper_decode(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, m
     device = get_device()
     model.to(device)
 
-    # Use the chat template to format the input
-    if tokenizer.chat_template:
-        initial_query = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    else:
-        # Fallback for tokenizers without chat templates
-        initial_query = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
     
     # Extract config from request_config if provided
     config = DEFAULT_CONFIG.copy()
     if request_config:
-        thinkdeeper_config = request_config.get("thinkdeeper_config", {})
+        thinkdeeper_config = request_config
         # Update only valid keys
         for key in DEFAULT_CONFIG:
             if key in thinkdeeper_config:
                 config[key] = thinkdeeper_config[key]
     
     try:      
-        
+        logger.info(f"config: {config}")
         # Create processor and generate response
         processor = ThinkDeeperProcessor(config, tokenizer, model)
-        response = processor.reasoning_effort(initial_query)
+        response = processor.reasoning_effort(messages)
         
-        # Calculate actual completion tokens
-        completion_tokens = len(tokenizer.encode(response))
-        logger.info(f"Generation complete. Used {completion_tokens} completion tokens")
-        
-        return response, completion_tokens
+        return response
         
     except Exception as e:
         logger.error(f"Error in ThinkDeeper processing: {str(e)}")

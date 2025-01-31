@@ -359,93 +359,144 @@ class DynamicTemperature:
         return np.clip(optimal_temperature, 0.1, 2.0)
 
 class CacheManager:
-    """Thread-safe singleton cache manager for model caching"""
-    
+    """
+    Singleton cache manager for models and tokenizers.
+    Thread-safe but minimizes lock contention.
+    """
     _instance = None
-    _lock = threading.Lock()  # Class level lock for thread safety
+    _lock = threading.Lock()
     
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            with cls._lock:  # Double-checked locking pattern
-                if cls._instance is None:  # Check again after acquiring lock
-                    cls._instance = super(CacheManager, cls).__new__(cls)
-                    cls._instance._initialized = False
+            with cls._lock:
+                # Double-checked locking pattern
+                if cls._instance is None:
+                    instance = super().__new__(cls)
+                    instance._initialized = False
+                    cls._instance = instance
         return cls._instance
     
     def __init__(self, max_size: int = 5):
         # Only initialize once
-        if not self._initialized:
-            with self._lock:
-                if not self._initialized:
-                    self.max_size = max_size
-                    self.model_cache = OrderedDict()
-                    self.adapter_cache = OrderedDict()
-                    self.prompt_cache = PromptCache()
-                    self.cache_stats = defaultdict(lambda: {"hits": 0, "misses": 0})
-                    self._initialized = True
-                    logger.info("Initialized singleton CacheManager")
-    
-    def _cleanup_cache(self, cache: OrderedDict):
-        """Thread-safe cache cleanup"""
-        with self._lock:
-            while len(cache) > self.max_size:
-                _, model = cache.popitem(last=False)
-                if hasattr(model, 'cpu'):
-                    model.cpu()
-                torch.cuda.empty_cache()
-                logger.info(f"Cleaned up cache. New size: {len(cache)}")
-    
-    def get_or_load_model(self, model_key: str, loader_fn) -> Any:
-        """Thread-safe model loading with caching"""
-        with self._lock:
-            if model_key in self.model_cache:
-                self.cache_stats[model_key]["hits"] += 1
-                self.model_cache.move_to_end(model_key)
-                logger.debug(f"Cache hit for model: {model_key}")
-                return self.model_cache[model_key]
+        if self._initialized:
+            return
             
-            self.cache_stats[model_key]["misses"] += 1
-            logger.info(f"Loading model into cache: {model_key}")
-            model = loader_fn()
+        with self._lock:
+            if not self._initialized:
+                logger.info("Initializing CacheManager singleton")
+                self.max_size = max_size
+                self.model_cache = OrderedDict()
+                self.tokenizer_cache = OrderedDict()
+                self.adapter_cache = OrderedDict()
+                self.cache_stats = defaultdict(lambda: {"hits": 0, "misses": 0})
+                self._initialized = True
+                logger.info("CacheManager singleton initialized")
+    
+    def get_or_load_model(self, model_key: str, loader_fn) -> Tuple[Any, Any]:
+        """
+        Get or load model and tokenizer with minimal locking.
+        Only locks during cache access, not during model loading.
+        """
+        # First check cache without loading
+        cached_model = cached_tokenizer = None
+        cache_hit = False
+        
+        with self._lock:
+            if model_key in self.model_cache and model_key in self.tokenizer_cache:
+                cached_model = self.model_cache[model_key]
+                cached_tokenizer = self.tokenizer_cache[model_key]
+                self.model_cache.move_to_end(model_key)
+                self.tokenizer_cache.move_to_end(model_key)
+                self.cache_stats[model_key]["hits"] += 1
+                cache_hit = True
+                logger.debug(f"Cache hit for model: {model_key}")
+
+        if cache_hit:
+            return cached_model, cached_tokenizer
+
+        # Load model outside of any locks
+        logger.info(f"Loading model and tokenizer: {model_key}")
+        model, tokenizer = loader_fn()
+        
+        # Cache the results
+        with self._lock:
+            # Check if another thread loaded the model while we were loading
+            if model_key in self.model_cache and model_key in self.tokenizer_cache:
+                # Use the already cached version
+                cached_model = self.model_cache[model_key]
+                cached_tokenizer = self.tokenizer_cache[model_key]
+                self.cache_stats[model_key]["hits"] += 1
+                logger.debug(f"Using already cached model: {model_key}")
+                return cached_model, cached_tokenizer
+            
+            # Cache our newly loaded model
             self.model_cache[model_key] = model
-            self._cleanup_cache(self.model_cache)
-            return model
+            self.tokenizer_cache[model_key] = tokenizer
+            self.cache_stats[model_key]["misses"] += 1
+            
+            # Cleanup if needed
+            self._cleanup_caches()
+            
+            logger.info(f"Successfully cached model and tokenizer: {model_key}")
+            return model, tokenizer
     
     def get_or_load_adapter(self, adapter_key: str, loader_fn):
-        """Thread-safe adapter loading with caching"""
+        """Get or load adapter with minimal locking."""
         with self._lock:
             if adapter_key in self.adapter_cache:
+                adapter = self.adapter_cache[adapter_key]
                 self.adapter_cache.move_to_end(adapter_key)
-                logger.debug(f"Cache hit for adapter: {adapter_key}")
-                return self.adapter_cache[adapter_key]
-            
-            logger.info(f"Loading adapter into cache: {adapter_key}")
-            adapter = loader_fn()
+                return adapter
+        
+        # Load adapter outside lock
+        adapter = loader_fn()
+        
+        # Cache the adapter
+        with self._lock:
             self.adapter_cache[adapter_key] = adapter
-            self._cleanup_cache(self.adapter_cache)
+            self._cleanup_caches()
             return adapter
     
-    def clear_caches(self):
-        """Thread-safe cache clearing"""
+    def _cleanup_caches(self):
+        """Clean up caches if they exceed max size."""
+        # Already under self._lock when called
+        while len(self.model_cache) > self.max_size:
+            _, model = self.model_cache.popitem(last=False)
+            if hasattr(model, 'cpu'):
+                model.cpu()
+        
+        while len(self.tokenizer_cache) > self.max_size:
+            self.tokenizer_cache.popitem(last=False)
+            
+        while len(self.adapter_cache) > self.max_size:
+            _, adapter = self.adapter_cache.popitem(last=False)
+            if hasattr(adapter, 'cpu'):
+                adapter.cpu()
+                
+        torch.cuda.empty_cache()
+    
+    def clear_all(self):
+        """Clear all caches."""
         with self._lock:
             self.model_cache.clear()
+            self.tokenizer_cache.clear()
             self.adapter_cache.clear()
             torch.cuda.empty_cache()
-            logger.info("Cleared all caches")
+            logger.info("All caches cleared")
     
-    def get_cache_stats(self):
-        """Get current cache statistics"""
+    def get_stats(self):
+        """Get cache statistics."""
         with self._lock:
-            stats = {
+            return {
                 "model_cache_size": len(self.model_cache),
+                "tokenizer_cache_size": len(self.tokenizer_cache),
                 "adapter_cache_size": len(self.adapter_cache),
-                "cache_stats": dict(self.cache_stats)
+                "stats": dict(self.cache_stats)
             }
-            return stats
-    
+
     @classmethod
     def get_instance(cls, max_size: int = 5) -> 'CacheManager':
-        """Get or create singleton instance"""
+        """Alternative way to get the singleton instance."""
         if cls._instance is None:
             return cls(max_size)
         return cls._instance
@@ -533,11 +584,13 @@ class ModelManager:
                 trust_remote_code=True
             )
             
+            logger.info("Model loaded successfully")
+
             if quantize and 'cuda' in device:
                 model = self.quantize_model(model)
             
             return model, tokenizer
-
+            
         return self.cache_manager.get_or_load_model(model_id, _load_model)
 
 class LoRAManager:
@@ -659,11 +712,8 @@ class LoRAManager:
         return self.loaded_adapters.get(model, [])
     
 class InferencePipeline:
-    """Enhanced inference pipeline with timestamp tracking"""
-    
-    def __init__(self, model_config: ModelConfig, cache_manager: CacheManager, 
-                 device_manager: DeviceManager, model_manager: ModelManager, 
-                 lora_manager: LoRAManager):
+    def __init__(self, model_config: ModelConfig, cache_manager, device_manager, model_manager, lora_manager):
+        logger.info("1. Starting pipeline initialization")
         self.model_config = model_config
         self.cache_manager = cache_manager
         self.device_manager = device_manager
@@ -671,77 +721,99 @@ class InferencePipeline:
         self.lora_manager = lora_manager
         self.last_used = time.time()
         
-        # Initialize dynamic components
-        self.dynamic_temperature = (
-            DynamicTemperature() if model_config.dynamic_temperature else None
-        )
-        
-        # Load base model and tokenizer
-        self.base_model, self.tokenizer = self.model_manager.load_base_model(
-            model_config.base_model_id,
-            quantize=model_config.quantization_bits == 4
-        )
-        
-        # Setup tokenizer
-        self.tokenizer = self.setup_tokenizer(self.tokenizer)
-
-        # Resize model embeddings if needed
-        if self.base_model.get_input_embeddings().num_embeddings != len(self.tokenizer):
-            self.base_model.resize_token_embeddings(len(self.tokenizer))
-            logger.info("Resized model embeddings to match tokenizer")
-        
-        # Load adapters if specified
-        self.current_model = self.base_model
-        if model_config.adapter_ids:
-            for adapter_id in model_config.adapter_ids:
-                try:
-                    self.current_model = self.lora_manager.load_adapter(
-                        self.current_model, adapter_id
-                    )
-                    logger.info(f"Loaded adapter: {adapter_id}")
-                except Exception as e:
-                    logger.error(f"Failed to load adapter {adapter_id}: {e}")
+        logger.info("2. Loading base model and tokenizer")
+        try:
+            # Load base model and tokenizer
+            self.base_model, self.tokenizer = self.model_manager.load_base_model(
+                model_config.base_model_id,
+                quantize=model_config.quantization_bits == 4
+            )
+            logger.info("3. Base model and tokenizer loaded")
             
-        self.lora_manager.set_active_adapter(self.current_model)
-        
-        # Setup optimizations
-        if model_config.use_memory_efficient_attention:
-            self.setup_efficient_attention()
-            
-        self.setup_mixed_precision()
-        self.optimal_batch_size = self._find_optimal_batch_size()
+            # Setup tokenizer
+            logger.info("4. Setting up tokenizer")
+            self.tokenizer = self.setup_tokenizer(self.tokenizer)
+            logger.info("5. Tokenizer setup completed")
 
-        logger.info(f"Initialized with optimal batch size: {self.optimal_batch_size}")
+            logger.info("6. Checking model embeddings")
+            # Resize model embeddings if needed
+            if self.base_model.get_input_embeddings().num_embeddings != len(self.tokenizer):
+                logger.info("7. Resizing model embeddings")
+                self.base_model.resize_token_embeddings(len(self.tokenizer))
+                logger.info("8. Model embeddings resized")
+            else:
+                logger.info("7. No embedding resize needed")
+            
+            # Set current model
+            logger.info("9. Setting current model")
+            self.current_model = self.base_model
+            logger.info("10. Current model set")
+            
+            # Load adapters if specified
+            if model_config.adapter_ids:
+                logger.info("11. Loading adapters")
+                for adapter_id in model_config.adapter_ids:
+                    try:
+                        logger.info(f"12. Loading adapter {adapter_id}")
+                        self.current_model = self.lora_manager.load_adapter(
+                            self.current_model, adapter_id
+                        )
+                        logger.info(f"13. Loaded adapter: {adapter_id}")
+                    except Exception as e:
+                        logger.error(f"Error loading adapter {adapter_id}: {e}")
+                
+                logger.info("14. Setting active adapter")
+                self.lora_manager.set_active_adapter(self.current_model)
+                logger.info("15. Active adapter set")
+            
+            # Setup optimizations
+            logger.info("16. Setting up optimizations")
+            if model_config.use_memory_efficient_attention:
+                logger.info("17. Setting up efficient attention")
+                self.setup_efficient_attention()
+                logger.info("18. Efficient attention setup complete")
+            
+            logger.info("19. Setting up mixed precision")
+            self.setup_mixed_precision()
+            logger.info("20. Mixed precision setup complete")
+
+            logger.info("21. Finding optimal batch size")
+            self.optimal_batch_size = self._find_optimal_batch_size()
+            logger.info(f"22. Pipeline initialization completed with optimal batch size: {self.optimal_batch_size}")
+            
+        except Exception as e:
+            logger.error(f"Pipeline initialization error: {str(e)}")
+            logger.error(f"Error traceback: {traceback.format_exc()}")
+            raise
 
     def setup_tokenizer(self, tokenizer: AutoTokenizer) -> AutoTokenizer:
-            """Ensure tokenizer has required special tokens"""
-            if tokenizer.pad_token is None:
-                if tokenizer.eos_token is not None:
-                    tokenizer.pad_token = tokenizer.eos_token
-                    logger.info("Using EOS token as padding token")
-                else:
-                    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                    logger.info("Added new [PAD] token to tokenizer")
-                    
-            # Ensure we have EOS token
-            if tokenizer.eos_token is None:
-                if tokenizer.sep_token is not None:
-                    tokenizer.eos_token = tokenizer.sep_token
-                else:
-                    tokenizer.eos_token = tokenizer.pad_token
-                    
-            # Ensure we have BOS token
-            if tokenizer.bos_token is None:
-                if tokenizer.cls_token is not None:
-                    tokenizer.bos_token = tokenizer.cls_token
-                else:
-                    tokenizer.bos_token = tokenizer.eos_token
-                    
-            # Log token IDs for debugging
-            logger.debug(f"Tokenizer special tokens - PAD: {tokenizer.pad_token_id}, "
-                        f"EOS: {tokenizer.eos_token_id}, BOS: {tokenizer.bos_token_id}")
-            
-            return tokenizer
+        """Ensure tokenizer has required special tokens"""
+        logger.info("  a. Starting tokenizer setup")
+        if tokenizer.pad_token is None:
+            if tokenizer.eos_token is not None:
+                tokenizer.pad_token = tokenizer.eos_token
+                logger.info("  b. Using EOS token as padding token")
+            else:
+                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                logger.info("  c. Added new [PAD] token to tokenizer")
+        
+        logger.info("  d. Setting up EOS token")
+        if tokenizer.eos_token is None:
+            if tokenizer.sep_token is not None:
+                tokenizer.eos_token = tokenizer.sep_token
+            else:
+                tokenizer.eos_token = tokenizer.pad_token
+        
+        logger.info("  e. Setting up BOS token")
+        if tokenizer.bos_token is None:
+            if tokenizer.cls_token is not None:
+                tokenizer.bos_token = tokenizer.cls_token
+            else:
+                tokenizer.bos_token = tokenizer.eos_token
+        
+        logger.info(f"  f. Tokenizer setup complete. PAD: {tokenizer.pad_token_id}, "
+                   f"EOS: {tokenizer.eos_token_id}, BOS: {tokenizer.bos_token_id}")
+        return tokenizer
     
     def generate(
         self,
@@ -862,10 +934,13 @@ class InferencePipeline:
 
     def setup_mixed_precision(self):
         """Configure automated mixed precision based on device capabilities"""
+        logger.info("  i. Starting mixed precision setup")
         device = self.current_model.device
         dtype = torch.float32  # default
         
+        logger.info(f"  ii. Current device: {device}")
         if torch.cuda.is_available() and 'cuda' in str(device):
+            logger.info("  iii. Setting up CUDA mixed precision")
             compute_capability = torch.cuda.get_device_capability(device.index if hasattr(device, 'index') else 0)
             
             if compute_capability[0] >= 8:
@@ -874,12 +949,16 @@ class InferencePipeline:
                 dtype = torch.float16
                 
         elif torch.backends.mps.is_available() and 'mps' in str(device):
-            dtype = torch.float16
+            logger.info("  iv. Setting up MPS mixed precision")
+            # For MPS, we'll stay with float32 for better compatibility
+            dtype = torch.float32
         
+        logger.info(f"  v. Selected dtype: {dtype}")
         if dtype != torch.float32:
+            logger.info("  vi. Converting model to selected dtype")
             self.current_model = self.current_model.to(dtype)
-            logger.info(f"Using mixed precision with dtype: {dtype}")
         
+        logger.info("  vii. Mixed precision setup complete")
         self.dtype = dtype
 
     def _find_optimal_batch_size(self, initial_batch_size: int = 1, max_batch_size: int = 128) -> int:
@@ -1224,32 +1303,17 @@ class InferenceClient:
         self.lora_manager = LoRAManager(self.cache_manager)
         self.chat = self.Chat(self)
         self.models = self.Models()
-        self._pipeline_cache = {}
 
     def get_pipeline(self, model: str) -> 'InferencePipeline':
-        if model not in self._pipeline_cache:
-            model_config = parse_model_string(model)
-            self._pipeline_cache[model] = InferencePipeline(
-                model_config,
-                self.cache_manager,
-                self.device_manager,
-                self.model_manager,
-                self.lora_manager
-            )
-        return self._pipeline_cache[model]
+        model_config = parse_model_string(model)
+        return InferencePipeline(
+            model_config,
+            self.cache_manager,
+            self.device_manager,
+            self.model_manager,
+            self.lora_manager
+        )
     
-    def clean_unused_pipelines(self, max_inactive: int = 5):
-        """Clean up pipelines that haven't been used recently"""
-        if len(self._pipeline_cache) > max_inactive:
-            oldest_models = sorted(
-                self._pipeline_cache.keys(),
-                key=lambda x: self._pipeline_cache[x].last_used
-            )[:-max_inactive]
-            
-            for model in oldest_models:
-                del self._pipeline_cache[model]
-                torch.cuda.empty_cache()
-
     class Chat:
         """OpenAI-compatible chat interface"""
         def __init__(self, client: 'InferenceClient'):
@@ -1297,8 +1361,13 @@ class InferenceClient:
                 **kwargs
             ) -> ChatCompletion:
                 """Create a chat completion with OpenAI-compatible parameters"""
+                logger.info("Starting chat completion creation")
                 if stream:
                     raise NotImplementedError("Streaming is not yet supported")
+
+                logger.info(f"Getting pipeline for model: {model}")
+                pipeline = self.client.get_pipeline(model)
+                logger.info("Pipeline acquired")
 
                 pipeline = self.client.get_pipeline(model)
 
@@ -1469,7 +1538,6 @@ class InferenceClient:
                         }
                     }
                     
-                    self.client.clean_unused_pipelines()
                     logger.debug(f"Response : {response_dict}")
                     return ChatCompletion(response_dict)
                     
