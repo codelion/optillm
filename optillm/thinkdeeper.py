@@ -133,11 +133,10 @@ def thinkdeeper_decode(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, m
 
     # Use the chat template to format the input
     if tokenizer.chat_template:
-        initial_query = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        initial_query = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     else:
         # Fallback for tokenizers without chat templates
         initial_query = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-        initial_query += "\nassistant:"
     
     # Extract config from request_config if provided
     config = DEFAULT_CONFIG.copy()
