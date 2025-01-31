@@ -1,16 +1,17 @@
-"""
-thinkdeeper_plugin.py - Plugin for enhanced thinking capabilities in optillm
-"""
-
 import torch
 import random
-from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
+from transformers import PreTrainedModel, PreTrainedTokenizer, DynamicCache
 from typing import Tuple, Dict, Any, List
 import logging
 
-# Plugin identifier
-SLUG = "thinkdeeper"
-
+def get_device():
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+    
 # Default configurations
 DEFAULT_CONFIG = {
     "replacements": ["\nWait, but", "\nHmm", "\nSo"],
@@ -112,7 +113,7 @@ class ThinkDeeperProcessor:
         logger.debug(f"Final response length: {len(full_response)} chars")
         return full_response
 
-def run(system_prompt: str, initial_query: str, client, model: str, request_config: Dict[str, Any] = None) -> Tuple[str, int]:
+def thinkdeeper_decode(model: PreTrainedModel, tokenizer: PreTrainedTokenizer, messages: List[Dict[str, str]], request_config: Dict[str, Any] = None) -> Tuple[str, int]:
     """
     Main plugin execution function.
     
@@ -127,6 +128,16 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         Tuple of (generated response, completion tokens)
     """
     logger.info("Starting ThinkDeeper processing")
+    device = get_device()
+    model.to(device)
+
+    # Use the chat template to format the input
+    if tokenizer.chat_template:
+        initial_query = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    else:
+        # Fallback for tokenizers without chat templates
+        initial_query = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+        initial_query += "\nassistant:"
     
     # Extract config from request_config if provided
     config = DEFAULT_CONFIG.copy()
@@ -138,13 +149,9 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
                 config[key] = thinkdeeper_config[key]
     
     try:      
-        # Load tokenizer and model
-        tokenizer = AutoTokenizer.from_pretrained(model)
-        llm = AutoModelForCausalLM.from_pretrained(model, device_map="auto")
-        logger.info("Model and tokenizer loaded successfully")
         
         # Create processor and generate response
-        processor = ThinkDeeperProcessor(config, tokenizer, llm)
+        processor = ThinkDeeperProcessor(config, tokenizer, model)
         response = processor.reasoning_effort(initial_query)
         
         # Calculate actual completion tokens

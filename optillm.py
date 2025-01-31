@@ -555,22 +555,6 @@ def proxy():
         "response_format": response_format  # Add response_format to config
     }
 
-    # Extract ThinkDeeper specific configurations
-    thinkdeeper_config = {
-        "replacements": data.get("thinkdeeper_replacements", None),
-        "min_thinking_tokens": data.get("thinkdeeper_min_thinking_tokens", None),
-        "prefill": data.get("thinkdeeper_prefill", None),
-        "start_think_token" : data.get("thinkdeeper_start_think_token", None),
-        "end_think_token" : data.get("thinkdeeper_end_think_token", None),
-    }
-    
-    # Remove None values
-    thinkdeeper_config = {k: v for k, v in thinkdeeper_config.items() if v is not None}
-    
-    # Add to request_config if there are any ThinkDeeper settings
-    if thinkdeeper_config:
-        request_config["thinkdeeper_config"] = thinkdeeper_config
-
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
     server_config['mcts_depth'] = data.get('mcts_depth', server_config['mcts_depth'])

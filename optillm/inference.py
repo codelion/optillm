@@ -17,6 +17,7 @@ import time
 
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
+from optillm.thinkdeeper import thinkdeeper_decode
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1235,6 +1236,11 @@ class InferenceClient:
                 # Entropy specific params
                 top_k: int = 27,
                 min_p: float = 0.03,
+                replacements: List[str] = ["\nWait, but", "\nHmm", "\nSo"],
+                min_thinking_tokens: int = 128,
+                prefill: str = "",
+                start_think_token: str ="<think>",
+                end_think_token: str = "</think>",
                 **kwargs
             ) -> ChatCompletion:
                 """Create a chat completion with OpenAI-compatible parameters"""
@@ -1328,7 +1334,21 @@ class InferenceClient:
                             finally:
                                 # Restore original dtype
                                 pipeline.current_model = pipeline.current_model.to(original_dtype)
-                        
+
+                        elif decoding == "thinkdeeper":
+                            thinkdeeper_config = {
+                                "replacements": replacements,
+                                "min_thinking_tokens": min_thinking_tokens,
+                                "prefill": prefill,
+                                "start_think_token" : start_think_token,
+                                "end_think_token" : end_think_token,
+                            }
+                            result = thinkdeeper_decode(
+                                pipeline.current_model,
+                                pipeline.tokenizer,
+                                messages,
+                                **thinkdeeper_config
+                                )
                         else:
                             raise ValueError(f"Unknown specialized decoding approach: {decoding}")
                         
