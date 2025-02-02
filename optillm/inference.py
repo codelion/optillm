@@ -15,6 +15,7 @@ from scipy.stats import entropy
 from functools import lru_cache
 import time
 import threading
+import traceback
 
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
@@ -713,7 +714,7 @@ class LoRAManager:
     
 class InferencePipeline:
     def __init__(self, model_config: ModelConfig, cache_manager, device_manager, model_manager, lora_manager):
-        logger.info("1. Starting pipeline initialization")
+        logger.debug("1. Starting pipeline initialization")
         self.model_config = model_config
         self.cache_manager = cache_manager
         self.device_manager = device_manager
@@ -721,65 +722,65 @@ class InferencePipeline:
         self.lora_manager = lora_manager
         self.last_used = time.time()
         
-        logger.info("2. Loading base model and tokenizer")
+        logger.debug("2. Loading base model and tokenizer")
         try:
             # Load base model and tokenizer
             self.base_model, self.tokenizer = self.model_manager.load_base_model(
                 model_config.base_model_id,
                 quantize=model_config.quantization_bits == 4
             )
-            logger.info("3. Base model and tokenizer loaded")
+            logger.debug("3. Base model and tokenizer loaded")
             
             # Setup tokenizer
-            logger.info("4. Setting up tokenizer")
+            logger.debug("4. Setting up tokenizer")
             self.tokenizer = self.setup_tokenizer(self.tokenizer)
-            logger.info("5. Tokenizer setup completed")
+            logger.debug("5. Tokenizer setup completed")
 
-            logger.info("6. Checking model embeddings")
+            logger.debug("6. Checking model embeddings")
             # Resize model embeddings if needed
             if self.base_model.get_input_embeddings().num_embeddings != len(self.tokenizer):
-                logger.info("7. Resizing model embeddings")
+                logger.debug("7. Resizing model embeddings")
                 self.base_model.resize_token_embeddings(len(self.tokenizer))
-                logger.info("8. Model embeddings resized")
+                logger.debug("8. Model embeddings resized")
             else:
-                logger.info("7. No embedding resize needed")
+                logger.debug("7. No embedding resize needed")
             
             # Set current model
-            logger.info("9. Setting current model")
+            logger.debug("9. Setting current model")
             self.current_model = self.base_model
-            logger.info("10. Current model set")
+            logger.debug("10. Current model set")
             
             # Load adapters if specified
             if model_config.adapter_ids:
-                logger.info("11. Loading adapters")
+                logger.debug("11. Loading adapters")
                 for adapter_id in model_config.adapter_ids:
                     try:
-                        logger.info(f"12. Loading adapter {adapter_id}")
+                        logger.debug(f"12. Loading adapter {adapter_id}")
                         self.current_model = self.lora_manager.load_adapter(
                             self.current_model, adapter_id
                         )
-                        logger.info(f"13. Loaded adapter: {adapter_id}")
+                        logger.debug(f"13. Loaded adapter: {adapter_id}")
                     except Exception as e:
                         logger.error(f"Error loading adapter {adapter_id}: {e}")
                 
-                logger.info("14. Setting active adapter")
+                logger.debug("14. Setting active adapter")
                 self.lora_manager.set_active_adapter(self.current_model)
-                logger.info("15. Active adapter set")
+                logger.debug("15. Active adapter set")
             
             # Setup optimizations
-            logger.info("16. Setting up optimizations")
+            logger.debug("16. Setting up optimizations")
             if model_config.use_memory_efficient_attention:
-                logger.info("17. Setting up efficient attention")
+                logger.debug("17. Setting up efficient attention")
                 self.setup_efficient_attention()
-                logger.info("18. Efficient attention setup complete")
+                logger.debug("18. Efficient attention setup complete")
             
-            logger.info("19. Setting up mixed precision")
+            logger.debug("19. Setting up mixed precision")
             self.setup_mixed_precision()
-            logger.info("20. Mixed precision setup complete")
+            logger.debug("20. Mixed precision setup complete")
 
-            logger.info("21. Finding optimal batch size")
+            logger.debug("21. Finding optimal batch size")
             self.optimal_batch_size = self._find_optimal_batch_size()
-            logger.info(f"22. Pipeline initialization completed with optimal batch size: {self.optimal_batch_size}")
+            logger.debug(f"22. Pipeline initialization completed with optimal batch size: {self.optimal_batch_size}")
             
         except Exception as e:
             logger.error(f"Pipeline initialization error: {str(e)}")
@@ -788,30 +789,30 @@ class InferencePipeline:
 
     def setup_tokenizer(self, tokenizer: AutoTokenizer) -> AutoTokenizer:
         """Ensure tokenizer has required special tokens"""
-        logger.info("  a. Starting tokenizer setup")
+        logger.debug("  a. Starting tokenizer setup")
         if tokenizer.pad_token is None:
             if tokenizer.eos_token is not None:
                 tokenizer.pad_token = tokenizer.eos_token
-                logger.info("  b. Using EOS token as padding token")
+                logger.debug("  b. Using EOS token as padding token")
             else:
                 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                logger.info("  c. Added new [PAD] token to tokenizer")
+                logger.debug("  c. Added new [PAD] token to tokenizer")
         
-        logger.info("  d. Setting up EOS token")
+        logger.debug("  d. Setting up EOS token")
         if tokenizer.eos_token is None:
             if tokenizer.sep_token is not None:
                 tokenizer.eos_token = tokenizer.sep_token
             else:
                 tokenizer.eos_token = tokenizer.pad_token
         
-        logger.info("  e. Setting up BOS token")
+        logger.debug("  e. Setting up BOS token")
         if tokenizer.bos_token is None:
             if tokenizer.cls_token is not None:
                 tokenizer.bos_token = tokenizer.cls_token
             else:
                 tokenizer.bos_token = tokenizer.eos_token
         
-        logger.info(f"  f. Tokenizer setup complete. PAD: {tokenizer.pad_token_id}, "
+        logger.debug(f"  f. Tokenizer setup complete. PAD: {tokenizer.pad_token_id}, "
                    f"EOS: {tokenizer.eos_token_id}, BOS: {tokenizer.bos_token_id}")
         return tokenizer
     
@@ -934,13 +935,13 @@ class InferencePipeline:
 
     def setup_mixed_precision(self):
         """Configure automated mixed precision based on device capabilities"""
-        logger.info("  i. Starting mixed precision setup")
+        logger.debug("  i. Starting mixed precision setup")
         device = self.current_model.device
         dtype = torch.float32  # default
         
-        logger.info(f"  ii. Current device: {device}")
+        logger.debug(f"  ii. Current device: {device}")
         if torch.cuda.is_available() and 'cuda' in str(device):
-            logger.info("  iii. Setting up CUDA mixed precision")
+            logger.debug("  iii. Setting up CUDA mixed precision")
             compute_capability = torch.cuda.get_device_capability(device.index if hasattr(device, 'index') else 0)
             
             if compute_capability[0] >= 8:
@@ -949,16 +950,16 @@ class InferencePipeline:
                 dtype = torch.float16
                 
         elif torch.backends.mps.is_available() and 'mps' in str(device):
-            logger.info("  iv. Setting up MPS mixed precision")
+            logger.debug("  iv. Setting up MPS mixed precision")
             # For MPS, we'll stay with float32 for better compatibility
             dtype = torch.float32
         
-        logger.info(f"  v. Selected dtype: {dtype}")
+        logger.debug(f"  v. Selected dtype: {dtype}")
         if dtype != torch.float32:
-            logger.info("  vi. Converting model to selected dtype")
+            logger.debug("  vi. Converting model to selected dtype")
             self.current_model = self.current_model.to(dtype)
         
-        logger.info("  vii. Mixed precision setup complete")
+        logger.debug("  vii. Mixed precision setup complete")
         self.dtype = dtype
 
     def _find_optimal_batch_size(self, initial_batch_size: int = 1, max_batch_size: int = 128) -> int:
