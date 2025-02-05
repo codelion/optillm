@@ -8,27 +8,23 @@ logger = logging.getLogger(__name__)
 
 # Default configurations
 DEFAULT_CONFIG = {
-    "min_thinking_tokens": 128,
+    "min_thinking_tokens": 512,
     "prefill": "",
     "start_think_token": "<think>",
     "end_think_token": "</think>",
-    "tip_alpha": 3.0,  # Penalty strength
-    "tip_beta": 600,   # Penalty duration (number of tokens)
+    
+    # Combined thought transition markers and TIP configs
+    "tip_alpha": 4.0,  # Penalty strength
+    "tip_beta": 1024,   # Penalty duration (number of tokens)
     "thought_switch_tokens": [
-        "wait, but",
+        "wait",
         "alternatively",
-        "another approach",
-        "let's try",
         "instead",
-        "on the other hand",
-        "we could also",
-        "perhaps we should",
         "however",
-        "on second thought",
-        "thinking differently",
-        "let me reconsider",
-        "looking at it another way"
-    ]
+    ],
+    
+    # N-best trace generation settings
+    "num_traces": 2,  # Number of thinking traces to generate
 }
 
 class ThinkDeeperTIPProcessor:
@@ -53,26 +49,24 @@ class ThinkDeeperTIPProcessor:
         
     def adjust_logits_with_tip(self, logits: torch.Tensor, current_pos: int) -> torch.Tensor:
         """Apply Thought Switching Penalty (TIP) to logits"""
-        # Only apply penalty within the duration window after a thought starts
         tokens_since_last_switch = current_pos - self.last_thought_switch_pos
         
         if tokens_since_last_switch < self.config["tip_beta"]:
-            # Create penalty mask for thought-switching tokens
             penalty_mask = torch.zeros_like(logits)
             for token_id in self.thought_switch_tokens:
                 penalty_mask[token_id] = self.config["tip_alpha"]
             
-            # Apply penalty
             adjusted_logits = logits - penalty_mask
             return adjusted_logits
         
         return logits
 
-    @torch.inference_mode()
-    def reasoning_effort(self, messages) -> str:
-        """Generate response with ThinkDeeper + TIP"""
-        
-        messages.append({"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"})
+    def compute_reward(self, trace: str, token_count: int) -> float:
+        """Compute reward for a thinking trace - currently rewards shorter traces"""
+        return -token_count  # Negative because shorter is better
+    
+    def generate_thinking_trace(self, messages: List[Dict[str, str]]) -> Tuple[str, int]:
+        """Generate a single thinking trace"""
 
         tokens = self.tokenizer.apply_chat_template(
             messages,
@@ -102,49 +96,79 @@ class ThinkDeeperTIPProcessor:
             next_str = self.tokenizer.decode([next_token])
             logger.debug(f"Generated token {next_token} -> '{next_str}'")
 
-            # Check if this is a thought-switching token
             if next_token in self.thought_switch_tokens:
                 self.last_thought_switch_pos = current_pos
-                logger.debug(f"Detected thought switch at position {current_pos}")
 
-            # Track if we've seen the end think token
             if next_token == self.end_think_token:
                 seen_end_think = True
-                logger.debug("Found end think token")
 
-            # Need to continue generating if:
-            # 1. We hit end think/eos before min tokens OR
-            # 2. We hit eos without seeing end think token
-            if ((next_token in (self.end_think_token, self.model.config.eos_token_id) 
-                 and n_thinking_tokens < self.config["min_thinking_tokens"]) 
-                or (next_token == self.model.config.eos_token_id and not seen_end_think)):
-                
-                replacement = random.choice(self.config["thought_switch_tokens"])
-                logger.debug(f"Inserting thought transition: '{replacement}' (tokens: {n_thinking_tokens}, seen_end_think: {seen_end_think})")
-                response_chunks.append(replacement)
-                replacement_tokens = self.tokenizer.encode(replacement)
-                n_thinking_tokens += len(replacement_tokens)
-                tokens = torch.tensor([replacement_tokens]).to(tokens.device)
-                seen_end_think = False
-                logger.debug("Reset seen_end_think flag after replacement")
-                
-            elif next_token == self.model.config.eos_token_id and seen_end_think:
-                logger.debug("Reached EOS after end think token - stopping generation")
-                break
+            if next_token == self.end_think_token:
+                if n_thinking_tokens >= self.config["min_thinking_tokens"]:
+                    # We have enough tokens and found </think>, we can stop
+                    response_chunks.append(next_str)
+                    break
+                else:
+                    # Need more tokens, continue with replacement
+                    replacement = random.choice(self.config["thought_switch_tokens"])
+                    response_chunks.append(replacement)
+                    replacement_tokens = self.tokenizer.encode(replacement)
+                    n_thinking_tokens += len(replacement_tokens)
+                    tokens = torch.tensor([replacement_tokens]).to(tokens.device)
                 
             else:
                 response_chunks.append(next_str)
                 n_thinking_tokens += 1
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
                 current_pos += 1
-                logger.debug(f"Added token to response. Total thinking tokens: {n_thinking_tokens}")
 
-        # Join all chunks and trim off the initial prompt
         response = "".join(response_chunks)
-        full_response = f"{self.config['start_think_token']}\n{self.config['prefill']}{response}"
+        return response, n_thinking_tokens
+
+    def generate_final_response(self, messages: List[Dict[str, str]], selected_trace: str) -> str:
+        """Generate final response using the selected thinking trace"""
+        messages.pop()
+        messages.append({"role": "assistant", "content": selected_trace})
         
-        logger.debug(f"Final response length: {len(full_response)} chars")
-        return full_response
+        tokens = self.tokenizer.apply_chat_template(
+            messages,
+            continue_final_message=True,
+            return_tensors="pt"
+        )
+        tokens = tokens.to(self.model.device)
+        
+        with torch.inference_mode():
+            outputs = self.model.generate(
+                tokens,
+                temperature=0.6,
+                top_p=0.95,
+                do_sample=True,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+            )
+        
+        return self.tokenizer.decode(outputs[0][len(tokens[0]):], skip_special_tokens=True)
+
+    @torch.inference_mode()
+    def reasoning_effort(self, messages: List[Dict[str, str]]) -> str:
+        """Generate multiple thinking traces and select the best one"""
+        messages.append({"role": "assistant", "content": f"{self.config['start_think_token']}\n{self.config['prefill']}"})
+        # Generate n thinking traces
+        traces_with_rewards = []
+        for i in range(self.config["num_traces"]):
+            logger.info(f"Generating thinking trace {i+1}/{self.config['num_traces']}")
+            trace, token_count = self.generate_thinking_trace(messages)
+            reward = self.compute_reward(trace, token_count)
+            traces_with_rewards.append((trace, reward))
+            logger.info(f"Trace {i+1} generated with reward {reward}")
+        
+        # Select the best trace
+        best_trace, best_reward = max(traces_with_rewards, key=lambda x: x[1])
+        logger.info(f"Selected best trace with reward {best_reward}")
+        
+        # Generate final response using the best trace
+        final_response = self.generate_final_response(messages, best_trace)
+        
+        return final_response
 
 def thinkdeeper_decode(
     model: PreTrainedModel, 
@@ -152,8 +176,8 @@ def thinkdeeper_decode(
     messages: List[Dict[str, str]], 
     request_config: Dict[str, Any] = None
 ) -> str:
-    """Main plugin execution function with ThinkDeeper + TIP"""
-    logger.info("Starting ThinkDeeper+TIP processing")
+    """Main plugin execution function with ThinkDeeper + TIP and n-best selection"""
+    logger.info("Starting ThinkDeeper+TIP processing with n-best selection")
     
     # Extract config from request_config if provided
     config = DEFAULT_CONFIG.copy()
@@ -163,12 +187,12 @@ def thinkdeeper_decode(
         for key in DEFAULT_CONFIG:
             if key in thinkdeeper_config:
                 config[key] = thinkdeeper_config[key]
+
+    logger.info(config)
     
     try:
-        # Create processor and generate response
         processor = ThinkDeeperTIPProcessor(config, tokenizer, model)
         response = processor.reasoning_effort(messages)
-        
         return response
         
     except Exception as e:

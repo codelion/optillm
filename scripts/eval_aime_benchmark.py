@@ -15,7 +15,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
+# client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
+
+client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -106,13 +108,20 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
         Union[str, List[Dict]]: Either a string response or list of attempt dictionaries
     """
     try:
-        response = client.with_options(timeout=1000.0).chat.completions.create(
+        response = client.with_options(timeout=1800.0).chat.completions.create(
             model=model,
             temperature=0.6,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=32768, # for thinking models, we need to use a lot more tokens
+            max_tokens=16384, # for thinking models, we need to use a lot more tokens
+            # extra_body = {
+            #     "decoding" : "thinkdeeper",
+            #     # "min_thinking_tokens": 0,
+            #     # "tip_alpha": 0,  # Penalty strength
+            #     # "tip_beta": 0, 
+            #     # "num_traces" : 1,
+            # }
         )
         
         # If there's more than one choice, format as attempts

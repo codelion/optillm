@@ -571,23 +571,64 @@ class ModelManager:
         def _load_model():
             logger.info(f"Loading base model: {model_id}")
             
-            # Determine optimal device
             device = self.device_manager.get_optimal_device()
             logger.info(f"Using device: {device}")
             
             # Load tokenizer
             tokenizer = AutoTokenizer.from_pretrained(model_id)
             
-            # Load model with quantization and device mapping
-            model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                device_map='auto' if 'cuda' in device else device,
-                trust_remote_code=True
-            )
+            # Base kwargs for model loading
+            model_kwargs = {
+                "trust_remote_code": True,
+                "device_map": "auto" if 'cuda' in device else device
+            }
             
-            logger.info("Model loaded successfully")
-
-            if quantize and 'cuda' in device:
+            # Configure device-specific optimizations
+            if 'cuda' in device:
+                compute_capability = torch.cuda.get_device_capability(0)
+                if compute_capability[0] >= 8:
+                    model_kwargs["torch_dtype"] = torch.bfloat16
+                elif compute_capability[0] >= 7:
+                    model_kwargs["torch_dtype"] = torch.float16
+                    
+                # Check for flash attention availability
+                try:
+                    import flash_attn
+                    has_flash_attn = True
+                    logger.info("Flash Attention 2 is available")
+                    model_kwargs["attn_implementation"] = "flash_attention_2"
+                except ImportError:
+                    has_flash_attn = False
+                    logger.info("Flash Attention 2 is not installed - falling back to default attention")
+                    
+            elif 'mps' in device:
+                model_kwargs["torch_dtype"] = torch.float32
+                logger.info("Using MPS device with float32 precision")
+            else:
+                model_kwargs["torch_dtype"] = torch.float32
+                logger.info("Using CPU device with float32 precision")
+            
+            # Load model with configured optimizations
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_id,
+                    **model_kwargs
+                )
+            except Exception as e:
+                # If loading fails with flash attention, try without it
+                if "attn_implementation" in model_kwargs:
+                    logger.warning(f"Failed to load model with Flash Attention: {e}")
+                    logger.info("Retrying without Flash Attention...")
+                    model_kwargs.pop("attn_implementation")
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_id,
+                        **model_kwargs
+                    )
+            
+            logger.info(f"Model loaded successfully with dtype: {model_kwargs['torch_dtype']}")
+            
+            # Only apply quantization for CUDA devices when not using mixed precision
+            if quantize and 'cuda' in device and model_kwargs["torch_dtype"] == torch.float32:
                 model = self.quantize_model(model)
             
             return model, tokenizer
@@ -765,18 +806,7 @@ class InferencePipeline:
                 
                 logger.debug("14. Setting active adapter")
                 self.lora_manager.set_active_adapter(self.current_model)
-                logger.debug("15. Active adapter set")
-            
-            # Setup optimizations
-            logger.debug("16. Setting up optimizations")
-            if model_config.use_memory_efficient_attention:
-                logger.debug("17. Setting up efficient attention")
-                self.setup_efficient_attention()
-                logger.debug("18. Efficient attention setup complete")
-            
-            logger.debug("19. Setting up mixed precision")
-            self.setup_mixed_precision()
-            logger.debug("20. Mixed precision setup complete")
+                logger.debug("15. Active adapter set")          
 
             logger.debug("21. Finding optimal batch size")
             self.optimal_batch_size = self._find_optimal_batch_size()
@@ -788,32 +818,14 @@ class InferencePipeline:
             raise
 
     def setup_tokenizer(self, tokenizer: AutoTokenizer) -> AutoTokenizer:
-        """Ensure tokenizer has required special tokens"""
+        """Use tokenizer with its default configuration for inference"""
         logger.debug("  a. Starting tokenizer setup")
-        if tokenizer.pad_token is None:
-            if tokenizer.eos_token is not None:
-                tokenizer.pad_token = tokenizer.eos_token
-                logger.debug("  b. Using EOS token as padding token")
-            else:
-                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                logger.debug("  c. Added new [PAD] token to tokenizer")
         
-        logger.debug("  d. Setting up EOS token")
-        if tokenizer.eos_token is None:
-            if tokenizer.sep_token is not None:
-                tokenizer.eos_token = tokenizer.sep_token
-            else:
-                tokenizer.eos_token = tokenizer.pad_token
+        # Just use existing special tokens without modification
+        logger.debug(f"  b. Using tokenizer with vocab size: {len(tokenizer)}")
+        logger.debug(f"  c. Special tokens: PAD={tokenizer.pad_token_id}, "
+                    f"EOS={tokenizer.eos_token_id}, BOS={tokenizer.bos_token_id}")
         
-        logger.debug("  e. Setting up BOS token")
-        if tokenizer.bos_token is None:
-            if tokenizer.cls_token is not None:
-                tokenizer.bos_token = tokenizer.cls_token
-            else:
-                tokenizer.bos_token = tokenizer.eos_token
-        
-        logger.debug(f"  f. Tokenizer setup complete. PAD: {tokenizer.pad_token_id}, "
-                   f"EOS: {tokenizer.eos_token_id}, BOS: {tokenizer.bos_token_id}")
         return tokenizer
     
     def generate(
@@ -932,35 +944,6 @@ class InferencePipeline:
                     if hasattr(layer, 'attention'):
                         layer.attention.self = self.efficient_attention
             logger.info("Memory-efficient attention mechanism enabled")
-
-    def setup_mixed_precision(self):
-        """Configure automated mixed precision based on device capabilities"""
-        logger.debug("  i. Starting mixed precision setup")
-        device = self.current_model.device
-        dtype = torch.float32  # default
-        
-        logger.debug(f"  ii. Current device: {device}")
-        if torch.cuda.is_available() and 'cuda' in str(device):
-            logger.debug("  iii. Setting up CUDA mixed precision")
-            compute_capability = torch.cuda.get_device_capability(device.index if hasattr(device, 'index') else 0)
-            
-            if compute_capability[0] >= 8:
-                dtype = torch.bfloat16
-            elif compute_capability[0] >= 7:
-                dtype = torch.float16
-                
-        elif torch.backends.mps.is_available() and 'mps' in str(device):
-            logger.debug("  iv. Setting up MPS mixed precision")
-            # For MPS, we'll stay with float32 for better compatibility
-            dtype = torch.float32
-        
-        logger.debug(f"  v. Selected dtype: {dtype}")
-        if dtype != torch.float32:
-            logger.debug("  vi. Converting model to selected dtype")
-            self.current_model = self.current_model.to(dtype)
-        
-        logger.debug("  vii. Mixed precision setup complete")
-        self.dtype = dtype
 
     def _find_optimal_batch_size(self, initial_batch_size: int = 1, max_batch_size: int = 128) -> int:
         """Find optimal batch size through binary search with memory monitoring"""
