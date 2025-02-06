@@ -370,7 +370,6 @@ class CacheManager:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
-                # Double-checked locking pattern
                 if cls._instance is None:
                     instance = super().__new__(cls)
                     instance._initialized = False
@@ -378,7 +377,6 @@ class CacheManager:
         return cls._instance
     
     def __init__(self, max_size: int = 5):
-        # Only initialize once
         if self._initialized:
             return
             
@@ -389,16 +387,13 @@ class CacheManager:
                 self.model_cache = OrderedDict()
                 self.tokenizer_cache = OrderedDict()
                 self.adapter_cache = OrderedDict()
+                self.model_adapter_map = {}  # Maps model ID to list of loaded adapter IDs
                 self.cache_stats = defaultdict(lambda: {"hits": 0, "misses": 0})
                 self._initialized = True
                 logger.info("CacheManager singleton initialized")
     
     def get_or_load_model(self, model_key: str, loader_fn) -> Tuple[Any, Any]:
-        """
-        Get or load model and tokenizer with minimal locking.
-        Only locks during cache access, not during model loading.
-        """
-        # First check cache without loading
+        """Get or load model and tokenizer with minimal locking."""
         cached_model = cached_tokenizer = None
         cache_hit = False
         
@@ -415,85 +410,90 @@ class CacheManager:
         if cache_hit:
             return cached_model, cached_tokenizer
 
-        # Load model outside of any locks
         logger.info(f"Loading model and tokenizer: {model_key}")
         model, tokenizer = loader_fn()
         
-        # Cache the results
         with self._lock:
-            # Check if another thread loaded the model while we were loading
             if model_key in self.model_cache and model_key in self.tokenizer_cache:
-                # Use the already cached version
                 cached_model = self.model_cache[model_key]
                 cached_tokenizer = self.tokenizer_cache[model_key]
                 self.cache_stats[model_key]["hits"] += 1
                 logger.debug(f"Using already cached model: {model_key}")
                 return cached_model, cached_tokenizer
             
-            # Cache our newly loaded model
             self.model_cache[model_key] = model
             self.tokenizer_cache[model_key] = tokenizer
             self.cache_stats[model_key]["misses"] += 1
+            self.model_adapter_map[model_key] = []  # Initialize empty adapter list for new model
             
-            # Cleanup if needed
             self._cleanup_caches()
             
             logger.info(f"Successfully cached model and tokenizer: {model_key}")
             return model, tokenizer
     
-    def get_or_load_adapter(self, adapter_key: str, loader_fn):
-        """Get or load adapter with minimal locking."""
+    def get_or_load_adapter(self, model_key: str, adapter_key: str, loader_fn):
+        """Get or load adapter with enhanced caching."""
+        cache_key = f"{model_key}_{adapter_key}"
+        
         with self._lock:
-            if adapter_key in self.adapter_cache:
-                adapter = self.adapter_cache[adapter_key]
-                self.adapter_cache.move_to_end(adapter_key)
+            if cache_key in self.adapter_cache:
+                adapter = self.adapter_cache[cache_key]
+                self.adapter_cache.move_to_end(cache_key)
+                logger.debug(f"Cache hit for adapter: {cache_key}")
                 return adapter
         
-        # Load adapter outside lock
         adapter = loader_fn()
         
-        # Cache the adapter
         with self._lock:
-            self.adapter_cache[adapter_key] = adapter
+            self.adapter_cache[cache_key] = adapter
+            if model_key not in self.model_adapter_map:
+                self.model_adapter_map[model_key] = []
+            if adapter_key not in self.model_adapter_map[model_key]:
+                self.model_adapter_map[model_key].append(adapter_key)
             self._cleanup_caches()
+            logger.info(f"Successfully cached adapter: {cache_key}")
             return adapter
+    
+    def get_model_adapters(self, model_key: str) -> List[str]:
+        """Get list of adapter IDs loaded for a specific model."""
+        with self._lock:
+            return self.model_adapter_map.get(model_key, [])
     
     def _cleanup_caches(self):
         """Clean up caches if they exceed max size."""
-        # Already under self._lock when called
         while len(self.model_cache) > self.max_size:
-            _, model = self.model_cache.popitem(last=False)
+            model_key, model = self.model_cache.popitem(last=False)
             if hasattr(model, 'cpu'):
                 model.cpu()
-        
+            # Clean up associated adapters
+            if model_key in self.model_adapter_map:
+                for adapter_id in self.model_adapter_map[model_key]:
+                    cache_key = f"{model_key}_{adapter_id}"
+                    if cache_key in self.adapter_cache:
+                        self.adapter_cache.pop(cache_key)
+                self.model_adapter_map.pop(model_key)
+            
         while len(self.tokenizer_cache) > self.max_size:
             self.tokenizer_cache.popitem(last=False)
             
-        while len(self.adapter_cache) > self.max_size:
-            _, adapter = self.adapter_cache.popitem(last=False)
+        # Cleanup orphaned adapters
+        valid_cache_keys = {
+            f"{model_key}_{adapter_id}"
+            for model_key, adapter_ids in self.model_adapter_map.items()
+            for adapter_id in adapter_ids
+        }
+        
+        orphaned_adapters = [
+            key for key in self.adapter_cache.keys()
+            if key not in valid_cache_keys
+        ]
+        
+        for key in orphaned_adapters:
+            adapter = self.adapter_cache.pop(key)
             if hasattr(adapter, 'cpu'):
                 adapter.cpu()
                 
         torch.cuda.empty_cache()
-    
-    def clear_all(self):
-        """Clear all caches."""
-        with self._lock:
-            self.model_cache.clear()
-            self.tokenizer_cache.clear()
-            self.adapter_cache.clear()
-            torch.cuda.empty_cache()
-            logger.info("All caches cleared")
-    
-    def get_stats(self):
-        """Get cache statistics."""
-        with self._lock:
-            return {
-                "model_cache_size": len(self.model_cache),
-                "tokenizer_cache_size": len(self.tokenizer_cache),
-                "adapter_cache_size": len(self.adapter_cache),
-                "stats": dict(self.cache_stats)
-            }
 
     @classmethod
     def get_instance(cls, max_size: int = 5) -> 'CacheManager':
@@ -602,11 +602,18 @@ class ModelManager:
                     logger.info("Flash Attention 2 is not installed - falling back to default attention")
                     
             elif 'mps' in device:
-                model_kwargs["torch_dtype"] = torch.float32
-                logger.info("Using MPS device with float32 precision")
+                # MPS supports FP16
+                model_kwargs["torch_dtype"] = torch.float16
+                # model_kwargs["torch_dtype"] = torch.float32
+                logger.info("Using MPS device with float16 precision")
             else:
-                model_kwargs["torch_dtype"] = torch.float32
-                logger.info("Using CPU device with float32 precision")
+                # CPU can use FP16 if available
+                if hasattr(torch.cpu, 'has_fp16') and torch.cpu.has_fp16:
+                    model_kwargs["torch_dtype"] = torch.float16
+                    logger.info("Using CPU device with float16 precision")
+                else:
+                    model_kwargs["torch_dtype"] = torch.float32
+                    logger.info("Using CPU device with float32 precision - FP16 not supported")
             
             # Load model with configured optimizations
             try:
@@ -615,11 +622,19 @@ class ModelManager:
                     **model_kwargs
                 )
             except Exception as e:
-                # If loading fails with flash attention, try without it
                 if "attn_implementation" in model_kwargs:
                     logger.warning(f"Failed to load model with Flash Attention: {e}")
                     logger.info("Retrying without Flash Attention...")
                     model_kwargs.pop("attn_implementation")
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_id,
+                        **model_kwargs
+                    )
+                elif model_kwargs["torch_dtype"] == torch.float16:
+                    # If FP16 fails, fallback to FP32
+                    logger.warning(f"Failed to load model with FP16: {e}")
+                    logger.info("Falling back to FP32...")
+                    model_kwargs["torch_dtype"] = torch.float32
                     model = AutoModelForCausalLM.from_pretrained(
                         model_id,
                         **model_kwargs
@@ -636,31 +651,33 @@ class ModelManager:
         return self.cache_manager.get_or_load_model(model_id, _load_model)
 
 class LoRAManager:
-    """LoRA manager with enhanced error handling"""
+    """LoRA manager with enhanced error handling and caching"""
     
     def __init__(self, cache_manager: CacheManager):
         self.cache_manager = cache_manager
-        self.loaded_adapters = {}  # Maps model -> list of loaded adapter_ids
+        self.loaded_adapters = {}
+        self.adapter_names = {}  # Maps adapter_id to valid adapter name
 
     def _get_adapter_name(self, adapter_id: str) -> str:
-        """Create a valid adapter name from adapter_id by removing invalid characters"""
-        # Replace invalid characters with underscore
+        """Create a valid adapter name from adapter_id."""
+        if adapter_id in self.adapter_names:
+            return self.adapter_names[adapter_id]
+            
         name = adapter_id.replace('.', '_').replace('-', '_')
-        # Remove any other non-alphanumeric characters
         name = ''.join(c if c.isalnum() or c == '_' else '' for c in name)
-        # Ensure it starts with a letter or underscore
         if name[0].isdigit():
             name = f"adapter_{name}"
+            
+        self.adapter_names[adapter_id] = name
         return name
 
     def validate_adapter(self, adapter_id: str) -> bool:
         """Validate if adapter exists and is compatible"""
         try:
-            # First check if adapter config exists
             config = PeftConfig.from_pretrained(
                 adapter_id,
                 trust_remote_code=True,
-                use_auth_token=os.getenv("HF_TOKEN")  # Support private repos
+                use_auth_token=os.getenv("HF_TOKEN")
             )
             return True
         except Exception as e:
@@ -668,62 +685,51 @@ class LoRAManager:
             return False
 
     def load_adapter(self, base_model: PreTrainedModel, adapter_id: str) -> PreTrainedModel:
-        """Load a LoRA adapter with enhanced error handling"""
+        """Load a LoRA adapter with enhanced caching"""
+        model_key = base_model.config._name_or_path
+        
         def _load_adapter():
             logger.info(f"Loading LoRA adapter: {adapter_id}")
             
-            # Validate adapter before loading
             if not self.validate_adapter(adapter_id):
                 error_msg = f"Adapter {adapter_id} not found or is not compatible"
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             
             try:
-                # Generate a consistent name for this adapter
                 adapter_name = self._get_adapter_name(adapter_id)
-
+                
                 config = PeftConfig.from_pretrained(
-                adapter_id,
-                trust_remote_code=True,
-                use_auth_token=os.getenv("HF_TOKEN")  # Support private repos
+                    adapter_id,
+                    trust_remote_code=True,
+                    use_auth_token=os.getenv("HF_TOKEN")
                 )
                 
-                # Load adapter into existing PeftModel
                 model = base_model
                 model.add_adapter(
                     config,
                     adapter_name = adapter_name,
                 )
                 
-                # Track loaded adapter
                 if model not in self.loaded_adapters:
                     self.loaded_adapters[model] = []
-                self.loaded_adapters[model].append(adapter_id)
+                if adapter_id not in self.loaded_adapters[model]:
+                    self.loaded_adapters[model].append(adapter_id)
                 
                 return model
-            
+                
             except Exception as e:
-                # Provide more detailed error message
                 error_msg = f"Failed to load adapter {adapter_id}: {str(e)}"
                 logger.error(error_msg)
-                
-                # Check common issues
-                if "not found" in str(e).lower():
-                    error_msg += "\nPossible causes:\n" \
-                               "1. Adapter ID is incorrect\n" \
-                               "2. Adapter is in a private repository (set HF_TOKEN)\n" \
-                               "3. No internet connection"
-                elif "incompatible" in str(e).lower():
-                    error_msg += "\nPossible causes:\n" \
-                               "1. Adapter architecture mismatch with base model\n" \
-                               "2. LoRA config incompatibility"
-                
                 raise RuntimeError(error_msg) from e
 
-        return self.cache_manager.get_or_load_adapter(f"{base_model.config._name_or_path}_{adapter_id}", _load_adapter)
+        return self.cache_manager.get_or_load_adapter(model_key, adapter_id, _load_adapter)
 
     def set_active_adapter(self, model: PeftModel, adapter_id: str = None) -> bool:
         """Set a specific adapter as active with error handling"""
+        if not isinstance(model, PeftModel):
+            logger.warning("Model is not a PeftModel, cannot set active adapter")
+            return False
             
         available_adapters = self.loaded_adapters.get(model, [])
         
@@ -731,31 +737,23 @@ class LoRAManager:
             logger.warning("No adapters loaded in model")
             return False
             
-        # If no adapter specified, use the last loaded one
         if adapter_id is None:
             adapter_id = available_adapters[-1]
             
         if adapter_id in available_adapters:
             try:
-                model.enable_adapters()
-                adapter_name = self._get_adapter_name(adapter_id)
-                model.set_adapter(adapter_name)
+                model.set_adapter(self._get_adapter_name(adapter_id))
                 logger.info(f"Successfully set active adapter to: {adapter_id}")
                 return True
             except Exception as e:
-                logger.error(f"Error setting adapter {adapter_id} out of {available_adapters}: {str(e)}")
+                logger.error(f"Error setting adapter {adapter_id}: {str(e)}")
                 return False
         else:
             logger.warning(f"Requested adapter {adapter_id} not loaded. Available adapters: {available_adapters}")
             return False
         
-    def get_loaded_adapters(self, model: PeftModel) -> List[str]:
-        """Get list of loaded adapters for a model"""
-        return self.loaded_adapters.get(model, [])
-    
 class InferencePipeline:
     def __init__(self, model_config: ModelConfig, cache_manager, device_manager, model_manager, lora_manager):
-        logger.debug("1. Starting pipeline initialization")
         self.model_config = model_config
         self.cache_manager = cache_manager
         self.device_manager = device_manager
@@ -763,54 +761,36 @@ class InferencePipeline:
         self.lora_manager = lora_manager
         self.last_used = time.time()
         
-        logger.debug("2. Loading base model and tokenizer")
         try:
-            # Load base model and tokenizer
             self.base_model, self.tokenizer = self.model_manager.load_base_model(
                 model_config.base_model_id,
                 quantize=model_config.quantization_bits == 4
             )
-            logger.debug("3. Base model and tokenizer loaded")
             
-            # Setup tokenizer
-            logger.debug("4. Setting up tokenizer")
             self.tokenizer = self.setup_tokenizer(self.tokenizer)
-            logger.debug("5. Tokenizer setup completed")
-
-            logger.debug("6. Checking model embeddings")
-            # Resize model embeddings if needed
+            
             if self.base_model.get_input_embeddings().num_embeddings != len(self.tokenizer):
-                logger.debug("7. Resizing model embeddings")
                 self.base_model.resize_token_embeddings(len(self.tokenizer))
-                logger.debug("8. Model embeddings resized")
-            else:
-                logger.debug("7. No embedding resize needed")
             
-            # Set current model
-            logger.debug("9. Setting current model")
             self.current_model = self.base_model
-            logger.debug("10. Current model set")
             
-            # Load adapters if specified
             if model_config.adapter_ids:
-                logger.debug("11. Loading adapters")
                 for adapter_id in model_config.adapter_ids:
                     try:
-                        logger.debug(f"12. Loading adapter {adapter_id}")
                         self.current_model = self.lora_manager.load_adapter(
                             self.current_model, adapter_id
                         )
-                        logger.debug(f"13. Loaded adapter: {adapter_id}")
                     except Exception as e:
                         logger.error(f"Error loading adapter {adapter_id}: {e}")
                 
-                logger.debug("14. Setting active adapter")
-                self.lora_manager.set_active_adapter(self.current_model)
-                logger.debug("15. Active adapter set")          
-
-            logger.debug("21. Finding optimal batch size")
+                # Set active adapter and verify it's set correctly
+                if isinstance(self.current_model, PeftModel):
+                    success = self.lora_manager.set_active_adapter(self.current_model)
+                    if not success:
+                        logger.error("Failed to set active adapter")
+            
+            self.dtype = self.current_model.dtype
             self.optimal_batch_size = self._find_optimal_batch_size()
-            logger.debug(f"22. Pipeline initialization completed with optimal batch size: {self.optimal_batch_size}")
             
         except Exception as e:
             logger.error(f"Pipeline initialization error: {str(e)}")
@@ -827,6 +807,23 @@ class InferencePipeline:
                     f"EOS={tokenizer.eos_token_id}, BOS={tokenizer.bos_token_id}")
         
         return tokenizer
+
+    def get_optimized_generation_config(self, generation_params: Optional[Dict[str, Any]] = None) -> Dict:
+        """Get optimized generation config"""
+        config = {
+            "max_new_tokens": generation_params.get("max_new_tokens", 4096),
+            "do_sample": generation_params.get("temperature", 1.0) > 0,
+            "temperature": generation_params.get("temperature", 1.0),
+            "top_p": generation_params.get("top_p", 0.95),
+            "num_return_sequences": generation_params.get("num_return_sequences", 1),
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+            "return_dict_in_generate": True,
+            "output_scores": generation_params.get("logprobs", False),
+            "use_cache": True,
+            "return_legacy_cache": True,  # To avoid warning
+        }
+        return config
     
     def generate(
         self,
@@ -834,14 +831,21 @@ class InferencePipeline:
         generation_params: Optional[Dict[str, Any]] = None
     ) -> Tuple[List[str], List[int]]:
         """Generate completions with optional logprobs"""
+        start_time = time.time()
+
+        # First: Set pad token if needed
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # Tokenize input
+        # Tokenize with batching disabled for single prompts
+        tokenize_start = time.time()
         inputs = self.tokenizer(
             prompt,
             padding=True,
             truncation=True,
-            return_tensors="pt"
+            return_tensors="pt",
         ).to(self.current_model.device)
+        logger.info(f"Tokenization time: {time.time() - tokenize_start:.2f}s")
         
         # Extract logprobs parameters
         calculate_logprobs = generation_params.get("logprobs", False)
@@ -852,20 +856,10 @@ class InferencePipeline:
         
         if top_logprobs and not (0 <= top_logprobs <= 20):
             raise ValueError("top_logprobs must be between 0 and 20")
-        
-        # Configure generation parameters
-        gen_config = {
-            "max_new_tokens": generation_params.get("max_new_tokens", 4096),
-            "do_sample": generation_params.get("temperature", 1.0) > 0,
-            "temperature": generation_params.get("temperature", 1.0),
-            "top_p": generation_params.get("top_p", 1.0),
-            "num_return_sequences": generation_params.get("num_return_sequences", 1),
-            "pad_token_id": self.tokenizer.pad_token_id,
-            "eos_token_id": self.tokenizer.eos_token_id,
-            "return_dict_in_generate": True,
-            "output_scores": calculate_logprobs,
-        }
-        
+             
+        # Get optimized generation config
+        gen_config = self.get_optimized_generation_config(generation_params)
+
         # Add optional parameters
         if generation_params:
             if generation_params.get("presence_penalty", 0) != 0:
@@ -881,18 +875,21 @@ class InferencePipeline:
                 torch.manual_seed(generation_params["seed"])
                 if torch.cuda.is_available():
                     torch.cuda.manual_seed(generation_params["seed"])
-                    
+
         # Generate responses
-        with torch.amp.autocast('cuda', dtype=self.dtype):
-            with torch.no_grad():
-                outputs = self.current_model.generate(
-                    **inputs,
-                    **gen_config
-                )
+        generate_start = time.time()
+        with torch.inference_mode():  # Faster than no_grad
+            outputs = self.current_model.generate(
+                **inputs,
+                **gen_config
+            )
+        logger.info(f"Generation time: {time.time() - generate_start:.2f}s")
         
         generated_sequences = outputs.sequences
         input_length = inputs['input_ids'].shape[1]
         
+        # Process outputs
+        process_start = time.time()
         responses = []
         token_counts = []
         logprobs_results = []
@@ -928,7 +925,10 @@ class InferencePipeline:
                 })
             else:
                 logprobs_results.append(None)
-        logger.debug(f"Logprobs_results : {logprobs_results}")        
+        
+        logger.info(f"Post-processing time: {time.time() - process_start:.2f}s")
+        logger.info(f"Total generation time: {time.time() - start_time:.2f}s")
+        
         return responses, token_counts, logprobs_results
     
     def setup_efficient_attention(self):
@@ -1337,8 +1337,11 @@ class InferenceClient:
                 # Entropy specific params
                 top_k: int = 27,
                 min_p: float = 0.03,
-                replacements: List[str] = ["\nWait, but", "\nHmm", "\nSo"],
-                min_thinking_tokens: int = 128,
+                thought_switch_tokens: List[str] = ["wait", "alternatively", "instead","however"],
+                min_thinking_tokens: int = 512,
+                tip_alpha: float = 4.0,
+                tip_beta: int = 1024,
+                num_traces: int = 1,
                 prefill: str = "",
                 start_think_token: str ="<think>",
                 end_think_token: str = "</think>",
@@ -1352,8 +1355,6 @@ class InferenceClient:
                 logger.info(f"Getting pipeline for model: {model}")
                 pipeline = self.client.get_pipeline(model)
                 logger.info("Pipeline acquired")
-
-                pipeline = self.client.get_pipeline(model)
 
                 # Set active adapter if specified
                 if active_adapter is not None:
@@ -1443,11 +1444,14 @@ class InferenceClient:
 
                         elif decoding == "thinkdeeper":
                             thinkdeeper_config = {
-                                "replacements": replacements,
+                                "thought_switch_tokens": thought_switch_tokens,
                                 "min_thinking_tokens": min_thinking_tokens,
                                 "prefill": prefill,
                                 "start_think_token" : start_think_token,
                                 "end_think_token" : end_think_token,
+                                "num_traces" : num_traces,
+                                "tip_alpha" : tip_alpha,
+                                "tip_beta" : tip_beta,
                             }
                             result = thinkdeeper_decode(
                                 pipeline.current_model,
