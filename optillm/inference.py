@@ -1337,7 +1337,7 @@ class InferenceClient:
                 # Entropy specific params
                 top_k: int = 27,
                 min_p: float = 0.03,
-                thought_switch_tokens: List[str] = ["wait", "alternatively", "instead","however"],
+                thought_switch_tokens: List[str] = ["Wait,", "Alternatively,"],
                 min_thinking_tokens: int = 512,
                 tip_alpha: float = 4.0,
                 tip_beta: int = 1024,

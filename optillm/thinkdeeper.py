@@ -17,10 +17,8 @@ DEFAULT_CONFIG = {
     "tip_alpha": 4.0,  # Penalty strength
     "tip_beta": 1024,   # Penalty duration (number of tokens)
     "thought_switch_tokens": [
-        "wait",
-        "alternatively",
-        "instead",
-        "however",
+        "Wait,",
+        "Alternatively,",
     ],
     
     # N-best trace generation settings
@@ -120,7 +118,7 @@ class ThinkDeeperTIPProcessor:
                     current_pos += 1
 
                 # Safety check for maximum tokens
-                if n_thinking_tokens > self.config["min_thinking_tokens"] * 2:
+                if n_thinking_tokens > self.config["min_thinking_tokens"] * 4:
                     logger.warning("Exceeded maximum thinking tokens, forcing end")
                     response_chunks.append(self.tokenizer.decode([self.end_think_token]))
                     break
@@ -133,7 +131,7 @@ class ThinkDeeperTIPProcessor:
             raise
 
     def generate_final_response(self, selected_trace: str, kv: DynamicCache = None) -> str:
-        """Generate final response using the selected trace, optionally continuing with existing KV cache"""
+        """Generate final response using the selected trace with greedy decoding"""
         # If there's no KV cache provided, start fresh
         if kv is None:
             kv = DynamicCache()
@@ -143,11 +141,8 @@ class ThinkDeeperTIPProcessor:
         
         while True:
             out = self.model(input_ids=tokens, past_key_values=kv, use_cache=True)
-            logits = out.logits[0, -1, :]
-            
-            next_token = torch.multinomial(
-                torch.softmax(logits, dim=-1), 1
-            ).item()
+            # Use argmax instead of sampling - take most likely token
+            next_token = out.logits[0, -1, :].argmax().item()
             
             if next_token == self.tokenizer.eos_token_id:
                 break
@@ -156,7 +151,7 @@ class ThinkDeeperTIPProcessor:
             next_str = self.tokenizer.decode([next_token])
             response_chunks.append(next_str)
             tokens = torch.tensor([[next_token]]).to(tokens.device)
-            
+        
         return "".join(response_chunks)
 
     @torch.inference_mode()
@@ -171,6 +166,7 @@ class ThinkDeeperTIPProcessor:
         for i in range(self.config["num_traces"]):
             logger.info(f"Generating thinking trace {i+1}/{self.config['num_traces']}")
             trace, token_count = self.generate_thinking_trace(messages_copy, kv)
+            logger.info(f"{trace}")
             reward = self.compute_reward(trace, token_count)
             traces_with_rewards.append((trace, reward))
             logger.info(f"Trace {i+1} generated with reward {reward}")
@@ -181,8 +177,11 @@ class ThinkDeeperTIPProcessor:
         
         # Generate final response using the best trace and the final KV cache state
         final_response = self.generate_final_response(best_trace, kv)
+        logger.info(f"{final_response}")
+        # Compose the complete response with thinking structure
+        complete_response = f"{self.config['start_think_token']}\n{self.config['prefill']}\n{best_trace}\n{final_response}"
         
-        return final_response
+        return complete_response
 
 def thinkdeeper_decode(
     model: PreTrainedModel, 
