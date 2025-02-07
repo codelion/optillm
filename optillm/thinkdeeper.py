@@ -118,9 +118,8 @@ class ThinkDeeperTIPProcessor:
                     current_pos += 1
 
                 # Safety check for maximum tokens
-                if n_thinking_tokens > self.config["min_thinking_tokens"] * 4:
+                if n_thinking_tokens > self.config["min_thinking_tokens"] * 2:
                     logger.warning("Exceeded maximum thinking tokens, forcing end")
-                    response_chunks.append(self.tokenizer.decode([self.end_think_token]))
                     break
 
             response = "".join(response_chunks)
