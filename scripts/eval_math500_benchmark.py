@@ -20,8 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-# client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
+client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
+# client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
 SYSTEM_PROMPT = '''You are solving mathematics problems.
 
@@ -567,9 +567,9 @@ def get_llm_response(problem: str, model: str) -> str:
                 {"role": "user", "content": SYSTEM_PROMPT + "\n" + problem}
             ],
             max_tokens=4096, # for thinking models, we need to use a lot more tokens
-            extra_body = {
-                "decoding" : "thinkdeeper",
-            }
+            # extra_body = {
+            #     "decoding" : "thinkdeeper",
+            # }
         )
         return response.choices[0].message.content.strip()
         
