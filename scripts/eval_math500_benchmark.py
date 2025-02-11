@@ -164,7 +164,7 @@ def normalize_matrix(matrix_str: str) -> str:
             normalized_rows.append('&'.join(entries))
         
         # Reconstruct the matrix
-        result = f"\\begin{{pmatrix}}{' \\\\ '.join(normalized_rows)}\\end{{pmatrix}}"
+        result = r"\begin{pmatrix}" + ' \\\\ '.join(normalized_rows) + r"\end{pmatrix}"
         logger.debug(f"Normalized matrix result: {repr(result)}")
         return result
         
