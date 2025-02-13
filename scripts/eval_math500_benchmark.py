@@ -82,14 +82,18 @@ def normalize_number(num_str: str) -> str:
     logger.debug(f"Normalizing number: {repr(num_str)}")
     try:
         # Remove commas, currency symbols, units, and whitespace
-        cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$', '', num_str).strip()
+        cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$|\s*\\text{[^}]+}', '', num_str).strip()
         # Convert to float and back to handle scientific notation if present
         num = float(cleaned)
         if 1e-5 <= abs(num) <= 1e6:
             # For regular numbers, remove trailing zeros after decimal
             # For currency, keep two decimal places
             if '.' in num_str:  # If original had decimal, keep decimal format
-                result = f"{num:.2f}"
+                # Always include leading zero for decimals less than 1
+                if 0 < abs(num) < 1:
+                    result = f"{num:.6f}".rstrip('0').rstrip('.')
+                else:
+                    result = f"{num:.6f}".rstrip('0').rstrip('.')
             else:
                 result = f"{num:f}".rstrip('0').rstrip('.')
         else:
@@ -97,20 +101,23 @@ def normalize_number(num_str: str) -> str:
             result = f"{num:e}".lower()
         logger.debug(f"Normalized number result: {repr(result)}")
         return result
-    except:
-        logger.debug(f"Failed to normalize number, returning original: {repr(num_str)}")
+    except Exception as e:
+        logger.debug(f"Failed to normalize number: {str(e)}, returning original: {repr(num_str)}")
         return num_str
     
 def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
     logger.debug(f"Normalizing fraction: {repr(fraction_str)}")
     try:
+        # Remove any trailing text or units
+        fraction_str = re.sub(r'\s*\\text{[^}]+}', '', fraction_str)
+        
         # Convert division to fraction
         if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
             num, den = fraction_str.split('/')
             return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
             
-        # Remove \dfrac or \frac prefix
+        # Standardize on \frac
         fraction_str = fraction_str.replace('\\dfrac', '\\frac')
         
         # Match the numerator and denominator
@@ -124,8 +131,8 @@ def normalize_fraction(fraction_str: str) -> str:
                 result = f"\\frac{{{norm_num}}}{{{norm_den}}}"
                 logger.debug(f"Normalized fraction result: {repr(result)}")
                 return result
-    except:
-        logger.debug(f"Failed to normalize fraction, returning original: {repr(fraction_str)}")
+    except Exception as e:
+        logger.debug(f"Failed to normalize fraction: {str(e)}")
     return fraction_str
 
 def normalize_matrix_entry(entry: str) -> str:
@@ -133,8 +140,14 @@ def normalize_matrix_entry(entry: str) -> str:
     logger.debug(f"Normalizing matrix entry: {repr(entry)}")
     entry = entry.strip()
     
+    # Remove any trailing text or units
+    entry = re.sub(r'\s*\\text{[^}]+}', '', entry)
+    
+    # Standardize fractions
+    entry = entry.replace('\\dfrac', '\\frac')
+    
     # If it's a fraction (either \frac or normal division)
-    if '\\frac' in entry or '\\dfrac' in entry or '/' in entry:
+    if '\\frac' in entry or '/' in entry:
         return normalize_fraction(entry)
     
     # Otherwise normalize as regular answer
@@ -164,7 +177,7 @@ def normalize_matrix(matrix_str: str) -> str:
             normalized_rows.append('&'.join(entries))
         
         # Reconstruct the matrix
-        result = r"\begin{pmatrix}" + ' \\\\ '.join(normalized_rows) + r"\end{pmatrix}"
+        result = r"\begin{pmatrix}" + r'\\'.join(normalized_rows) + r"\end{pmatrix}"
         logger.debug(f"Normalized matrix result: {repr(result)}")
         return result
         
@@ -370,6 +383,13 @@ def normalize_answer(answer: str) -> str:
     char_codes = [(c, ord(c)) for c in answer]
     logger.debug(f"Character codes: {char_codes}")
 
+    # Handle text-only answers first (including multiple choice)
+    text_match = re.match(r'^(?:\\text{)?([A-Za-z]+)(?:})?$', answer)
+    if text_match:
+        result = text_match.group(1).lower()
+        logger.debug(f"Matched as text answer: {repr(result)}")
+        return result
+
     # Handle intervals first (with or without \left and \right)
     if (answer.startswith('\\left[') or answer.startswith('\\left(') or 
         answer.startswith('[') or answer.startswith('(')) and \
@@ -489,12 +509,13 @@ def normalize_answer(answer: str) -> str:
     answer = answer.replace('\\left', '').replace('\\right', '')
     
     # Remove any remaining extra backslashes before common symbols
+    answer = answer.replace('\\left', '').replace('\\right', '')
     answer = answer.replace('\\(', '(').replace('\\)', ')')
     answer = answer.replace('\\[', '[').replace('\\]', ']')
     answer = answer.replace('\\{', '{').replace('\\}', '}')
     
-    # Normalize square roots
-    answer = re.sub(r'\\sqrt{(\d+)}', r'\\sqrt\1', answer)
+    # Normalize square roots consistently
+    answer = re.sub(r'\\sqrt\{?(\d+)\}?', r'\\sqrt{\1}', answer)
     answer = re.sub(r'\\sqrt{([^{}]+)}', r'\\sqrt\1', answer)
     
     # Handle percentage notation
