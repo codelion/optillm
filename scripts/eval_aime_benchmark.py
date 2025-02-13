@@ -114,10 +114,10 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=16384, # for thinking models, we need to use a lot more tokens
-            extra_body = {
-                "decoding" : "thinkdeeper",
-            }
+            max_tokens=32768, # for thinking models, we need to use a lot more tokens
+            # extra_body = {
+            #     "decoding" : "thinkdeeper",
+            # }
         )
         
         # If there's more than one choice, format as attempts

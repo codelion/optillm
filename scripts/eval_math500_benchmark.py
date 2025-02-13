@@ -436,13 +436,25 @@ def normalize_answer(answer: str) -> str:
             logger.debug(f"Matched as ordered tuple: {repr(result)}")
             return result
 
-    # Handle square roots
-    sqrt_match = re.match(r'^(-)?\\sqrt\{?(\d+)\}?$', answer)
+    # Handle direct square root expressions first
+    logger.debug("Checking for square root pattern...")
+    sqrt_match = re.match(r'^(\d*)?\\sqrt\{?(\d+)\}?$', answer)
     if sqrt_match:
-        sign, num = sqrt_match.groups()
-        sign = sign if sign else ''
-        result = f"{sign}\\sqrt{{{num}}}"
-        logger.debug(f"Matched as square root: {repr(result)}")
+        coeff, num = sqrt_match.groups()
+        coeff = coeff if coeff else '1'
+        if coeff == '1':
+            result = f"\\sqrt{{{num}}}"
+        else:
+            result = f"{coeff}\\sqrt{{{num}}}"
+        logger.debug(f"Matched as pure square root: {repr(result)}")
+        return result
+
+    # Now handle coefficient with square root
+    sqrt_with_coeff_match = re.match(r'^(\d+)\\sqrt\{?(\d+)\}?$', answer)
+    if sqrt_with_coeff_match:
+        coeff, num = sqrt_with_coeff_match.groups()
+        result = f"{coeff}\\sqrt{{{num}}}"
+        logger.debug(f"Matched as coefficient with square root: {repr(result)}")
         return result
     
     # Handle numbers with base subscripts
