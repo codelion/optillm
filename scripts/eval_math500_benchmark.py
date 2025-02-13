@@ -587,7 +587,7 @@ def get_llm_response(problem: str, model: str) -> str:
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + "\n" + problem}
             ],
-            max_tokens=4096, # for thinking models, we need to use a lot more tokens
+            max_tokens=32768, # for thinking models, we need to use a lot more tokens
             # extra_body = {
             #     "decoding" : "thinkdeeper",
             # }
