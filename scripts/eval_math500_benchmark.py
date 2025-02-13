@@ -33,7 +33,7 @@ Important: Always end your solution with the final answer in this format:
 \\boxed{your_answer_here}
 \\]
 
-Make sure to write your complete answer inside the \\boxed{} command.'''
+The entire answer should be contained completely within the \\boxed{} command.'''
 
 def load_math500_dataset() -> list[dict]:
     """
