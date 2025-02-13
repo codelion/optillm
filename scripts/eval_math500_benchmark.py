@@ -321,10 +321,11 @@ def normalize_interval(interval_str: str) -> str:
         interval_str = ''.join(interval_str.split())
         
         # Extract the interval content, handling \left and \right
-        match = re.match(r'^\\left?([[(])(.*?),(.+?)\\right?([)\]])$', interval_str)
+        # Fixed regex to avoid nested set warning by using explicit character classes
+        match = re.match(r'^\\left?([\[\(])(.*?),(.*?)\\right?([\]\)])$', interval_str)
         if not match:
             # Try without \left and \right
-            match = re.match(r'^([[(])(.*?),(.+?)([)\]])$', interval_str)
+            match = re.match(r'^([\[\(])(.*?),(.*?)([\]\)])$', interval_str)
             if not match:
                 return interval_str
                 
