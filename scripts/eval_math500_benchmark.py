@@ -83,22 +83,33 @@ def normalize_number(num_str: str) -> str:
     try:
         # Remove commas, currency symbols, units, and whitespace
         cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$|\s*\\text{[^}]+}', '', num_str).strip()
-        # Convert to float and back to handle scientific notation if present
+        
+        # Convert to float for standardization
         num = float(cleaned)
-        if 1e-5 <= abs(num) <= 1e6:
-            # For regular numbers, remove trailing zeros after decimal
-            # For currency, keep two decimal places
-            if '.' in num_str:  # If original had decimal, keep decimal format
-                # Always include leading zero for decimals less than 1
-                if 0 < abs(num) < 1:
-                    result = f"{num:.6f}".rstrip('0').rstrip('.')
+        
+        if 1e-10 <= abs(num) <= 1e10:  # Adjusted range to handle very small numbers
+            if '.' in cleaned:  # If original had decimal
+                # Convert to scientific notation first to handle very small numbers
+                sci_notation = f"{num:e}"
+                if 'e-' in sci_notation:  # For very small numbers
+                    # Extract exponent and ensure we have enough decimal places
+                    exponent = int(sci_notation.split('e-')[1])
+                    # Add 2 extra decimal places to ensure precision
+                    format_str = f"%.{exponent + 2}f"
+                    result = format_str % num
+                    # Remove trailing zeros but keep the significant ones
+                    while result.endswith('0') and '.' in result and len(result) > exponent + 3:
+                        result = result[:-1]
                 else:
-                    result = f"{num:.6f}".rstrip('0').rstrip('.')
+                    # For regular decimals, use enough precision and remove trailing zeros
+                    result = f"{num:.10f}".rstrip('0').rstrip('.')
             else:
-                result = f"{num:f}".rstrip('0').rstrip('.')
+                # For integers, don't add decimal point
+                result = f"{int(num)}"
         else:
             # For very large/small numbers, use scientific notation
             result = f"{num:e}".lower()
+        
         logger.debug(f"Normalized number result: {repr(result)}")
         return result
     except Exception as e:
@@ -109,21 +120,25 @@ def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
     logger.debug(f"Normalizing fraction: {repr(fraction_str)}")
     try:
-        # Convert \dfrac to \frac first
+        # Remove spaces and convert \dfrac to \frac
+        fraction_str = ''.join(fraction_str.split())
         fraction_str = fraction_str.replace('\\dfrac', '\\frac')
-        
-        # Remove spaces
-        fraction_str = re.sub(r'\\?\s+', '', fraction_str)
         
         # Remove any trailing text or units
         fraction_str = re.sub(r'\s*\\text{[^}]+}', '', fraction_str)
         
-        # Convert division to fraction
+        # Handle simple fractions without braces (e.g., \frac43)
+        unbracedFrac = re.match(r'^\\frac(\d+)(\d+)$', fraction_str)
+        if unbracedFrac:
+            num, den = unbracedFrac.groups()
+            return f"\\frac{{{num}}}{{{den}}}"
+        
+        # Handle division format (e.g., 4/3)
         if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
             num, den = fraction_str.split('/')
             return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
         
-        # Match the numerator and denominator
+        # Handle standard \frac{a}{b} format
         match = re.match(r'^\\frac\{([^{}]+)\}\{([^{}]+)\}$', fraction_str)
         if match:
             num, den = match.groups()
@@ -143,18 +158,29 @@ def normalize_matrix_entry(entry: str) -> str:
     logger.debug(f"Normalizing matrix entry: {repr(entry)}")
     entry = entry.strip()
     
+    # Handle negative fractions first
+    if entry.startswith('-'):
+        is_negative = True
+        entry = entry[1:]
+    else:
+        is_negative = False
+    
+    # Convert a/b format to \frac{a}{b}
+    if '/' in entry and not any(c in entry for c in '\\{}'):
+        num, den = entry.split('/')
+        entry = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
+    
+    # Convert \dfrac to \frac
+    entry = entry.replace('\\dfrac', '\\frac')
+    
     # Remove any trailing text or units
     entry = re.sub(r'\s*\\text{[^}]+}', '', entry)
     
-    # Standardize fractions
-    entry = entry.replace('\\dfrac', '\\frac')
+    # Add back negative sign if needed
+    if is_negative:
+        entry = f"-{entry}"
     
-    # If it's a fraction (either \frac or normal division)
-    if '\\frac' in entry or '/' in entry:
-        return normalize_fraction(entry)
-    
-    # Otherwise normalize as regular answer
-    return normalize_answer(entry) or entry
+    return entry
 
 def normalize_matrix(matrix_str: str) -> str:
     """Helper function to normalize matrices and vectors."""
@@ -397,9 +423,29 @@ def normalize_answer(answer: str) -> str:
         logger.debug("Answer became empty after whitespace removal")
         return None
     
-    # Log each character and its ASCII value for debugging
-    char_codes = [(c, ord(c)) for c in answer]
-    logger.debug(f"Character codes: {char_codes}")
+    # Handle plus-minus expressions first
+    # This will match both forms: "a \pm b" and "a - b"
+    pm_match = re.match(r'^(.*?)(?:\\pm|-)(.*?)$', answer)
+    if pm_match:
+        left, right = pm_match.groups()
+        # Normalize both sides
+        norm_left = normalize_answer(left) if left else ""
+        norm_right = normalize_answer(right) if right else ""
+        if norm_left or norm_right:  # If either side normalized successfully
+            # Always use \pm in the normalized form
+            result = f"{norm_left}\\pm{norm_right}"
+            logger.debug(f"Matched as plus-minus expression: {repr(result)}")
+            return result
+    
+    # Handle trigonometric functions
+    trig_match = re.match(r'^\\(?:sin|cos|tan|cot|sec|csc)\s*([a-zA-Z])$', answer)
+    if trig_match:
+        variable = trig_match.group(1)
+        # Get the function name without the backslash
+        func_name = re.match(r'^\\(.*?)(?:\s|$)', answer).group(1)
+        result = f"\\{func_name}{variable}"
+        logger.debug(f"Matched as trigonometric function: {repr(result)}")
+        return result
 
     # Handle text-only answers first (including multiple choice)
     text_match = re.match(r'^(?:\\text{)?([A-Za-z]+)(?:})?$', answer)
@@ -441,6 +487,14 @@ def normalize_answer(answer: str) -> str:
         if result:
             logger.debug(f"Matched as ordered tuple: {repr(result)}")
             return result
+
+    # Handle negative square roots first (before other square root handling)
+    neg_sqrt_match = re.match(r'^-\\sqrt\{?(\d+)\}?$', answer)
+    if neg_sqrt_match:
+        num = neg_sqrt_match.group(1)
+        result = f"-\\sqrt{{{num}}}"
+        logger.debug(f"Matched as negative square root: {repr(result)}")
+        return result
 
     # Handle direct square root expressions first
     logger.debug("Checking for square root pattern...")
