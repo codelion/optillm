@@ -347,20 +347,31 @@ def normalize_ordered_tuple(tuple_str: str) -> str:
     """Helper function to normalize ordered tuples/lists of numbers."""
     logger.debug(f"Normalizing tuple: {repr(tuple_str)}")
     try:
+        # Remove \left and \right
+        tuple_str = tuple_str.replace('\\left', '').replace('\\right', '')
+        
+        # Remove spaces and standardize on \frac
+        tuple_str = ''.join(tuple_str.split())
+        tuple_str = tuple_str.replace('\\dfrac', '\\frac')
+        
         # Remove outer parentheses and split by commas
-        parts = tuple_str.strip('()').split(',')
-        # Normalize each part and rejoin
+        inner = tuple_str.strip('()')
+        parts = inner.split(',')
+        
+        # Normalize each part
         normalized_parts = []
         for part in parts:
             norm_part = normalize_answer(part.strip())
             if not norm_part:  # If any part fails to normalize, return None
                 return None
             normalized_parts.append(norm_part)
-        result = f"({','.join(normalized_parts)})"
+            
+        # Reconstruct with standardized format
+        result = f"\\left({','.join(normalized_parts)}\\right)"
         logger.debug(f"Normalized tuple result: {repr(result)}")
         return result
-    except:
-        logger.debug(f"Failed to normalize tuple, returning None")
+    except Exception as e:
+        logger.debug(f"Failed to normalize tuple: {str(e)}")
         return None
 
 def normalize_answer(answer: str) -> str:
