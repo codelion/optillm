@@ -109,6 +109,12 @@ def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
     logger.debug(f"Normalizing fraction: {repr(fraction_str)}")
     try:
+        # Convert \dfrac to \frac first
+        fraction_str = fraction_str.replace('\\dfrac', '\\frac')
+        
+        # Remove spaces
+        fraction_str = re.sub(r'\\?\s+', '', fraction_str)
+        
         # Remove any trailing text or units
         fraction_str = re.sub(r'\s*\\text{[^}]+}', '', fraction_str)
         
@@ -116,9 +122,6 @@ def normalize_fraction(fraction_str: str) -> str:
         if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
             num, den = fraction_str.split('/')
             return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
-            
-        # Standardize on \frac
-        fraction_str = fraction_str.replace('\\dfrac', '\\frac')
         
         # Match the numerator and denominator
         match = re.match(r'^\\frac\{([^{}]+)\}\{([^{}]+)\}$', fraction_str)
@@ -348,12 +351,14 @@ def normalize_ordered_tuple(tuple_str: str) -> str:
     """Helper function to normalize ordered tuples/lists of numbers."""
     logger.debug(f"Normalizing tuple: {repr(tuple_str)}")
     try:
-        # Remove \left and \right
-        tuple_str = tuple_str.replace('\\left', '').replace('\\right', '')
-        
-        # Remove spaces and standardize on \frac
-        tuple_str = ''.join(tuple_str.split())
+        # First replace \dfrac with \frac
         tuple_str = tuple_str.replace('\\dfrac', '\\frac')
+        
+        # Remove ALL spaces and backslash-space combinations
+        tuple_str = re.sub(r'\\?\s+', '', tuple_str)
+        
+        # Remove \left and \right if present
+        tuple_str = tuple_str.replace('\\left', '').replace('\\right', '')
         
         # Remove outer parentheses and split by commas
         inner = tuple_str.strip('()')
@@ -364,10 +369,11 @@ def normalize_ordered_tuple(tuple_str: str) -> str:
         for part in parts:
             norm_part = normalize_answer(part.strip())
             if not norm_part:  # If any part fails to normalize, return None
+                logger.debug(f"Failed to normalize part: {part}")
                 return None
             normalized_parts.append(norm_part)
             
-        # Reconstruct with standardized format
+        # Always reconstruct with standard format
         result = f"\\left({','.join(normalized_parts)}\\right)"
         logger.debug(f"Normalized tuple result: {repr(result)}")
         return result
