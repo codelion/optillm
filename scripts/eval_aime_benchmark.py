@@ -108,7 +108,7 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
         Union[str, List[Dict]]: Either a string response or list of attempt dictionaries
     """
     try:
-        response = client.with_options(timeout=600.0).chat.completions.create(
+        response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
             temperature=0.6,
             messages=[
