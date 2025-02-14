@@ -485,6 +485,13 @@ def normalize_answer(answer: str) -> str:
         if result:
             logger.debug(f"Matched as matrix: {repr(result)}")
             return result
+        
+    # Handle ordered tuples first (including pairs and longer tuples)
+    if answer.startswith('(') and answer.endswith(')'):
+        result = normalize_ordered_tuple(answer)
+        if result:
+            logger.debug(f"Matched as ordered tuple: {repr(result)}")
+            return result
     
     # Normalize all fraction commands to \frac first
     answer = answer.replace('\\dfrac', '\\frac')
@@ -494,13 +501,6 @@ def normalize_answer(answer: str) -> str:
         result = normalize_fraction(answer)
         if result:
             logger.debug(f"Matched as fraction: {repr(result)}")
-            return result
-
-    # Handle ordered tuples first (including pairs and longer tuples)
-    if answer.startswith('(') and answer.endswith(')'):
-        result = normalize_ordered_tuple(answer)
-        if result:
-            logger.debug(f"Matched as ordered tuple: {repr(result)}")
             return result
 
     # Handle negative square roots first (before other square root handling)
