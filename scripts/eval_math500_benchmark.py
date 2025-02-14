@@ -125,25 +125,32 @@ def normalize_fraction(fraction_str: str) -> str:
         # Remove any trailing text
         fraction_str = re.sub(r'\s*\\text{[^}]+}', '', fraction_str)
         
+        # Handle mixed brace format first (\frac9{19})
+        mixed_brace = re.match(r'^\\frac(\d+)\{(\d+)\}$', fraction_str)
+        if mixed_brace:
+            num, den = mixed_brace.groups()
+            return f"\\frac{{{num}}}{{{den}}}"
+        
+        # Handle no braces format (\frac12)
+        no_braces = re.match(r'^\\frac(\d+)(\d+)$', fraction_str)
+        if no_braces:
+            num, den = no_braces.groups()
+            return f"\\frac{{{num}}}{{{den}}}"
+        
         # Handle a/b format
         if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
             num, den = fraction_str.split('/')
             return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
-            
-        # Handle \frac without braces
-        unbracedFrac = re.match(r'^\\frac(\d+)(\d+)$', fraction_str)
-        if unbracedFrac:
-            num, den = unbracedFrac.groups()
-            return f"\\frac{{{num}}}{{{den}}}"
         
         # Handle standard \frac{a}{b}
-        match = re.match(r'^\\frac\{([^{}]+)\}\{([^{}]+)\}$', fraction_str)
-        if match:
-            num, den = match.groups()
+        standard = re.match(r'^\\frac\{([^{}]+)\}\{([^{}]+)\}$', fraction_str)
+        if standard:
+            num, den = standard.groups()
             return f"\\frac{{{num}}}{{{den}}}"
             
     except Exception as e:
         logger.debug(f"Failed to normalize fraction: {str(e)}")
+        logger.debug(f"Original fraction string: {repr(fraction_str)}")
     return fraction_str
 
 def normalize_matrix_entry(entry: str) -> str:
