@@ -153,38 +153,39 @@ def normalize_fraction(fraction_str: str) -> str:
         logger.debug(f"Original fraction string: {repr(fraction_str)}")
     return fraction_str
 
-def simplify_fraction(entry: str) -> str:
-    """Convert any fraction format to simple a/b format."""
-    logger.debug(f"Simplifying fraction: {repr(entry)}")
+def normalize_matrix_entry(entry: str) -> str:
+    """Helper function to normalize a single matrix entry."""
+    logger.debug(f"Normalizing matrix entry input: {repr(entry)}")
     
-    # If it's already in a/b format, return as is
+    # Remove all spaces first
+    entry = ''.join(entry.split())
+    
+    # If it's already in simple a/b format, standardize spacing
     if '/' in entry and not any(c in entry for c in '\\{}'):
-        return entry
-        
-    # Handle \dfrac and \frac
+        if entry.startswith('-'):
+            num, den = entry[1:].split('/')
+            return f"-{num.strip()}/{den.strip()}"
+        else:
+            num, den = entry.split('/')
+            return f"{num.strip()}/{den.strip()}"
+            
+    # Convert \dfrac to \frac
     entry = entry.replace('\\dfrac', '\\frac')
-    frac_match = re.match(r'^-?\\frac\{(\d+)\}\{(\d+)\}$', entry)
+    
+    # Handle LaTeX fractions
+    frac_match = re.match(r'^(-)?\\frac\{(\d+)\}\{(\d+)\}$', entry)
     if frac_match:
-        num, den = frac_match.groups()
-        # Preserve negative sign if present
-        is_negative = entry.startswith('-')
-        return f"{'-' if is_negative else ''}{num}/{den}"
+        sign, num, den = frac_match.groups()
+        sign = sign if sign else ''
+        return f"{sign}{num}/{den}"
     
     return entry
 
-def normalize_matrix_entry(entry: str) -> str:
-    """Helper function to normalize a single matrix entry."""
-    logger.debug(f"Normalizing matrix entry: {repr(entry)}")
-    entry = entry.strip()
-    
-    # Convert everything to simple a/b format
-    return simplify_fraction(entry)
-
 def normalize_matrix(matrix_str: str) -> str:
     """Helper function to normalize matrices and vectors."""
-    logger.debug(f"Normalizing matrix: {repr(matrix_str)}")
+    logger.debug(f"Normalizing matrix input: {repr(matrix_str)}")
     try:
-        # Remove all whitespace first
+        # Remove all whitespace
         matrix_str = ''.join(matrix_str.split())
         
         # Extract the matrix content
@@ -193,18 +194,19 @@ def normalize_matrix(matrix_str: str) -> str:
             return matrix_str
             
         content = match.group(1)
-        
-        # Split into rows
         rows = content.split('\\\\')
         
         # Normalize each entry in each row
         normalized_rows = []
         for row in rows:
-            entries = [normalize_matrix_entry(entry) for entry in row.split('&')] if '&' in row else [normalize_matrix_entry(row)]
+            if '&' in row:
+                entries = [normalize_matrix_entry(entry) for entry in row.split('&')]
+            else:
+                entries = [normalize_matrix_entry(row)]
             normalized_rows.append('&'.join(entries))
         
         # Reconstruct the matrix
-        result = r"\begin{pmatrix}" + r'\\'.join(normalized_rows) + r"\end{pmatrix}"
+        result = "\\begin{pmatrix}" + "\\\\".join(normalized_rows) + "\\end{pmatrix}"
         logger.debug(f"Normalized matrix result: {repr(result)}")
         return result
         
