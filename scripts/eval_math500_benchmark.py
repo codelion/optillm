@@ -165,21 +165,19 @@ def normalize_matrix_entry(entry: str) -> str:
     else:
         is_negative = False
     
-    # Convert simple fractions (a/b) to \frac{a}{b}
+    # Convert a/b format to \frac{a}{b}
     if '/' in entry and not any(c in entry for c in '\\{}'):
         num, den = entry.split('/')
         entry = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
     
-    # Standardize on \frac
+    # Convert \dfrac to \frac
     entry = entry.replace('\\dfrac', '\\frac')
-    
-    # Remove any trailing text
-    entry = re.sub(r'\s*\\text{[^}]+}', '', entry)
     
     # Add back negative sign if needed
     if is_negative:
         entry = f"-{entry}"
-    
+        
+    logger.debug(f"Normalized matrix entry result: {repr(entry)}")
     return entry
 
 def normalize_matrix(matrix_str: str) -> str:
@@ -414,6 +412,13 @@ def normalize_answer(answer: str) -> str:
     if answer is None:
         logger.debug("Received None answer")
         return ""
+    
+    # Remove \text{} with units first
+    answer = re.sub(r'\\text{[^}]+(?:inches|feet|meters|cm|m|kg|ft|in|lb|oz|ml|L|per|second|minute|hour)[^}]*}', '', answer)
+    
+    # Remove all whitespace
+    answer = ''.join(answer.split())
+    logger.debug(f"After whitespace removal: {repr(answer)}")
         
     # Remove all whitespace
     answer = ''.join(answer.split())
