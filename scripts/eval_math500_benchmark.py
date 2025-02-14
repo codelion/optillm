@@ -377,14 +377,14 @@ def normalize_ordered_tuple(tuple_str: str) -> str:
     """Helper function to normalize ordered tuples/lists of numbers."""
     logger.debug(f"Normalizing tuple: {repr(tuple_str)}")
     try:
-        # First replace \dfrac with \frac
+        # First standardize \dfrac to \frac
         tuple_str = tuple_str.replace('\\dfrac', '\\frac')
         
-        # Remove ALL spaces and backslash-space combinations
-        tuple_str = re.sub(r'\\?\s+', '', tuple_str)
-        
-        # Remove \left and \right if present
+        # Remove \left and \right
         tuple_str = tuple_str.replace('\\left', '').replace('\\right', '')
+        
+        # Remove all spaces and backslash spaces
+        tuple_str = re.sub(r'\\?\s+', '', tuple_str)
         
         # Remove outer parentheses and split by commas
         inner = tuple_str.strip('()')
@@ -399,8 +399,8 @@ def normalize_ordered_tuple(tuple_str: str) -> str:
                 return None
             normalized_parts.append(norm_part)
             
-        # Always reconstruct with standard format
-        result = f"\\left({','.join(normalized_parts)}\\right)"
+        # Always reconstruct with standard format (using parentheses)
+        result = f"({','.join(normalized_parts)})"
         logger.debug(f"Normalized tuple result: {repr(result)}")
         return result
     except Exception as e:
@@ -418,6 +418,27 @@ def normalize_answer(answer: str) -> str:
     # Remove \text{} with units first
     answer = re.sub(r'\\text{[^}]+(?:inches|feet|meters|cm|m|kg|ft|in|lb|oz|ml|L|per|second|minute|hour)[^}]*}', '', answer)
     
+
+    # Remove all whitespace first but preserve backslash space temporarily
+    answer = re.sub(r'(?<!\\)\s+', '', answer)
+    logger.debug(f"After initial whitespace removal: {repr(answer)}")
+    
+    # Then handle ordered pairs/tuples with potential \left, \right
+    ordered_pair_match = re.match(r'^(?:\\left)?\((.*?)(?:\\right)?\)$', answer)
+    if ordered_pair_match:
+        content = ordered_pair_match.group(1)
+        # Split by comma and normalize each part
+        parts = content.split(',')
+        normalized_parts = []
+        for part in parts:
+            # Remove any remaining backslash spaces
+            part = re.sub(r'\\?\s+', '', part)
+            norm_part = normalize_answer(part)
+            if norm_part is None:
+                return None
+            normalized_parts.append(norm_part)
+        return f"({','.join(normalized_parts)})"
+    
     # Remove all whitespace
     answer = ''.join(answer.split())
     logger.debug(f"After whitespace removal: {repr(answer)}")
@@ -425,14 +446,6 @@ def normalize_answer(answer: str) -> str:
     if not answer:
         logger.debug("Answer became empty after whitespace removal")
         return None
-    
-    answer = answer.replace('\\dfrac', '\\frac')
-    if '/' in answer and not any(c in answer for c in '\\{}'):
-        try:
-            num, den = answer.split('/')
-            answer = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
-        except:
-            pass
     
     # Handle plus-minus expressions first
     # This will match both forms: "a \pm b" and "a - b"
@@ -480,13 +493,6 @@ def normalize_answer(answer: str) -> str:
         result = normalize_matrix(answer)
         if result:
             logger.debug(f"Matched as matrix: {repr(result)}")
-            return result
-        
-    # Handle ordered tuples first (including pairs and longer tuples)
-    if answer.startswith('(') and answer.endswith(')'):
-        result = normalize_ordered_tuple(answer)
-        if result:
-            logger.debug(f"Matched as ordered tuple: {repr(result)}")
             return result
     
     # Normalize all fraction commands to \frac first
