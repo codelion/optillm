@@ -153,41 +153,41 @@ def normalize_fraction(fraction_str: str) -> str:
         logger.debug(f"Original fraction string: {repr(fraction_str)}")
     return fraction_str
 
+def simplify_fraction(entry: str) -> str:
+    """Convert any fraction format to simple a/b format."""
+    logger.debug(f"Simplifying fraction: {repr(entry)}")
+    
+    # If it's already in a/b format, return as is
+    if '/' in entry and not any(c in entry for c in '\\{}'):
+        return entry
+        
+    # Handle \dfrac and \frac
+    entry = entry.replace('\\dfrac', '\\frac')
+    frac_match = re.match(r'^-?\\frac\{(\d+)\}\{(\d+)\}$', entry)
+    if frac_match:
+        num, den = frac_match.groups()
+        # Preserve negative sign if present
+        is_negative = entry.startswith('-')
+        return f"{'-' if is_negative else ''}{num}/{den}"
+    
+    return entry
+
 def normalize_matrix_entry(entry: str) -> str:
     """Helper function to normalize a single matrix entry."""
     logger.debug(f"Normalizing matrix entry: {repr(entry)}")
     entry = entry.strip()
     
-    # Handle negative sign
-    if entry.startswith('-'):
-        is_negative = True
-        entry = entry[1:]
-    else:
-        is_negative = False
-    
-    # Convert a/b format to \frac{a}{b}
-    if '/' in entry and not any(c in entry for c in '\\{}'):
-        num, den = entry.split('/')
-        entry = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
-    
-    # Convert \dfrac to \frac
-    entry = entry.replace('\\dfrac', '\\frac')
-    
-    # Add back negative sign if needed
-    if is_negative:
-        entry = f"-{entry}"
-        
-    logger.debug(f"Normalized matrix entry result: {repr(entry)}")
-    return entry
+    # Convert everything to simple a/b format
+    return simplify_fraction(entry)
 
 def normalize_matrix(matrix_str: str) -> str:
     """Helper function to normalize matrices and vectors."""
     logger.debug(f"Normalizing matrix: {repr(matrix_str)}")
     try:
-        # Remove all whitespace
+        # Remove all whitespace first
         matrix_str = ''.join(matrix_str.split())
         
-        # Extract matrix content
+        # Extract the matrix content
         match = re.match(r'^\\begin\{pmatrix\}(.*?)\\end\{pmatrix\}$', matrix_str)
         if not match:
             return matrix_str
@@ -197,13 +197,13 @@ def normalize_matrix(matrix_str: str) -> str:
         # Split into rows
         rows = content.split('\\\\')
         
-        # Normalize each entry
+        # Normalize each entry in each row
         normalized_rows = []
         for row in rows:
             entries = [normalize_matrix_entry(entry) for entry in row.split('&')] if '&' in row else [normalize_matrix_entry(row)]
             normalized_rows.append('&'.join(entries))
         
-        # Reconstruct matrix
+        # Reconstruct the matrix
         result = r"\begin{pmatrix}" + r'\\'.join(normalized_rows) + r"\end{pmatrix}"
         logger.debug(f"Normalized matrix result: {repr(result)}")
         return result
