@@ -79,7 +79,6 @@ def extract_answer(response: str) -> Optional[str]:
 
 def normalize_number(num_str: str) -> str:
     """Helper function to normalize number representation."""
-    logger.debug(f"Normalizing number: {repr(num_str)}")
     try:
         # Remove commas, currency symbols, units, and whitespace
         cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$|\s*\\text{[^}]+}', '', num_str).strip()
@@ -105,6 +104,13 @@ def normalize_number(num_str: str) -> str:
     except Exception as e:
         logger.debug(f"Failed to normalize number: {str(e)}")
         return num_str
+
+def numerically_equal(str1: str, str2: str) -> bool:
+    """Compare if two numeric strings represent the same value."""
+    try:
+        return abs(float(str1) - float(str2)) < 1e-10
+    except:
+        return False
     
 def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
@@ -410,6 +416,14 @@ def normalize_answer(answer: str) -> str:
         logger.debug("Answer became empty after whitespace removal")
         return None
     
+    answer = answer.replace('\\dfrac', '\\frac')
+    if '/' in answer and not any(c in answer for c in '\\{}'):
+        try:
+            num, den = answer.split('/')
+            answer = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
+        except:
+            pass
+    
     # Handle plus-minus expressions first
     # This will match both forms: "a \pm b" and "a - b"
     pm_match = re.match(r'^(.*?)(?:\\pm|-)(.*?)$', answer)
@@ -613,6 +627,10 @@ def compare_answers(correct_answer: str, predicted_answer: Optional[str]) -> boo
     if predicted_answer is None:
         logger.debug("Predicted answer is None")
         return False
+    
+    # Try numerical comparison first
+    if numerically_equal(correct_answer, predicted_answer):
+        return True
         
     normalized_correct = normalize_answer(correct_answer)
     normalized_predicted = normalize_answer(predicted_answer)
