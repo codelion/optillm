@@ -84,71 +84,58 @@ def normalize_number(num_str: str) -> str:
         # Remove commas, currency symbols, units, and whitespace
         cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$|\s*\\text{[^}]+}', '', num_str).strip()
         
-        # Convert to float for standardization
+        # Handle leading decimal point
+        if cleaned.startswith('.'):
+            cleaned = '0' + cleaned
+            
+        # Convert to float
         num = float(cleaned)
         
-        if 1e-10 <= abs(num) <= 1e10:  # Adjusted range to handle very small numbers
-            if '.' in cleaned:  # If original had decimal
-                # Convert to scientific notation first to handle very small numbers
-                sci_notation = f"{num:e}"
-                if 'e-' in sci_notation:  # For very small numbers
-                    # Extract exponent and ensure we have enough decimal places
-                    exponent = int(sci_notation.split('e-')[1])
-                    # Add 2 extra decimal places to ensure precision
-                    format_str = f"%.{exponent + 2}f"
-                    result = format_str % num
-                    # Remove trailing zeros but keep the significant ones
-                    while result.endswith('0') and '.' in result and len(result) > exponent + 3:
-                        result = result[:-1]
-                else:
-                    # For regular decimals, use enough precision and remove trailing zeros
-                    result = f"{num:.10f}".rstrip('0').rstrip('.')
-            else:
-                # For integers, don't add decimal point
-                result = f"{int(num)}"
+        # For small decimals, preserve exact representation
+        if abs(num) < 1 and '.' in cleaned:
+            # Count original decimal places
+            decimal_places = len(cleaned.split('.')[1])
+            format_str = f"{{:.{decimal_places}f}}"
+            result = format_str.format(num)
         else:
-            # For very large/small numbers, use scientific notation
-            result = f"{num:e}".lower()
+            result = str(num)
         
         logger.debug(f"Normalized number result: {repr(result)}")
         return result
     except Exception as e:
-        logger.debug(f"Failed to normalize number: {str(e)}, returning original: {repr(num_str)}")
+        logger.debug(f"Failed to normalize number: {str(e)}")
         return num_str
     
 def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
     logger.debug(f"Normalizing fraction: {repr(fraction_str)}")
     try:
-        # Remove spaces and convert \dfrac to \frac
-        fraction_str = ''.join(fraction_str.split())
+        # Convert \dfrac to \frac
         fraction_str = fraction_str.replace('\\dfrac', '\\frac')
         
-        # Remove any trailing text or units
+        # Remove all whitespace
+        fraction_str = ''.join(fraction_str.split())
+        
+        # Remove any trailing text
         fraction_str = re.sub(r'\s*\\text{[^}]+}', '', fraction_str)
         
-        # Handle simple fractions without braces (e.g., \frac43)
+        # Handle a/b format
+        if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
+            num, den = fraction_str.split('/')
+            return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
+            
+        # Handle \frac without braces
         unbracedFrac = re.match(r'^\\frac(\d+)(\d+)$', fraction_str)
         if unbracedFrac:
             num, den = unbracedFrac.groups()
             return f"\\frac{{{num}}}{{{den}}}"
         
-        # Handle division format (e.g., 4/3)
-        if '/' in fraction_str and not any(c in fraction_str for c in '\\{}'):
-            num, den = fraction_str.split('/')
-            return f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
-        
-        # Handle standard \frac{a}{b} format
+        # Handle standard \frac{a}{b}
         match = re.match(r'^\\frac\{([^{}]+)\}\{([^{}]+)\}$', fraction_str)
         if match:
             num, den = match.groups()
-            # Normalize both parts
-            norm_num = normalize_answer(num)
-            norm_den = normalize_answer(den)
-            if norm_num and norm_den:
-                result = f"\\frac{{{norm_num}}}{{{norm_den}}}"
-                logger.debug(f"Normalized fraction result: {repr(result)}")
-                return result
+            return f"\\frac{{{num}}}{{{den}}}"
+            
     except Exception as e:
         logger.debug(f"Failed to normalize fraction: {str(e)}")
     return fraction_str
@@ -158,22 +145,22 @@ def normalize_matrix_entry(entry: str) -> str:
     logger.debug(f"Normalizing matrix entry: {repr(entry)}")
     entry = entry.strip()
     
-    # Handle negative fractions first
+    # Handle negative sign
     if entry.startswith('-'):
         is_negative = True
         entry = entry[1:]
     else:
         is_negative = False
     
-    # Convert a/b format to \frac{a}{b}
+    # Convert simple fractions (a/b) to \frac{a}{b}
     if '/' in entry and not any(c in entry for c in '\\{}'):
         num, den = entry.split('/')
         entry = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
     
-    # Convert \dfrac to \frac
+    # Standardize on \frac
     entry = entry.replace('\\dfrac', '\\frac')
     
-    # Remove any trailing text or units
+    # Remove any trailing text
     entry = re.sub(r'\s*\\text{[^}]+}', '', entry)
     
     # Add back negative sign if needed
@@ -186,10 +173,10 @@ def normalize_matrix(matrix_str: str) -> str:
     """Helper function to normalize matrices and vectors."""
     logger.debug(f"Normalizing matrix: {repr(matrix_str)}")
     try:
-        # Remove all whitespace first
+        # Remove all whitespace
         matrix_str = ''.join(matrix_str.split())
         
-        # Extract the matrix content
+        # Extract matrix content
         match = re.match(r'^\\begin\{pmatrix\}(.*?)\\end\{pmatrix\}$', matrix_str)
         if not match:
             return matrix_str
@@ -199,13 +186,13 @@ def normalize_matrix(matrix_str: str) -> str:
         # Split into rows
         rows = content.split('\\\\')
         
-        # Normalize each entry in each row
+        # Normalize each entry
         normalized_rows = []
         for row in rows:
             entries = [normalize_matrix_entry(entry) for entry in row.split('&')] if '&' in row else [normalize_matrix_entry(row)]
             normalized_rows.append('&'.join(entries))
         
-        # Reconstruct the matrix
+        # Reconstruct matrix
         result = r"\begin{pmatrix}" + r'\\'.join(normalized_rows) + r"\end{pmatrix}"
         logger.debug(f"Normalized matrix result: {repr(result)}")
         return result
