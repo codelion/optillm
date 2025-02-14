@@ -79,42 +79,30 @@ def extract_answer(response: str) -> Optional[str]:
 
 def normalize_number(num_str: str) -> str:
     """Helper function to normalize number representation."""
-    logger.debug(f"Normalizing number: {repr(num_str)}")
     try:
         # Remove commas, currency symbols, units, and whitespace
         cleaned = re.sub(r'[,\$\\]|\s*(?:cm|m|kg|ft|in|lb|oz|ml|L)$|\s*\\text{[^}]+}', '', num_str).strip()
         
-        # Convert to float for standardization
+        # Convert to float and compare numerically
         num = float(cleaned)
         
-        if 1e-10 <= abs(num) <= 1e10:  # Adjusted range to handle very small numbers
-            if '.' in cleaned:  # If original had decimal
-                # Convert to scientific notation first to handle very small numbers
-                sci_notation = f"{num:e}"
-                if 'e-' in sci_notation:  # For very small numbers
-                    # Extract exponent and ensure we have enough decimal places
-                    exponent = int(sci_notation.split('e-')[1])
-                    # Add 2 extra decimal places to ensure precision
-                    format_str = f"%.{exponent + 2}f"
-                    result = format_str % num
-                    # Remove trailing zeros but keep the significant ones
-                    while result.endswith('0') and '.' in result and len(result) > exponent + 3:
-                        result = result[:-1]
-                else:
-                    # For regular decimals, use enough precision and remove trailing zeros
-                    result = f"{num:.10f}".rstrip('0').rstrip('.')
-            else:
-                # For integers, don't add decimal point
-                result = f"{int(num)}"
-        else:
-            # For very large/small numbers, use scientific notation
-            result = f"{num:e}".lower()
+        # For very small numbers, use scientific notation
+        if abs(num) < 0.001:
+            return f"{num:.10g}"
         
-        logger.debug(f"Normalized number result: {repr(result)}")
-        return result
-    except Exception as e:
-        logger.debug(f"Failed to normalize number: {str(e)}, returning original: {repr(num_str)}")
+        # For normal numbers, preserve original decimal places but standardize format
+        if '.' in cleaned:
+            return str(num).rstrip('0').rstrip('.')
+        return str(int(num))
+    except:
         return num_str
+
+def numerically_equal(str1: str, str2: str) -> bool:
+    """Compare if two numeric strings represent the same value."""
+    try:
+        return abs(float(str1) - float(str2)) < 1e-10
+    except:
+        return False
     
 def normalize_fraction(fraction_str: str) -> str:
     """Helper function to normalize fractions."""
@@ -423,6 +411,14 @@ def normalize_answer(answer: str) -> str:
         logger.debug("Answer became empty after whitespace removal")
         return None
     
+    answer = answer.replace('\\dfrac', '\\frac')
+    if '/' in answer and not any(c in answer for c in '\\{}'):
+        try:
+            num, den = answer.split('/')
+            answer = f"\\frac{{{num.strip()}}}{{{den.strip()}}}"
+        except:
+            pass
+    
     # Handle plus-minus expressions first
     # This will match both forms: "a \pm b" and "a - b"
     pm_match = re.match(r'^(.*?)(?:\\pm|-)(.*?)$', answer)
@@ -626,6 +622,10 @@ def compare_answers(correct_answer: str, predicted_answer: Optional[str]) -> boo
     if predicted_answer is None:
         logger.debug("Predicted answer is None")
         return False
+    
+    # Try numerical comparison first
+    if numerically_equal(correct_answer, predicted_answer):
+        return True
         
     normalized_correct = normalize_answer(correct_answer)
     normalized_predicted = normalize_answer(predicted_answer)
