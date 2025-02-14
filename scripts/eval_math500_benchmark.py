@@ -421,10 +421,6 @@ def normalize_answer(answer: str) -> str:
     # Remove all whitespace
     answer = ''.join(answer.split())
     logger.debug(f"After whitespace removal: {repr(answer)}")
-        
-    # Remove all whitespace
-    answer = ''.join(answer.split())
-    logger.debug(f"After whitespace removal: {repr(answer)}")
     
     if not answer:
         logger.debug("Answer became empty after whitespace removal")
