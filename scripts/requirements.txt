@@ -1,3 +1,4 @@
+tabulate
 datasets
 accelerate
 huggingface_hub
