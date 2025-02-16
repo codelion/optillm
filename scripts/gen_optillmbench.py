@@ -15,13 +15,13 @@ np.random.seed(42)
 
 # Configuration
 DATASET_NAME = "codelion/optillmbench"
-NUM_SAMPLES = 100  # Total samples in the benchmark
+NUM_SAMPLES = 500  # Total samples in the benchmark
 SPLIT_RATIO = {"train": 0.8, "test": 0.2}  # 80-20 split
 SOURCES = {
     "gsm8k": {
         "name": "gsm8k",
         "subset": "main",
-        "samples": 25,
+        "samples": 125,
         "field_map": {
             "question": "question",
             "answer": "answer"
@@ -30,7 +30,7 @@ SOURCES = {
     "boolq": {
         "name": "boolq",
         "subset": None,
-        "samples": 25,
+        "samples": 125,
         "field_map": {
             "question": "question",
             "passage": "passage",
@@ -39,8 +39,8 @@ SOURCES = {
     },
     "mmlu_math": {
         "name": "cais/mmlu",
-        "subset": "high_school_mathematics",  # or "college_mathematics"
-        "samples": 25,
+        "subset": "all", 
+        "samples": 125,
         "field_map": {
             "question": "question",
             "choices": "choices",
@@ -50,7 +50,7 @@ SOURCES = {
     "aqua_rat": {
         "name": "aqua_rat",
         "subset": None,
-        "samples": 25,
+        "samples": 125,
         "field_map": {
             "question": "question",
             "answer": "correct"
