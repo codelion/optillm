@@ -160,7 +160,11 @@ def evaluate_model(
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
-                max_tokens=4096
+                max_tokens=4096,
+                reasoning_effort="low",
+                extra_body = {
+                    "decoding" : "thinkdeeper",
+                }
             )
             
             # Calculate time taken

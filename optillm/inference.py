@@ -1321,7 +1321,6 @@ class InferenceClient:
                 presence_penalty: float = 0,
                 frequency_penalty: float = 0,
                 logit_bias: Optional[Dict[str, float]] = None,
-                user: Optional[str] = None,
                 seed: Optional[int] = None,
                 logprobs: Optional[bool] = None,
                 top_logprobs: Optional[int] = None,
@@ -1337,11 +1336,12 @@ class InferenceClient:
                 # Entropy specific params
                 top_k: int = 27,
                 min_p: float = 0.03,
-                thought_switch_tokens: List[str] = ["Wait,", "Alternatively,"],
-                min_thinking_tokens: int = 512,
-                max_thinking_tokens: int = 2048,
-                max_thoughts: int = 4,
-                num_traces: int = 1,
+                # Thinking specific params
+                reasoning_effort: str = "low",
+                thought_switch_tokens: List[str] = [],
+                min_thinking_tokens: Optional[int] = None,
+                max_thinking_tokens: Optional[int] = None,
+                max_thoughts: Optional[int] = None,
                 prefill: str = "",
                 start_think_token: str ="<think>",
                 end_think_token: str = "</think>",
@@ -1443,15 +1443,21 @@ class InferenceClient:
                                 pipeline.current_model = pipeline.current_model.to(original_dtype)
 
                         elif decoding == "thinkdeeper":
-                            thinkdeeper_config = {
-                                "thought_switch_tokens": thought_switch_tokens,
-                                "min_thinking_tokens": min_thinking_tokens,
-                                "max_thinking_tokens": max_thinking_tokens,
-                                "max_thoughts": max_thoughts,
-                                "prefill": prefill,
+                            # Get base config for reasoning effort
+                            thinkdeeper_config = get_effort_profile(reasoning_effort)
+                            
+                            # Override with any custom parameters
+                            custom_config = {
+                                "min_thinking_tokens": min_thinking_tokens if min_thinking_tokens is not None else thinkdeeper_config["min_thinking_tokens"],
+                                "max_thinking_tokens": max_thinking_tokens if max_thinking_tokens is not None else thinkdeeper_config["max_thinking_tokens"],
+                                "max_thoughts": max_thoughts if max_thoughts is not None else thinkdeeper_config["max_thoughts"],
+                                "thought_switch_tokens": thought_switch_tokens if thought_switch_tokens else thinkdeeper_config["thought_switch_tokens"],
+                                "prefill": prefill if prefill else thinkdeeper_config["prefill"],
                                 "start_think_token": start_think_token,
                                 "end_think_token": end_think_token,
                             }
+                            thinkdeeper_config.update(custom_config)
+
                             result = thinkdeeper_decode(
                                 pipeline.current_model,
                                 pipeline.tokenizer,
@@ -1584,3 +1590,65 @@ def parse_model_string(model: str) -> ModelConfig:
         enable_prompt_caching=False,
         dynamic_temperature=False,
     )
+
+# Low Reasoning Effort
+# Suitable for:
+# - Simple, straightforward questions
+# - Quick clarifications
+# - Well-defined tasks with clear steps
+LOW_EFFORT = {
+    "min_thinking_tokens": 256,     # ~100-200 words minimum
+    "max_thinking_tokens": 512,     # ~200-400 words maximum
+    "max_thoughts": 2,              # Allow only one alternative perspective
+    "thought_switch_tokens": [
+        "However,",                 # Single alternative consideration
+        "Wait,",
+        "Alternatively,",
+    ],
+    "prefill": "Let me think about this briefly..."
+}
+
+# Medium Reasoning Effort
+# Suitable for:
+# - Moderate complexity problems
+# - Analysis requiring multiple perspectives
+# - Tasks needing detailed explanation
+MEDIUM_EFFORT = {
+    "min_thinking_tokens": 512,     # ~200-400 words minimum
+    "max_thinking_tokens": 1024,    # ~400-800 words maximum
+    "max_thoughts": 4,              # Allow multiple perspective shifts
+    "thought_switch_tokens": [
+        "Additionally,",
+        "Alternatively,",
+        "However,",                 
+        "Wait,",
+    ],
+    "prefill": "Let me analyze this from multiple angles..."
+}
+
+# High Reasoning Effort
+# Suitable for:
+# - Complex problem solving
+# - Deep analysis tasks
+# - Multi-step reasoning chains
+HIGH_EFFORT = {
+    "min_thinking_tokens": 1024,    # ~400-800 words minimum
+    "max_thinking_tokens": 2048,    # ~800-1600 words maximum
+    "max_thoughts": 6,              # Allow extensive exploration
+    "thought_switch_tokens": [
+        "Additionally,",
+        "Alternatively,",
+        "However,",                 
+        "Wait,",
+    ],
+    "prefill": "This requires careful analysis. Let me think through it systematically..."
+}
+
+def get_effort_profile(effort_level: str) -> dict:
+    """Get reasoning effort profile based on specified level."""
+    profiles = {
+        "low": LOW_EFFORT,
+        "medium": MEDIUM_EFFORT,
+        "high": HIGH_EFFORT
+    }
+    return profiles.get(effort_level, LOW_EFFORT)
