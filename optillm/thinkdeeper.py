@@ -89,16 +89,18 @@ class ThinkDeeperProcessor:
             out = self.model(input_ids=tokens, past_key_values=kv, use_cache=True)
             logits = out.logits[0, -1, :]
             
-            # Check if we need to force end token
+            # Check if we need to force end thinking
             force_end = (n_thinking_tokens >= self.config["max_thinking_tokens"] or 
                         self.thought_count >= self.config["max_thoughts"])
             
-            if force_end:
+            if force_end and not seen_end_think:
                 logger.debug(f"Forcing end think token. Tokens: {n_thinking_tokens}, Thoughts: {self.thought_count}")
                 next_token = self.end_think_token
                 response_chunks.append(self.tokenizer.decode([next_token]))
-                # Break immediately when forcing end token
-                break
+                seen_end_think = True
+                # Don't break - continue generating but with end_think token forced
+                tokens = torch.tensor([[next_token]]).to(tokens.device)
+                continue
             else:
                 next_token = torch.multinomial(
                     torch.softmax(logits, dim=-1), 1
@@ -107,8 +109,8 @@ class ThinkDeeperProcessor:
             kv = out.past_key_values
             next_str = self.tokenizer.decode([next_token])
             
-            # Check if this is a thought-switching token
-            if self.is_thought_switch(next_token):
+            # Check if this is a thought-switching token (only if not in conclusion phase)
+            if not seen_end_think and self.is_thought_switch(next_token):
                 self.thought_count += 1
                 logger.debug(f"Detected thought switch marker. Total thoughts: {self.thought_count}")
                 # Clear the sequence after detecting a switch
@@ -135,6 +137,7 @@ class ThinkDeeperProcessor:
             if next_token == self.model.config.eos_token_id:
                 if seen_end_think:
                     logger.debug("Reached EOS after end think token - stopping generation")
+                    response_chunks.append(next_str)
                     break
                 elif n_thinking_tokens < self.config["min_thinking_tokens"]:
                     # Continue with thought transition if under minimum tokens
@@ -150,11 +153,13 @@ class ThinkDeeperProcessor:
                     # Force end think token if we haven't seen it
                     logger.debug("Reached EOS without end think token - adding end token")
                     response_chunks.append(self.tokenizer.decode([self.end_think_token]))
+                    response_chunks.append(next_str)
                     break
             
             # Normal token processing
             response_chunks.append(next_str)
-            n_thinking_tokens += 1
+            if not seen_end_think:
+                n_thinking_tokens += 1
             tokens = torch.tensor([[next_token]]).to(tokens.device)
 
         # Join all chunks and add framing tokens
