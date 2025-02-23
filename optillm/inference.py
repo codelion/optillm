@@ -1339,8 +1339,8 @@ class InferenceClient:
                 min_p: float = 0.03,
                 thought_switch_tokens: List[str] = ["Wait,", "Alternatively,"],
                 min_thinking_tokens: int = 512,
-                tip_alpha: float = 4.0,
-                tip_beta: int = 1024,
+                max_thinking_tokens: int = 2048,
+                max_thoughts: int = 4,
                 num_traces: int = 1,
                 prefill: str = "",
                 start_think_token: str ="<think>",
@@ -1446,12 +1446,11 @@ class InferenceClient:
                             thinkdeeper_config = {
                                 "thought_switch_tokens": thought_switch_tokens,
                                 "min_thinking_tokens": min_thinking_tokens,
+                                "max_thinking_tokens": max_thinking_tokens,
+                                "max_thoughts": max_thoughts,
                                 "prefill": prefill,
-                                "start_think_token" : start_think_token,
-                                "end_think_token" : end_think_token,
-                                "num_traces" : num_traces,
-                                "tip_alpha" : tip_alpha,
-                                "tip_beta" : tip_beta,
+                                "start_think_token": start_think_token,
+                                "end_think_token": end_think_token,
                             }
                             result = thinkdeeper_decode(
                                 pipeline.current_model,
