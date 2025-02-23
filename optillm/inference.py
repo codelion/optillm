@@ -1608,32 +1608,31 @@ def get_effort_profile(reasoning_effort: str, max_tokens: int = 4096) -> dict:
             "max_tokens_pct": 0.33,  # 33% of max_tokens
             "max_thoughts": 4,
             "thought_switch_tokens": [
-                "However,",
-                "Additionally,"
+                "Wait,",
+                "Alternatively,"
             ],
             "prefill": "Let me think about this briefly..."
         },
         "medium": {
             "min_tokens_pct": 0.33,  # 33% of max_tokens
             "max_tokens_pct": 0.66,  # 66% of max_tokens
-            "max_thoughts": 16,
+            "max_thoughts": 8,
             "thought_switch_tokens": [
-                "Additionally,",
+                "Wait,",
                 "Alternatively,",
                 "However,",
-                "Wait,"
             ],
             "prefill": "Let me analyze this from multiple angles..."
         },
         "high": {
             "min_tokens_pct": 0.66,  # 66% of max_tokens
             "max_tokens_pct": 0.90,  # 90% of max_tokens
-            "max_thoughts": 32,
+            "max_thoughts": 16,
             "thought_switch_tokens": [
-                "Additionally,",
+                "Wait,",
                 "Alternatively,",
                 "However,",
-                "Wait,"
+                "Additionally,",
             ],
             "prefill": "This requires careful analysis. Let me think through it systematically..."
         }

@@ -135,6 +135,7 @@ class ThinkDeeperProcessor:
 
             # Handle EOS token
             if next_token == self.model.config.eos_token_id:
+                logger.debug("Found eos token")
                 if seen_end_think:
                     logger.debug("Reached EOS after end think token - stopping generation")
                     response_chunks.append(next_str)
@@ -150,11 +151,12 @@ class ThinkDeeperProcessor:
                     self.thought_count += 1
                     continue
                 else:
-                    # Force end think token if we haven't seen it
-                    logger.debug("Reached EOS without end think token - adding end token")
+                    # Force end think token and continue generating for natural conclusion
+                    logger.debug("Reached EOS without end think token - adding end token and continuing generation")
                     response_chunks.append(self.tokenizer.decode([self.end_think_token]))
-                    response_chunks.append(next_str)
-                    break
+                    tokens = torch.tensor([[self.end_think_token]]).to(tokens.device)
+                    seen_end_think = True
+                    continue
             
             # Normal token processing
             response_chunks.append(next_str)
