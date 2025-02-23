@@ -1591,64 +1591,68 @@ def parse_model_string(model: str) -> ModelConfig:
         dynamic_temperature=False,
     )
 
-# Low Reasoning Effort
-# Suitable for:
-# - Simple, straightforward questions
-# - Quick clarifications
-# - Well-defined tasks with clear steps
-LOW_EFFORT = {
-    "min_thinking_tokens": 256,     # ~100-200 words minimum
-    "max_thinking_tokens": 512,     # ~200-400 words maximum
-    "max_thoughts": 2,              # Allow only one alternative perspective
-    "thought_switch_tokens": [
-        "However,",                 # Single alternative consideration
-        "Wait,",
-        "Alternatively,",
-    ],
-    "prefill": "Let me think about this briefly..."
-}
-
-# Medium Reasoning Effort
-# Suitable for:
-# - Moderate complexity problems
-# - Analysis requiring multiple perspectives
-# - Tasks needing detailed explanation
-MEDIUM_EFFORT = {
-    "min_thinking_tokens": 512,     # ~200-400 words minimum
-    "max_thinking_tokens": 1024,    # ~400-800 words maximum
-    "max_thoughts": 4,              # Allow multiple perspective shifts
-    "thought_switch_tokens": [
-        "Additionally,",
-        "Alternatively,",
-        "However,",                 
-        "Wait,",
-    ],
-    "prefill": "Let me analyze this from multiple angles..."
-}
-
-# High Reasoning Effort
-# Suitable for:
-# - Complex problem solving
-# - Deep analysis tasks
-# - Multi-step reasoning chains
-HIGH_EFFORT = {
-    "min_thinking_tokens": 1024,    # ~400-800 words minimum
-    "max_thinking_tokens": 2048,    # ~800-1600 words maximum
-    "max_thoughts": 6,              # Allow extensive exploration
-    "thought_switch_tokens": [
-        "Additionally,",
-        "Alternatively,",
-        "However,",                 
-        "Wait,",
-    ],
-    "prefill": "This requires careful analysis. Let me think through it systematically..."
-}
-
-def get_effort_profile(effort_level: str) -> dict:
-    """Get reasoning effort profile based on specified level."""
+def get_effort_profile(reasoning_effort: str, max_tokens: int = 4096) -> dict:
+    """Get reasoning effort profile based on specified level and max tokens.
+    
+    Args:
+        reasoning_effort: 'low', 'medium', or 'high'
+        max_tokens: Maximum tokens allowed for generation, defaults to 4096
+    
+    Returns:
+        dict: Configuration for the specified reasoning effort level
+    """
+    # Base profiles with percentages and thought counts
     profiles = {
-        "low": LOW_EFFORT,
-        "medium": MEDIUM_EFFORT,
-        "high": HIGH_EFFORT
+        "low": {
+            "min_tokens_pct": 0.25,  # 25% of max_tokens
+            "max_tokens_pct": 0.33,  # 33% of max_tokens
+            "max_thoughts": 4,
+            "thought_switch_tokens": [
+                "However,",
+                "Additionally,"
+            ],
+            "prefill": "Let me think about this briefly..."
+        },
+        "medium": {
+            "min_tokens_pct": 0.33,  # 33% of max_tokens
+            "max_tokens_pct": 0.66,  # 66% of max_tokens
+            "max_thoughts": 16,
+            "thought_switch_tokens": [
+                "Additionally,",
+                "Alternatively,",
+                "However,",
+                "Wait,"
+            ],
+            "prefill": "Let me analyze this from multiple angles..."
+        },
+        "high": {
+            "min_tokens_pct": 0.66,  # 66% of max_tokens
+            "max_tokens_pct": 0.90,  # 90% of max_tokens
+            "max_thoughts": 32,
+            "thought_switch_tokens": [
+                "Additionally,",
+                "Alternatively,",
+                "However,",
+                "Wait,"
+            ],
+            "prefill": "This requires careful analysis. Let me think through it systematically..."
+        }
     }
-    return profiles.get(effort_level, LOW_EFFORT)
+    
+    # Get base profile or default to medium
+    profile = profiles.get(reasoning_effort.lower(), profiles["low"])
+    
+    # Calculate actual token limits based on max_tokens
+    min_thinking_tokens = int(max_tokens * profile["min_tokens_pct"])
+    max_thinking_tokens = int(max_tokens * profile["max_tokens_pct"])
+    
+    # Create final config
+    config = {
+        "min_thinking_tokens": min_thinking_tokens,
+        "max_thinking_tokens": max_thinking_tokens,
+        "max_thoughts": profile["max_thoughts"],
+        "thought_switch_tokens": profile["thought_switch_tokens"],
+        "prefill": profile["prefill"]
+    }
+    
+    return config
