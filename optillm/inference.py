@@ -1444,7 +1444,7 @@ class InferenceClient:
 
                         elif decoding == "thinkdeeper":
                             # Get base config for reasoning effort
-                            thinkdeeper_config = get_effort_profile(reasoning_effort)
+                            thinkdeeper_config = get_effort_profile(reasoning_effort, max_tokens)
                             
                             # Override with any custom parameters
                             custom_config = {
