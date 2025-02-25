@@ -137,7 +137,7 @@ def analyze_thinking(response: str) -> Dict:
         position = 0
         for phrase in THOUGHT_TRANSITIONS:
             # Find all occurrences of each transition phrase
-            for match in re.finditer(r'\b' + re.escape(phrase) + r'\b', thinking_text):
+            for match in re.finditer(re.escape(phrase), thinking_text):
                 result["transition_counts"][phrase] += 1
                 # Record the approximate token position of the transition
                 token_position = len(thinking_text[:match.start()].split())
@@ -170,6 +170,12 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
+            extra_body = {
+                "decoding" : "thinkdeeper",
+                "min_thinking_tokens" : 0,
+                "max_thinking_tokens" : 8192,
+                "max_thoughts" : 128,
+            },
         )
         
         # If there's more than one choice, format as attempts
