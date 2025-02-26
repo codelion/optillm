@@ -4,6 +4,8 @@ import os
 import logging
 import re
 import time
+import math
+import numpy as np
 from typing import List, Dict, Tuple, Optional, Union, Counter
 from datetime import datetime
 from openai import OpenAI
@@ -137,7 +139,7 @@ def analyze_thinking(response: str) -> Dict:
         position = 0
         for phrase in THOUGHT_TRANSITIONS:
             # Find all occurrences of each transition phrase
-            for match in re.finditer(re.escape(phrase), thinking_text):
+            for match in re.finditer(r'\b' + re.escape(phrase) + r'\b', thinking_text):
                 result["transition_counts"][phrase] += 1
                 # Record the approximate token position of the transition
                 token_position = len(thinking_text[:match.start()].split())
@@ -151,7 +153,110 @@ def analyze_thinking(response: str) -> Dict:
     
     return result
 
-def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
+def analyze_logits_probs(logprobs_data: List[Dict]) -> Dict:
+    """
+    Analyze token probability distributions and entropy patterns.
+    
+    Args:
+        logprobs_data: List of dictionaries containing token and logprob information
+        
+    Returns:
+        Dict: Analysis metrics including entropy statistics
+    """
+    if not logprobs_data:
+        return {
+            "entropy_stats": None,
+            "transition_entropy": None,
+            "token_count": 0
+        }
+    
+    token_entropies = []
+    token_probs = []
+    token_texts = []
+    
+    # Process each token's logprobs
+    for token_info in logprobs_data:
+        if not token_info.get("top_logprobs"):
+            continue
+        
+        # Extract probabilities from logprobs
+        probs = []
+        for token, logprob in token_info["top_logprobs"].items():
+            probs.append(math.exp(logprob))
+        
+        # Normalize probabilities to sum to 1
+        total_prob = sum(probs)
+        if total_prob > 0:
+            probs = [p/total_prob for p in probs]
+        
+        # Calculate entropy: -sum(p_i * log(p_i))
+        entropy = -sum(p * math.log2(p) if p > 0 else 0 for p in probs)
+        token_entropies.append(entropy)
+        token_probs.append(probs[0] if probs else 0)  # Store top token probability
+        token_texts.append(token_info["token"])
+    
+    # Analyze entropy changes around thought transitions
+    transition_entropy = {}
+    
+    for phrase in THOUGHT_TRANSITIONS:
+        # Find indices where this transition phrase begins
+        transition_indices = []
+        
+        # Simple approach: find where token texts match the start of the phrase
+        for i, token in enumerate(token_texts):
+            if phrase.startswith(token) and i < len(token_texts) - 1:
+                # Check if this could be the start of the transition phrase
+                # This is a simplification; more complex matching would require full tokenization
+                transition_indices.append(i)
+        
+        # Analyze entropy changes around transitions
+        if transition_indices:
+            before_entropy = []
+            after_entropy = []
+            
+            for idx in transition_indices:
+                # Look at 5 tokens before and after transition
+                before_window = max(0, idx-5)
+                after_window = min(len(token_entropies), idx+5)
+                
+                if idx > before_window:
+                    before_entropy.extend(token_entropies[before_window:idx])
+                if after_window > idx:
+                    after_entropy.extend(token_entropies[idx:after_window])
+            
+            transition_entropy[phrase] = {
+                "before_mean": statistics.mean(before_entropy) if before_entropy else 0,
+                "after_mean": statistics.mean(after_entropy) if after_entropy else 0,
+                "count": len(transition_indices)
+            }
+    
+    # Calculate overall entropy statistics
+    entropy_stats = {
+        "mean": statistics.mean(token_entropies) if token_entropies else 0,
+        "median": statistics.median(token_entropies) if token_entropies else 0,
+        "max": max(token_entropies) if token_entropies else 0,
+        "min": min(token_entropies) if token_entropies else 0,
+        "std": statistics.stdev(token_entropies) if len(token_entropies) > 1 else 0
+    }
+    
+    # Calculate entropy per quartile of generation
+    if token_entropies:
+        quartile_size = max(1, len(token_entropies) // 4)
+        entropy_stats["quartiles"] = [
+            statistics.mean(token_entropies[i:i+quartile_size])
+            for i in range(0, len(token_entropies), quartile_size)
+            if i < len(token_entropies)
+        ]
+    else:
+        entropy_stats["quartiles"] = []
+    
+    return {
+        "entropy_stats": entropy_stats,
+        "transition_entropy": transition_entropy,
+        "token_count": len(token_entropies)
+    }
+
+def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> Union[str, List[Dict]]:
     """
     Get response from the LLM for a given problem.
     If multiple choices are returned, formats them as attempt dictionaries.
@@ -159,24 +264,32 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
     Args:
         problem (str): The problem text
         model (str): The model identifier
+        analyze_logits (bool): Whether to request logprobs
         
     Returns:
         Union[str, List[Dict]]: Either a string response or list of attempt dictionaries
     """
     try:
+        # Add logprobs parameters if requested
+        kwargs = {}
+        if analyze_logits:
+            kwargs["logprobs"] = True
+            kwargs["top_logprobs"] = 3
+        
         response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
-            extra_body = {
-                "decoding" : "thinkdeeper",
-                "min_thinking_tokens" : 0,
-                "max_thinking_tokens" : 8192,
-                "max_thoughts" : 128,
-            },
+            **kwargs
         )
+        
+        # Save raw response if logprobs are requested
+        if analyze_logits:
+            raw_filename = f"results/raw_responses_{model.replace('/', '_')}.json"
+            problem_id = hash(problem) % 10000  # Simple hash to identify the problem
+            save_raw_response(raw_filename, problem_id, response.model_dump())
         
         # If there's more than one choice, format as attempts
         if len(response.choices) > 1:
@@ -184,21 +297,37 @@ def get_llm_response(problem: str, model: str) -> Union[str, List[Dict]]:
             for i, choice in enumerate(response.choices):
                 response_text = choice.message.content.strip()
                 predicted_answer = extract_answer(response_text)
-                attempts.append({
+                attempt_data = {
                     "attempt_number": i + 1,
                     "response": response_text,
                     "predicted_answer": predicted_answer
-                })
+                }
+                
+                # Add logprobs if available
+                if analyze_logits and hasattr(choice.message, 'logprobs') and choice.message.logprobs:
+                    attempt_data["logprobs"] = choice.message.logprobs
+                
+                attempts.append(attempt_data)
             return attempts
             
         # If single choice, return as before
-        return response.choices[0].message.content.strip()
+        response_text = response.choices[0].message.content.strip()
+        
+        # If analyzing logits, return as a dictionary with logprobs
+        if analyze_logits and hasattr(response.choices[0].message, 'logprobs') and response.choices[0].message.logprobs:
+            return {
+                "response": response_text,
+                "logprobs": response.choices[0].message.logprobs
+            }
+        
+        # Otherwise return just the text
+        return response_text
         
     except Exception as e:
         logger.error(f"Error getting LLM response: {e}")
         return ""
 
-def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False) -> List[Dict]:
+def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False, analyze_logits: bool = False) -> List[Dict]:
     """
     Make n attempts to solve a problem and return all responses and predictions.
     
@@ -207,6 +336,7 @@ def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = F
         model (str): The model identifier
         n (int): Number of attempts to make
         analyze_thoughts (bool): Whether to analyze thinking patterns
+        analyze_logits (bool): Whether to analyze token probabilities
         
     Returns:
         List[Dict]: List of dictionaries containing response and predicted answer for each attempt
@@ -215,17 +345,34 @@ def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = F
     remaining_attempts = n
     
     while remaining_attempts > 0:
-        response = get_llm_response(problem, model)
+        response = get_llm_response(problem, model, analyze_logits)
         
         # If response is already formatted as attempts
         if isinstance(response, list):
             for attempt in response:
                 if analyze_thoughts:
                     attempt["thought_analysis"] = analyze_thinking(attempt["response"])
+                if analyze_logits and "logprobs" in attempt:
+                    attempt["logit_analysis"] = analyze_logits_probs(attempt["logprobs"]["content"])
             attempts.extend(response)
             remaining_attempts = n - len(attempts)
+        elif isinstance(response, dict) and "response" in response:
+            # Process dict response with logprobs
+            response_text = response["response"]
+            predicted_answer = extract_answer(response_text)
+            attempt_data = {
+                "attempt_number": len(attempts) + 1,
+                "response": response_text,
+                "predicted_answer": predicted_answer
+            }
+            if analyze_thoughts:
+                attempt_data["thought_analysis"] = analyze_thinking(response_text)
+            if analyze_logits and "logprobs" in response:
+                attempt_data["logit_analysis"] = analyze_logits_probs(response["logprobs"]["content"])
+            attempts.append(attempt_data)
+            remaining_attempts -= 1
         else:
-            # Process single response
+            # Process simple string response
             predicted_answer = extract_answer(response)
             attempt_data = {
                 "attempt_number": len(attempts) + 1,
@@ -276,7 +423,7 @@ def get_last_processed_index(results: List[Dict]) -> int:
         return -1
     return max(int(r.get('index', -1)) for r in results)
 
-def analyze_results(results: List[Dict], n: int, analyze_thoughts: bool = False):
+def analyze_results(results: List[Dict], n: int, analyze_thoughts: bool = False, analyze_logits: bool = False):
     """
     Analyze and print summary statistics of the results.
     
@@ -284,6 +431,7 @@ def analyze_results(results: List[Dict], n: int, analyze_thoughts: bool = False)
         results (List[Dict]): List of evaluation results
         n (int): Number of attempts per problem
         analyze_thoughts (bool): Whether to analyze thinking patterns
+        analyze_logits (bool): Whether to analyze token probabilities
     """
     total = len(results)
     correct = sum(1 for r in results if r['is_correct'])
@@ -437,6 +585,155 @@ def analyze_results(results: List[Dict], n: int, analyze_thoughts: bool = False)
                 print(f"Average token difference (correct - incorrect): {statistics.mean(avg_token_diff):.2f}")
                 print(f"Average transition difference (correct - incorrect): {statistics.mean(avg_transition_diff):.2f}")
     
+    if analyze_logits:
+        print("\n=== Logit Analysis ===")
+        
+        # Collect metrics about logit patterns for correct vs incorrect attempts
+        correct_attempts = []
+        incorrect_attempts = []
+        
+        for result in results:
+            for attempt in result['attempts']:
+                if 'logit_analysis' in attempt:
+                    if result['is_correct'] and attempt['predicted_answer'] == result['correct_answer']:
+                        correct_attempts.append(attempt)
+                    else:
+                        incorrect_attempts.append(attempt)
+        
+        # Function to calculate logit statistics for a group of attempts
+        def calc_logit_stats(attempts):
+            if not attempts:
+                return {
+                    "count": 0,
+                    "entropy": None,
+                    "transitions": None
+                }
+            
+            # Collect all entropy stats
+            entropy_means = []
+            entropy_stds = []
+            entropy_quartiles = []
+            transition_entropies = defaultdict(lambda: {"before": [], "after": []})
+            
+            for attempt in attempts:
+                if attempt['logit_analysis'].get('entropy_stats') and attempt['logit_analysis']['entropy_stats'].get('mean'):
+                    entropy_means.append(attempt['logit_analysis']['entropy_stats']['mean'])
+                    entropy_stds.append(attempt['logit_analysis']['entropy_stats']['std'])
+                    
+                    if attempt['logit_analysis']['entropy_stats'].get('quartiles'):
+                        entropy_quartiles.append(attempt['logit_analysis']['entropy_stats']['quartiles'])
+                    
+                    # Collect transition entropy data
+                    if attempt['logit_analysis'].get('transition_entropy'):
+                        for phrase, stats in attempt['logit_analysis']['transition_entropy'].items():
+                            if stats.get('before_mean') is not None:
+                                transition_entropies[phrase]["before"].append(stats['before_mean'])
+                            if stats.get('after_mean') is not None:
+                                transition_entropies[phrase]["after"].append(stats['after_mean'])
+            
+            # Calculate average entropy quartiles
+            avg_quartiles = []
+            if entropy_quartiles:
+                # Ensure all quartile lists have the same length
+                max_quartiles = max(len(q) for q in entropy_quartiles)
+                padded_quartiles = [q + [0] * (max_quartiles - len(q)) for q in entropy_quartiles]
+                
+                # Calculate average for each quartile position
+                for i in range(max_quartiles):
+                    quartile_values = [q[i] for q in padded_quartiles if i < len(q)]
+                    avg_quartiles.append(statistics.mean(quartile_values) if quartile_values else 0)
+            
+            # Calculate statistics for transitions
+            transition_stats = {}
+            for phrase, values in transition_entropies.items():
+                if values["before"] and values["after"]:
+                    before_mean = statistics.mean(values["before"])
+                    after_mean = statistics.mean(values["after"])
+                    transition_stats[phrase] = {
+                        "before_mean": before_mean,
+                        "after_mean": after_mean,
+                        "entropy_change": after_mean - before_mean,
+                        "count": len(values["before"])
+                    }
+            
+            return {
+                "count": len(attempts),
+                "entropy": {
+                    "mean": statistics.mean(entropy_means) if entropy_means else 0,
+                    "std": statistics.mean(entropy_stds) if entropy_stds else 0,
+                    "quartiles": avg_quartiles
+                },
+                "transitions": transition_stats
+            }
+        
+        # Calculate statistics
+        correct_stats = calc_logit_stats(correct_attempts)
+        incorrect_stats = calc_logit_stats(incorrect_attempts)
+        all_stats = calc_logit_stats(correct_attempts + incorrect_attempts)
+        
+        # Print statistics
+        print(f"\nOverall Logit Statistics (All {all_stats['count']} Attempts):")
+        if all_stats['entropy'] and all_stats['entropy']['mean']:
+            print(f"- Average entropy: {all_stats['entropy']['mean']:.4f}")
+            print(f"- Average entropy std: {all_stats['entropy']['std']:.4f}")
+            
+            if all_stats['entropy']['quartiles']:
+                print(f"- Entropy by generation quartile:")
+                for i, q in enumerate(all_stats['entropy']['quartiles']):
+                    print(f"  - Q{i+1}: {q:.4f}")
+            
+            if all_stats['transitions']:
+                print(f"- Entropy around thought transitions:")
+                for phrase, stats in all_stats['transitions'].items():
+                    change = stats['entropy_change']
+                    change_dir = "increases" if change > 0 else "decreases"
+                    print(f"  - {phrase} (n={stats['count']}): Entropy {change_dir} by {abs(change):.4f}")
+                    print(f"    - Before: {stats['before_mean']:.4f}, After: {stats['after_mean']:.4f}")
+        
+        if correct_stats['count'] > 0 and incorrect_stats['count'] > 0:
+            print("\nEntropy Comparison (Correct vs Incorrect Attempts):")
+            
+            if (correct_stats['entropy'] and correct_stats['entropy']['mean'] and 
+                incorrect_stats['entropy'] and incorrect_stats['entropy']['mean']):
+                
+                correct_entropy = correct_stats['entropy']['mean']
+                incorrect_entropy = incorrect_stats['entropy']['mean']
+                diff = correct_entropy - incorrect_entropy
+                
+                print(f"- Correct attempts avg entropy: {correct_entropy:.4f}")
+                print(f"- Incorrect attempts avg entropy: {incorrect_entropy:.4f}")
+                print(f"- Difference (correct - incorrect): {diff:.4f}")
+                
+                # Compare entropy progression
+                if (correct_stats['entropy']['quartiles'] and incorrect_stats['entropy']['quartiles']):
+                    print(f"- Entropy progression through generation:")
+                    
+                    for i in range(min(len(correct_stats['entropy']['quartiles']), 
+                                       len(incorrect_stats['entropy']['quartiles']))):
+                        c_q = correct_stats['entropy']['quartiles'][i]
+                        i_q = incorrect_stats['entropy']['quartiles'][i]
+                        q_diff = c_q - i_q
+                        
+                        print(f"  - Q{i+1}: Correct: {c_q:.4f}, Incorrect: {i_q:.4f}, Diff: {q_diff:.4f}")
+                
+                # Compare transitions
+                common_transitions = set(correct_stats['transitions'].keys()) & set(incorrect_stats['transitions'].keys())
+                
+                if common_transitions:
+                    print(f"- Entropy changes around thought transitions:")
+                    
+                    for phrase in common_transitions:
+                        c_stats = correct_stats['transitions'][phrase]
+                        i_stats = incorrect_stats['transitions'][phrase]
+                        
+                        c_change = c_stats['entropy_change']
+                        i_change = i_stats['entropy_change']
+                        
+                        print(f"  - {phrase}:")
+                        print(f"    - Correct: {c_stats['before_mean']:.4f} → {c_stats['after_mean']:.4f} (Δ {c_change:.4f})")
+                        print(f"    - Incorrect: {i_stats['before_mean']:.4f} → {i_stats['after_mean']:.4f} (Δ {i_change:.4f})")
+                        print(f"    - Difference in entropy change: {c_change - i_change:.4f}")
+    
     print("\n=== Incorrect Problems ===")
     for r in results:
         if not r['is_correct']:
@@ -447,12 +744,47 @@ def analyze_results(results: List[Dict], n: int, analyze_thoughts: bool = False)
             ])
             print("---")
 
-def main(model: str, n_attempts: int, analyze_thoughts: bool = False):
+def save_raw_response(filename: str, problem_id: int, response_data: Dict):
+    """Save raw response data (including logprobs) to a separate file."""
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    
+    # Create a timestamped ID for this response
+    timestamp = int(time.time())
+    response_id = f"{problem_id}_{timestamp}"
+    
+    # Create or update the raw responses file
+    try:
+        with open(filename, 'r') as f:
+            raw_responses = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        raw_responses = {}
+    
+    # Add this response to the collection
+    raw_responses[response_id] = response_data
+    
+    # Save the updated collection
+    with open(filename, 'w') as f:
+        json.dump(raw_responses, f)
+    
+    return response_id
+
+def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_logits: bool = False):
     """Main evaluation function that handles gaps in processed indexes."""
     os.makedirs("results", exist_ok=True)
     
-    suffix = "_thought_analysis" if analyze_thoughts else ""
-    results_file = f"evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
+    # Create suffix based on analysis flags
+    suffix_parts = []
+    if analyze_thoughts:
+        suffix_parts.append("thought_analysis")
+    if analyze_logits:
+        suffix_parts.append("logit_analysis")
+    
+    suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
+    results_file = f"results/evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
+    
+    # Create raw data directory if analyzing logits
+    if analyze_logits:
+        os.makedirs("results/raw", exist_ok=True)
     
     dataset = load_2024_dataset()
     existing_results = load_existing_results(results_file)
@@ -470,7 +802,7 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False):
         correct_answer = int(item['answer'])
         
         # Make n attempts for each problem
-        attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts)
+        attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts, analyze_logits)
         is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
         
         result = {
@@ -484,14 +816,14 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False):
         save_result(results_file, result)
     
     final_results = load_existing_results(results_file)
-    analyze_results(final_results, n_attempts, analyze_thoughts)
-
+    analyze_results(final_results, n_attempts, analyze_thoughts, analyze_logits)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME 2024 problems")
     parser.add_argument("--model", type=str, required=True, help="OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)")
     parser.add_argument("--n", type=int, default=1, help="Number of attempts per problem (for pass@n evaluation)")
     parser.add_argument("--analyze-thoughts", action="store_true", help="Analyze thinking patterns in responses")
+    parser.add_argument("--analyze-logits", action="store_true", help="Analyze token probability distributions")
     args = parser.parse_args()
     
-    main(args.model, args.n, args.analyze_thoughts)
+    main(args.model, args.n, args.analyze_thoughts, args.analyze_logits)
