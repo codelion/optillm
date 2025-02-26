@@ -282,6 +282,12 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> 
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
+            extra_body={
+                "decoding": "thinkdeeper",
+                "min_thinking_tokens" : 0,
+                "max_thinking_tokens" : 8000,
+                "max_thoughts": 100,
+            },
             **kwargs
         )
         

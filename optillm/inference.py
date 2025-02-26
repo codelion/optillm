@@ -1604,30 +1604,33 @@ def get_effort_profile(reasoning_effort: str, max_tokens: int = 4096) -> dict:
     # Base profiles with percentages and thought counts
     profiles = {
         "low": {
-            "min_tokens_pct": 0.25,  # 25% of max_tokens
+            "min_tokens_pct": 0.10,  
             "max_tokens_pct": 0.33,  # 33% of max_tokens
-            "max_thoughts": 4,
-            "thought_switch_tokens": [
-                "Wait,",
-                "Alternatively,"
-            ],
-            "prefill": "Let me think about this briefly..."
-        },
-        "medium": {
-            "min_tokens_pct": 0.33,  # 33% of max_tokens
-            "max_tokens_pct": 0.66,  # 66% of max_tokens
-            "max_thoughts": 8,
+            "max_thoughts": 64,
             "thought_switch_tokens": [
                 "Wait,",
                 "Alternatively,",
                 "However,",
+                "Additionally,",
+            ],
+            "prefill": "Let me think about this briefly..."
+        },
+        "medium": {
+            "min_tokens_pct": 0.10,  
+            "max_tokens_pct": 0.66,  # 66% of max_tokens
+            "max_thoughts": 128,
+            "thought_switch_tokens": [
+                "Wait,",
+                "Alternatively,",
+                "However,",
+                "Additionally,",
             ],
             "prefill": "Let me analyze this from multiple angles..."
         },
         "high": {
-            "min_tokens_pct": 0.66,  # 66% of max_tokens
+            "min_tokens_pct": 0.10,  
             "max_tokens_pct": 0.90,  # 90% of max_tokens
-            "max_thoughts": 16,
+            "max_thoughts": 256,
             "thought_switch_tokens": [
                 "Wait,",
                 "Alternatively,",
