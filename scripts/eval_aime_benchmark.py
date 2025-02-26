@@ -781,11 +781,7 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
     
     suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
     results_file = f"results/evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
-    
-    # Create raw data directory if analyzing logits
-    if analyze_logits:
-        os.makedirs("results/raw", exist_ok=True)
-    
+      
     dataset = load_2024_dataset()
     existing_results = load_existing_results(results_file)
     
