@@ -268,7 +268,7 @@ def parse_combined_approach(model: str, known_approaches: list, plugin_approache
 
     return operation, approaches, actual_model
     
-def execute_single_approach(approach, system_prompt, initial_query, client, model):
+def execute_single_approach(approach, system_prompt, initial_query, client, model, request_config: dict = None):
     if approach in known_approaches:
         if approach == 'none':
             # Extract kwargs from the request data
@@ -313,31 +313,42 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
         elif approach == 'cepo':
-            return cepo(system_prompt, initial_query, client, model, cepo_config)
+            return cepo(system_prompt, initial_query, client, model, cepo_config)            
     elif approach in plugin_approaches:
-        return plugin_approaches[approach](system_prompt, initial_query, client, model)
+        # Check if the plugin accepts request_config
+        plugin_func = plugin_approaches[approach]
+        import inspect
+        sig = inspect.signature(plugin_func)
+        
+        if 'request_config' in sig.parameters:
+            # Plugin supports request_config
+            return plugin_func(system_prompt, initial_query, client, model, request_config=request_config)
+        else:
+            # Legacy plugin without request_config support
+            return plugin_func(system_prompt, initial_query, client, model)
     else:
         raise ValueError(f"Unknown approach: {approach}")
     
-def execute_combined_approaches(approaches, system_prompt, initial_query, client, model):
+def execute_combined_approaches(approaches, system_prompt, initial_query, client, model, request_config: dict = None):
     final_response = initial_query
     total_tokens = 0
     for approach in approaches:
-        response, tokens = execute_single_approach(approach, system_prompt, final_response, client, model)
+        response, tokens = execute_single_approach(approach, system_prompt, final_response, client, model, request_config)
         final_response = response
         total_tokens += tokens
     return final_response, total_tokens
 
-async def execute_parallel_approaches(approaches, system_prompt, initial_query, client, model):
+async def execute_parallel_approaches(approaches, system_prompt, initial_query, client, model, request_config: dict = None):
     async def run_approach(approach):
-        return await asyncio.to_thread(execute_single_approach, approach, system_prompt, initial_query, client, model)
+        return await asyncio.to_thread(execute_single_approach, approach, system_prompt, initial_query, client, model, request_config)
 
     tasks = [run_approach(approach) for approach in approaches]
     results = await asyncio.gather(*tasks)
     responses, tokens = zip(*results)
     return list(responses), sum(tokens)
 
-def execute_n_times(n: int, approaches, operation: str, system_prompt: str, initial_query: str, client: Any, model: str) -> Tuple[Union[str, List[str]], int]:
+def execute_n_times(n: int, approaches, operation: str, system_prompt: str, initial_query: str, client: Any, model: str,
+                     request_config: dict = None) -> Tuple[Union[str, List[str]], int]:
     """
     Execute the pipeline n times and return n responses.
     
@@ -358,13 +369,13 @@ def execute_n_times(n: int, approaches, operation: str, system_prompt: str, init
     
     for _ in range(n):
         if operation == 'SINGLE':
-            response, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+            response, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
         elif operation == 'AND':
-            response, tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model)
+            response, tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model, request_config)
         elif operation == 'OR':
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            response, tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model))
+            response, tokens = loop.run_until_complete(execute_parallel_approaches(approaches, system_prompt, initial_query, client, model, request_config))
             loop.close()
         else:
             raise ValueError(f"Unknown operation: {operation}")
@@ -534,6 +545,15 @@ def proxy():
     messages = data.get('messages', [])
     model = data.get('model', server_config['model'])
     n = data.get('n', server_config['n'])  # Get n value from request or config
+    # Extract response_format if present
+    response_format = data.get("response_format", None)
+
+    # Create request config with all parameters
+    request_config = {
+        "stream": stream,
+        "n": n,
+        "response_format": response_format  # Add response_format to config
+    }
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
@@ -574,12 +594,12 @@ def proxy():
                 responses = []
                 completion_tokens = 0
                 for _ in range(n):
-                    result, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+                    result, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
                     responses.append(result)
                     completion_tokens += tokens
                 result = responses
             else:
-                result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model)
+                result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
             
             logger.debug(f'Direct proxy response: {result}')
 
@@ -593,7 +613,7 @@ def proxy():
                 raise ValueError("'none' approach cannot be combined with other approaches")
 
         # Handle non-none approaches with n attempts
-        response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model)
+        response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model, request_config)
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")

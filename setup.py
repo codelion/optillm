@@ -42,6 +42,8 @@ setup(
         # Constrain spacy version to avoid blis build issues on ARM64
         "spacy<3.8.0",
         "cerebras_cloud_sdk",
+        "outlines[transformers]",
+        "sentencepiece",
     ],
     entry_points={
         'console_scripts': [

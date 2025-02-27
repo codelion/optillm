@@ -167,3 +167,5 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+scripts/results/
