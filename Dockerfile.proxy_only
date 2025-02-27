@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.12-slim-bullseye AS builder
+FROM python:3.12-slim AS builder
 
 # Define build argument with default value
 ARG PORT=8000
@@ -26,7 +26,7 @@ COPY requirements_proxy_only.txt .
 RUN pip install --no-cache-dir -r requirements_proxy_only.txt
 
 # Final stage
-FROM python:3.12-slim-bullseye
+FROM python:3.12-slim
 
 LABEL org.opencontainers.image.source=https://github.com/codelion/optillm
 LABEL org.opencontainers.image.description="OptiLLM proxy-only image for API routing without model serving capabilities"
