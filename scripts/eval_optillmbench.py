@@ -36,7 +36,7 @@ APPROACHES = [
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
-    """Load the OptILLM Bench dataset."""
+    """Load the OptiLLM Bench dataset."""
     try:
         dataset = load_dataset("codelion/optillmbench")
         return dataset["test"]  # We use the test split for evaluation
@@ -161,10 +161,6 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
-                reasoning_effort="low",
-                extra_body = {
-                    "decoding" : "thinkdeeper",
-                }
             )
             
             # Calculate time taken
@@ -255,7 +251,7 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str):
     report = []
     
     # Header
-    report.append("# OptILLM Bench Evaluation Report")
+    report.append("# OptiLLM Bench Evaluation Report")
     report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
     # Overall Results Table
@@ -303,7 +299,7 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str):
     logger.info(f"Report saved to {report_path}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate a model on OptILLM Bench")
+    parser = argparse.ArgumentParser(description="Evaluate a model on OptiLLM Bench")
     parser.add_argument("--model", required=True, help="Model identifier")
     parser.add_argument("--base-url", default="http://localhost:8000/v1", 
                         help="Base URL for API endpoint")

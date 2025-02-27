@@ -19,9 +19,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-# client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-client = OpenAI(api_key="optillm", base_url="http://localhost:8001/v1")
+# client = OpenAI(api_key="optillm", base_url="http://localhost:8001/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -282,12 +282,12 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> 
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
-            extra_body={
-                "decoding": "thinkdeeper",
-                "min_thinking_tokens" : 0,
-                "max_thinking_tokens" : 8000,
-                "max_thoughts": 100,
-            },
+            # extra_body={
+            #     "decoding": "thinkdeeper",
+            #     "min_thinking_tokens" : 0,
+            #     "max_thinking_tokens" : 8000,
+            #     "max_thoughts": 100,
+            # },
             **kwargs
         )
         
