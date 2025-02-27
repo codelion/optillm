@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.12-slim-bullseye AS builder
+FROM python:3.12-slim-bookworm AS builder
 
 # Define build argument with default value
 ARG PORT=8000
@@ -26,7 +26,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Final stage
-FROM python:3.12-slim-bullseye
+FROM python:3.12-slim-bookworm
 
 # Add labels for the final image
 LABEL org.opencontainers.image.source="https://github.com/codelion/optillm"
