@@ -118,6 +118,29 @@ known_approaches = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency
 
 plugin_approaches = {}
 
+def normalize_message_content(messages):
+    """
+    Ensure all message content fields are strings, not lists.
+    Some models don't handle list-format content correctly.
+    """
+    normalized_messages = []
+    for message in messages:
+        normalized_message = message.copy()
+        content = message.get('content', '')
+        
+        # Convert list content to string if needed
+        if isinstance(content, list):
+            # Extract text content from the list
+            text_content = ' '.join(
+                item.get('text', '') for item in content 
+                if isinstance(item, dict) and item.get('type') == 'text'
+            )
+            normalized_message['content'] = text_content
+        
+        normalized_messages.append(normalized_message)
+    
+    return normalized_messages
+
 def none_approach(
     client: Any, 
     model: str,
@@ -143,10 +166,13 @@ def none_approach(
         model = model[5:]
     
     try:
-        # Make the direct completion call with original messages and parameters
+        # Normalize message content to ensure it's always string
+        normalized_messages = normalize_message_content(original_messages)
+        
+        # Make the direct completion call with normalized messages and parameters
         response = client.chat.completions.create(
             model=model,
-            messages=original_messages,
+            messages=normalized_messages,
             **kwargs
         )
         
