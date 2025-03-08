@@ -346,12 +346,32 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         import inspect
         sig = inspect.signature(plugin_func)
         
-        if 'request_config' in sig.parameters:
-            # Plugin supports request_config
-            return plugin_func(system_prompt, initial_query, client, model, request_config=request_config)
+        # Check if the plugin function is async
+        is_async = inspect.iscoroutinefunction(plugin_func)
+        
+        if is_async:
+            # For async functions, we need to run them in an event loop
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                if 'request_config' in sig.parameters:
+                    # Plugin supports request_config
+                    result = loop.run_until_complete(plugin_func(system_prompt, initial_query, client, model, request_config=request_config))
+                else:
+                    # Legacy plugin without request_config support
+                    result = loop.run_until_complete(plugin_func(system_prompt, initial_query, client, model))
+                return result
+            finally:
+                loop.close()
         else:
-            # Legacy plugin without request_config support
-            return plugin_func(system_prompt, initial_query, client, model)
+            # For synchronous functions, call directly
+            if 'request_config' in sig.parameters:
+                # Plugin supports request_config
+                return plugin_func(system_prompt, initial_query, client, model, request_config=request_config)
+            else:
+                # Legacy plugin without request_config support
+                return plugin_func(system_prompt, initial_query, client, model)
     else:
         raise ValueError(f"Unknown approach: {approach}")
     
