@@ -22,6 +22,7 @@ import traceback
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 import mcp.types as types
+from mcp.shared.exceptions import McpError
 
 # Configure logging
 LOG_DIR = Path.home() / ".optillm" / "logs"
@@ -47,11 +48,6 @@ def find_executable(cmd: str) -> Optional[str]:
     """
     Find the full path to an executable command.
     
-    This function will:
-    1. Check if the command exists in PATH
-    2. Check common install locations 
-    3. Try npm prefix paths
-    
     Args:
         cmd: The command to find
         
@@ -68,18 +64,14 @@ def find_executable(cmd: str) -> Optional[str]:
         logger.info(f"Found {cmd} in PATH at {cmd_path}")
         return cmd_path
     
-    # Try common locations for Node.js tools
+    # Try common locations
     common_paths = [
         "/usr/local/bin",
         "/usr/bin",
         "/bin",
-        "/opt/homebrew/bin",  # macOS with Homebrew
-        "/opt/homebrew/opt/node/bin",  # Specific Homebrew Node.js location
-        "/usr/local/opt/node/bin",
+        "/opt/homebrew/bin",
         os.path.expanduser("~/.npm-global/bin"),
         os.path.expanduser("~/.nvm/current/bin"),
-        os.path.expanduser("~/npm/bin"),
-        os.path.expanduser("~/.npm/bin"),
     ]
     
     for path in common_paths:
@@ -87,70 +79,9 @@ def find_executable(cmd: str) -> Optional[str]:
         if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
             logger.info(f"Found {cmd} at {full_path}")
             return full_path
-    
-    # Try using npm to find global bin path
-    try:
-        npm_bin_path = subprocess.run(
-            ["npm", "bin", "-g"], 
-            capture_output=True, 
-            text=True, 
-            check=True
-        ).stdout.strip()
-        
-        full_path = os.path.join(npm_bin_path, cmd)
-        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-            logger.info(f"Found {cmd} in npm global bin at {full_path}")
-            return full_path
-    except:
-        pass
-    
-    # If all else fails, create a wrapper script that sources profile files
-    wrapper_path = create_command_wrapper(cmd)
-    if wrapper_path:
-        logger.info(f"Created wrapper script for {cmd} at {wrapper_path}")
-        return wrapper_path
-        
+            
     logger.error(f"Could not find executable: {cmd}")
     return None
-
-def create_command_wrapper(cmd: str) -> Optional[str]:
-    """
-    Create a shell wrapper script for a command that might be in PATH after shell initialization.
-    
-    Args:
-        cmd: The command to wrap
-        
-    Returns:
-        Path to the wrapper script if successful, None otherwise
-    """
-    try:
-        wrapper_dir = Path.home() / ".optillm" / "wrappers"
-        wrapper_dir.mkdir(parents=True, exist_ok=True)
-        
-        wrapper_path = wrapper_dir / f"{cmd}_wrapper.sh"
-        
-        with open(wrapper_path, 'w') as f:
-            f.write(f"""#!/bin/bash
-# Source profile to get correct PATH
-if [ -f ~/.bash_profile ]; then
-    source ~/.bash_profile
-elif [ -f ~/.profile ]; then
-    source ~/.profile
-elif [ -f ~/.zshrc ]; then
-    source ~/.zshrc
-fi
-
-# Run command with all arguments
-exec {cmd} "$@"
-""")
-        
-        # Make the script executable
-        os.chmod(wrapper_path, 0o755)
-        
-        return str(wrapper_path)
-    except Exception as e:
-        logger.error(f"Error creating wrapper script: {e}")
-        return None
 
 @dataclass
 class ServerConfig:
@@ -240,255 +171,131 @@ class MCPServer:
     def __init__(self, server_name: str, config: ServerConfig):
         self.server_name = server_name
         self.config = config
-        self.session: Optional[ClientSession] = None
-        self.transport: Optional[Tuple] = None
+        self.tools = []
+        self.resources = []
+        self.prompts = []
         self.connected = False
-        self.tools: List[types.Tool] = []
-        self.resources: List[types.Resource] = []
-        self.prompts: List[types.Prompt] = []
+        self.has_tools_capability = False
+        self.has_resources_capability = False
+        self.has_prompts_capability = False
     
-    async def connect(self) -> bool:
-        """Connect to the MCP server"""
+    async def connect_and_discover(self) -> bool:
+        """Connect to the server and discover capabilities using proper context management"""
+        logger.info(f"Connecting to MCP server: {self.server_name}")
+        
+        # Find the full path to the command
+        full_command = find_executable(self.config.command)
+        if not full_command:
+            logger.error(f"Failed to find executable for command: {self.config.command}")
+            return False
+            
+        # Create environment with PATH included
+        merged_env = os.environ.copy()
+        if self.config.env:
+            merged_env.update(self.config.env)
+        
+        # Create server parameters
+        server_params = StdioServerParameters(
+            command=full_command,
+            args=self.config.args,
+            env=merged_env
+        )
+        
         try:
-            logger.info(f"Connecting to MCP server: {self.server_name}")
-            
-            # Find the full path to the command
-            full_command = find_executable(self.config.command)
-            if not full_command:
-                logger.error(f"Failed to find executable for command: {self.config.command}")
-                logger.error("Please make sure the command is in your PATH or use an absolute path")
-                return False
-                
-            # Create environment with PATH included
-            merged_env = os.environ.copy()
-            if self.config.env:
-                merged_env.update(self.config.env)
-            
-            # Create server parameters with the full command path
-            server_params = StdioServerParameters(
-                command=full_command,
-                args=self.config.args,
-                env=merged_env
+            # Start the server separately to see its output
+            process = await asyncio.create_subprocess_exec(
+                full_command,
+                *self.config.args,
+                env=merged_env,
+                stderr=asyncio.subprocess.PIPE
             )
             
-            # Create transport using async with
-            try:
-                # Using context manager directly with try/except/finally for cleanup
-                ctx = stdio_client(server_params)
-                transport = await ctx.__aenter__()
-                self.transport = transport
-                
-                read_stream, write_stream = transport
-                
-                # Create and initialize session
-                self.session = ClientSession(read_stream, write_stream)
-                await self.session.initialize()
-                
-                # Discover capabilities
-                await self.discover_capabilities()
-                
-                self.connected = True
-                logger.info(f"Successfully connected to MCP server: {self.server_name}")
-                return True
-                
-            except Exception as e:
-                # Clean up resources in case of error
-                if 'ctx' in locals() and 'transport' in locals():
-                    await ctx.__aexit__(type(e), e, e.__traceback__)
-                raise
+            # Log startup message from stderr
+            async def log_stderr():
+                while True:
+                    line = await process.stderr.readline()
+                    if not line:
+                        break
+                    logger.info(f"Server {self.server_name} stderr: {line.decode().strip()}")
+            
+            # Start stderr logging task
+            asyncio.create_task(log_stderr())
+            
+            # Wait a bit for the server to start up
+            await asyncio.sleep(2)
+            
+            # Use the MCP client with proper context management
+            async with stdio_client(server_params) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    logger.info(f"Connected to server: {self.server_name}")
+                    
+                    # Initialize session
+                    result = await session.initialize()
+                    logger.info(f"Server {self.server_name} initialized with capabilities: {result.capabilities}")
+                    
+                    # Check which capabilities the server supports
+                    server_capabilities = result.capabilities
+                    
+                    # Discover tools if supported
+                    if hasattr(server_capabilities, "tools"):
+                        self.has_tools_capability = True
+                        logger.info(f"Discovering tools for {self.server_name}")
+                        try:
+                            tools_result = await session.list_tools()
+                            self.tools = tools_result.tools
+                            logger.info(f"Found {len(self.tools)} tools")
+                        except McpError as e:
+                            logger.warning(f"Failed to list tools: {e}")
+                    
+                    # Discover resources if supported
+                    if hasattr(server_capabilities, "resources"):
+                        self.has_resources_capability = True
+                        logger.info(f"Discovering resources for {self.server_name}")
+                        try:
+                            resources_result = await session.list_resources()
+                            self.resources = resources_result.resources
+                            logger.info(f"Found {len(self.resources)} resources")
+                        except McpError as e:
+                            logger.warning(f"Failed to list resources: {e}")
+                    
+                    # Discover prompts if supported
+                    if hasattr(server_capabilities, "prompts"):
+                        self.has_prompts_capability = True
+                        logger.info(f"Discovering prompts for {self.server_name}")
+                        try:
+                            prompts_result = await session.list_prompts()
+                            self.prompts = prompts_result.prompts
+                            logger.info(f"Found {len(self.prompts)} prompts")
+                        except McpError as e:
+                            logger.warning(f"Failed to list prompts: {e}")
+                    
+                    logger.info(f"Server {self.server_name} capabilities: "
+                               f"{len(self.tools)} tools, {len(self.resources)} resources, "
+                               f"{len(self.prompts)} prompts")
+            
+            self.connected = True
+            return True
             
         except Exception as e:
             logger.error(f"Error connecting to MCP server {self.server_name}: {e}")
             logger.error(traceback.format_exc())
-            
-            if self.session:
-                try:
-                    await self.session.aclose()
-                except:
-                    pass
-            
-            self.session = None
-            self.connected = False
             return False
-    
-    async def discover_capabilities(self) -> bool:
-        """Discover the server's capabilities"""
-        if not self.session:
-            logger.error(f"Cannot discover capabilities for {self.server_name}: Not connected")
-            return False
-            
-        try:
-            # List tools
-            tools_result = await self.session.list_tools()
-            self.tools = tools_result.tools
-            
-            # List resources
-            resources_result = await self.session.list_resources()
-            self.resources = resources_result.resources
-            
-            # List prompts
-            prompts_result = await self.session.list_prompts()
-            self.prompts = prompts_result.prompts
-            
-            logger.info(f"Server {self.server_name} capabilities: "
-                       f"{len(self.tools)} tools, {len(self.resources)} resources, "
-                       f"{len(self.prompts)} prompts")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error discovering capabilities for {self.server_name}: {e}")
-            logger.error(traceback.format_exc())
-            return False
-    
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Call a tool on this server"""
-        if not self.session or not self.connected:
-            logger.error(f"Cannot call tool for {self.server_name}: Not connected")
-            return {"error": f"Server {self.server_name} is not connected"}
-            
-        try:
-            # Find the tool
-            tool = next((t for t in self.tools if t.name == tool_name), None)
-            if not tool:
-                return {"error": f"Tool {tool_name} not found on server {self.server_name}"}
-                
-            # Call the tool
-            logger.info(f"Calling tool {tool_name} on server {self.server_name} with arguments: {arguments}")
-            result = await self.session.call_tool(tool_name, arguments)
-            
-            # Process the result
-            content_results = []
-            for content in result.content:
-                if content.type == "text":
-                    content_results.append({
-                        "type": "text",
-                        "text": content.text
-                    })
-                elif content.type == "image":
-                    content_results.append({
-                        "type": "image",
-                        "data": content.data,
-                        "mimeType": content.mimeType
-                    })
-            
-            return {
-                "result": content_results,
-                "is_error": result.isError
-            }
-            
-        except Exception as e:
-            logger.error(f"Error calling tool {tool_name} on server {self.server_name}: {e}")
-            logger.error(traceback.format_exc())
-            return {"error": f"Error calling tool: {str(e)}"}
-    
-    async def read_resource(self, uri: str) -> Dict[str, Any]:
-        """Read a resource from this server"""
-        if not self.session or not self.connected:
-            logger.error(f"Cannot read resource for {self.server_name}: Not connected")
-            return {"error": f"Server {self.server_name} is not connected"}
-            
-        try:
-            # Find the resource
-            resource = next((r for r in self.resources if r.uri == uri), None)
-            if not resource:
-                return {"error": f"Resource {uri} not found on server {self.server_name}"}
-                
-            # Read the resource
-            logger.info(f"Reading resource {uri} from server {self.server_name}")
-            result = await self.session.read_resource(uri)
-            
-            # Process the result
-            content_results = []
-            for content in result.contents:
-                if content.text:
-                    content_results.append({
-                        "type": "text",
-                        "uri": content.uri or uri,
-                        "text": content.text,
-                        "mimeType": content.mimeType
-                    })
-                elif content.blob:
-                    content_results.append({
-                        "type": "binary",
-                        "uri": content.uri or uri,
-                        "data": content.blob,
-                        "mimeType": content.mimeType
-                    })
-            
-            return {
-                "result": content_results
-            }
-            
-        except Exception as e:
-            logger.error(f"Error reading resource {uri} from server {self.server_name}: {e}")
-            logger.error(traceback.format_exc())
-            return {"error": f"Error reading resource: {str(e)}"}
-    
-    async def get_prompt(self, prompt_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Get a prompt from this server"""
-        if not self.session or not self.connected:
-            logger.error(f"Cannot get prompt for {self.server_name}: Not connected")
-            return {"error": f"Server {self.server_name} is not connected"}
-            
-        try:
-            # Find the prompt
-            prompt = next((p for p in self.prompts if p.name == prompt_name), None)
-            if not prompt:
-                return {"error": f"Prompt {prompt_name} not found on server {self.server_name}"}
-                
-            # Get the prompt
-            logger.info(f"Getting prompt {prompt_name} from server {self.server_name} with arguments: {arguments}")
-            result = await self.session.get_prompt(prompt_name, arguments)
-            
-            # Process the result
-            messages = []
-            for msg in result.messages:
-                if msg.content.type == "text":
-                    messages.append({
-                        "role": msg.role,
-                        "content": msg.content.text
-                    })
-                elif msg.content.type == "image":
-                    messages.append({
-                        "role": msg.role,
-                        "content": {
-                            "type": "image",
-                            "data": msg.content.data,
-                            "mimeType": msg.content.mimeType
-                        }
-                    })
-            
-            return {
-                "result": messages
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting prompt {prompt_name} from server {self.server_name}: {e}")
-            logger.error(traceback.format_exc())
-            return {"error": f"Error getting prompt: {str(e)}"}
-    
-    async def close(self):
-        """Close the connection to the server"""
-        if self.session:
-            try:
-                await self.session.aclose()
-                logger.info(f"Closed connection to MCP server: {self.server_name}")
-            except Exception as e:
-                logger.error(f"Error closing connection to {self.server_name}: {e}")
-            finally:
-                self.session = None
-                self.connected = False
 
 class MCPServerManager:
-    """Manages MCP server connections and capabilities"""
+    """Manages MCP servers and capabilities"""
     
     def __init__(self, config_manager: MCPConfigManager):
         self.config_manager = config_manager
         self.servers: Dict[str, MCPServer] = {}
         self.initialized = False
+        
+        # Cache of capabilities
+        self.all_tools = []
+        self.all_resources = []
+        self.all_prompts = []
     
     async def initialize(self) -> bool:
-        """Initialize connections to all configured servers"""
+        """Initialize and cache all server capabilities"""
         if self.initialized:
             return True
             
@@ -496,50 +303,65 @@ class MCPServerManager:
         for server_name, server_config in self.config_manager.servers.items():
             self.servers[server_name] = MCPServer(server_name, server_config)
         
-        # Connect to all servers asynchronously
-        if self.servers:
-            connect_tasks = [server.connect() for server in self.servers.values()]
-            results = await asyncio.gather(*connect_tasks, return_exceptions=True)
-            
-            # Check how many servers connected successfully
-            success_count = sum(1 for r in results if r is True)
-            logger.info(f"Connected to {success_count}/{len(self.servers)} MCP servers")
-            
-            if success_count > 0:
-                self.initialized = True
-                return True
-            else:
-                logger.error("Failed to connect to any MCP servers")
-                return False
-        else:
-            logger.warning("No MCP servers configured")
-            self.initialized = True
-            return True
+        # Connect to all servers and discover capabilities
+        for server_name, server in self.servers.items():
+            success = await server.connect_and_discover()
+            if success:
+                # Cache server capabilities
+                for tool in server.tools:
+                    self.all_tools.append({
+                        "server": server_name,
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema
+                    })
+                
+                for resource in server.resources:
+                    self.all_resources.append({
+                        "server": server_name,
+                        "uri": resource.uri,
+                        "name": resource.name,
+                        "description": resource.description
+                    })
+                
+                for prompt in server.prompts:
+                    self.all_prompts.append({
+                        "server": server_name,
+                        "name": prompt.name,
+                        "description": prompt.description,
+                        "arguments": prompt.arguments
+                    })
+        
+        self.initialized = True
+        
+        # Check if we successfully connected to any servers
+        connected_servers = sum(1 for server in self.servers.values() if server.connected)
+        logger.info(f"Connected to {connected_servers}/{len(self.servers)} MCP servers")
+        return connected_servers > 0
     
     def get_tools_for_model(self) -> List[Dict[str, Any]]:
-        """Get tools from all servers in a format suitable for the model's tool-calling API"""
+        """Get tools in a format suitable for the model's tool-calling API"""
         tools = []
         
-        for server_name, server in self.servers.items():
-            if not server.connected or not server.tools:
-                continue
-                
-            for tool in server.tools:
-                # Convert MCP tool to model tool format
-                tool_entry = {
-                    "type": "function",
-                    "function": {
-                        "name": f"{server_name}.{tool.name}",
-                        "description": tool.description or f"Tool {tool.name} from server {server_name}",
-                        "parameters": tool.inputSchema
-                    }
+        for tool_info in self.all_tools:
+            server_name = tool_info["server"]
+            tool_name = tool_info["name"]
+            
+            # Format for model tools API
+            tool_entry = {
+                "type": "function",
+                "function": {
+                    "name": f"{server_name}.{tool_name}",
+                    "description": tool_info["description"] or f"Tool {tool_name} from server {server_name}",
+                    "parameters": tool_info["input_schema"]
                 }
-                tools.append(tool_entry)
+            }
+            tools.append(tool_entry)
         
         return tools
     
     def get_capabilities_description(self) -> str:
-        """Get a formatted description of all server capabilities"""
+        """Get a description of all capabilities"""
         if not self.servers:
             return "No MCP servers available."
             
@@ -576,35 +398,74 @@ class MCPServerManager:
             description_parts.append(server_description)
             
         return "\n".join(description_parts)
+
+async def execute_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Execute a tool on an MCP server
     
-    async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a tool on the appropriate server"""
-        if "." not in tool_name:
-            return {"error": f"Invalid tool name format: {tool_name}. Expected format: server_name.tool_name"}
-            
-        server_name, function_name = tool_name.split(".", 1)
-        
-        if server_name not in self.servers:
-            return {"error": f"Server not found: {server_name}"}
-            
-        server = self.servers[server_name]
-        if not server.connected:
-            return {"error": f"Server {server_name} is not connected"}
-            
-        # Execute the tool
-        return await server.call_tool(function_name, arguments)
+    This function creates a fresh connection for each tool execution to ensure reliability.
+    """
+    logger.info(f"Executing tool {tool_name} on server {server_name} with arguments: {arguments}")
     
-    async def close(self):
-        """Close all server connections"""
-        if not self.servers:
-            return
-            
-        # Close all server connections in parallel
-        close_tasks = [server.close() for server in self.servers.values()]
-        await asyncio.gather(*close_tasks, return_exceptions=True)
-        
-        self.servers = {}
-        self.initialized = False
+    # Load configuration
+    config_manager = MCPConfigManager()
+    if not config_manager.load_config():
+        return {"error": "Failed to load MCP configuration"}
+    
+    # Get server configuration
+    server_config = config_manager.servers.get(server_name)
+    if not server_config:
+        return {"error": f"Server {server_name} not found in configuration"}
+    
+    # Find executable
+    full_command = find_executable(server_config.command)
+    if not full_command:
+        return {"error": f"Failed to find executable for command: {server_config.command}"}
+    
+    # Create environment with PATH included
+    merged_env = os.environ.copy()
+    if server_config.env:
+        merged_env.update(server_config.env)
+    
+    # Create server parameters
+    server_params = StdioServerParameters(
+        command=full_command,
+        args=server_config.args,
+        env=merged_env
+    )
+    
+    try:
+        # Use the MCP client with proper context management
+        async with stdio_client(server_params) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                # Call the tool and get the result
+                logger.info(f"Calling tool {tool_name} with arguments: {arguments}")
+                result = await session.call_tool(tool_name, arguments)
+                
+                # Process the result
+                content_results = []
+                for content in result.content:
+                    if content.type == "text":
+                        content_results.append({
+                            "type": "text",
+                            "text": content.text
+                        })
+                    elif content.type == "image":
+                        content_results.append({
+                            "type": "image",
+                            "data": content.data,
+                            "mimeType": content.mimeType
+                        })
+                
+                return {
+                    "result": content_results,
+                    "is_error": result.isError
+                }
+                
+    except Exception as e:
+        logger.error(f"Error executing tool {tool_name} on server {server_name}: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": f"Error executing tool: {str(e)}"}
 
 async def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str, int]:
     """
@@ -621,12 +482,9 @@ async def run(system_prompt: str, initial_query: str, client, model: str) -> Tup
     """
     logger.info(f"MCP Plugin run called with model: {model}")
     
-    # Create server manager
-    config_manager = MCPConfigManager()
-    server_manager = MCPServerManager(config_manager)
-    
     try:
         # Load configuration
+        config_manager = MCPConfigManager()
         if not config_manager.load_config():
             # Try to create default config
             config_manager.create_default_config()
@@ -645,10 +503,34 @@ async def run(system_prompt: str, initial_query: str, client, model: str) -> Tup
                 return response.choices[0].message.content, response.usage.completion_tokens
         
         # Initialize server manager
-        await server_manager.initialize()
+        server_manager = MCPServerManager(config_manager)
+        success = await server_manager.initialize()
+        
+        if not success:
+            logger.warning("Failed to connect to any MCP servers, falling back to default behavior")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": initial_query}
+                ],
+                temperature=0.7,
+            )
+            return response.choices[0].message.content, response.usage.completion_tokens
         
         # Get tools formatted for the model
         tools = server_manager.get_tools_for_model()
+        if not tools:
+            logger.warning("No tools available from MCP servers")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": initial_query}
+                ],
+                temperature=0.7,
+            )
+            return response.choices[0].message.content, response.usage.completion_tokens
         
         # Get capabilities description
         capabilities_description = server_manager.get_capabilities_description()
@@ -686,27 +568,38 @@ async def run(system_prompt: str, initial_query: str, client, model: str) -> Tup
             # Process each tool call
             for tool_call in response_message.tool_calls:
                 tool_call_id = tool_call.id
-                tool_name = tool_call.function.name
-                try:
-                    # Parse arguments
-                    arguments = json.loads(tool_call.function.arguments)
+                full_tool_name = tool_call.function.name
+                
+                # Split into server and tool name
+                if "." in full_tool_name:
+                    server_name, tool_name = full_tool_name.split(".", 1)
                     
-                    # Execute tool
-                    logger.info(f"Executing tool: {tool_name} with arguments: {arguments}")
-                    result = await server_manager.execute_tool(tool_name, arguments)
-                    
-                    # Add tool result to messages
+                    try:
+                        # Parse arguments
+                        arguments = json.loads(tool_call.function.arguments)
+                        
+                        # Execute tool (creates a fresh connection for reliability)
+                        result = await execute_tool(server_name, tool_name, arguments)
+                        
+                        # Add tool result to messages
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": json.dumps(result)
+                        })
+                    except Exception as e:
+                        logger.error(f"Error processing tool call {full_tool_name}: {e}")
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": json.dumps({"error": f"Error: {str(e)}"})
+                        })
+                else:
+                    # Invalid tool name format
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call_id,
-                        "content": json.dumps(result)
-                    })
-                except Exception as e:
-                    logger.error(f"Error processing tool call {tool_name}: {e}")
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps({"error": f"Error: {str(e)}"})
+                        "content": json.dumps({"error": f"Invalid tool name format: {full_tool_name}. Expected format: server_name.tool_name"})
                     })
             
             # Send follow-up request with tool results
@@ -732,11 +625,12 @@ async def run(system_prompt: str, initial_query: str, client, model: str) -> Tup
         logger.error(f"Error in MCP plugin run: {e}")
         logger.error(traceback.format_exc())
         # In case of error, pass through the original query
-        return initial_query, 0
-        
-    finally:
-        # Always clean up server connections
-        try:
-            await server_manager.close()
-        except Exception as e:
-            logger.error(f"Error cleaning up server connections: {e}")
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": initial_query}
+            ],
+            temperature=0.7,
+        )
+        return response.choices[0].message.content, response.usage.completion_tokens
