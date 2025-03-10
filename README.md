@@ -219,6 +219,126 @@ response = client.chat.completions.create(
 > The Anthropic API, llama.cpp-server, and ollama currently do not support sampling multiple responses from a model, which limits the available approaches to the following:
 > `cot_reflection`, `leap`, `plansearch`, `rstar`, `rto`, `self_consistency`, `re2`, and `z3`. For models on HuggingFace, you can use the built-in local inference server as it supports multiple responses.
 
+### MCP Plugin
+
+The Model Context Protocol (MCP) plugin enables OptiLLM to connect with MCP servers, bringing external tools, resources, and prompts into the context of language models. This allows for powerful integrations with filesystem access, database queries, API connections, and more.
+
+#### What is MCP?
+
+The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open protocol standard that allows LLMs to securely access tools and data sources through a standardized interface. MCP servers can provide:
+
+- **Tools**: Callable functions that perform actions (like writing files, querying databases, etc.)
+- **Resources**: Data sources for providing context (like file contents)
+- **Prompts**: Reusable prompt templates for specific use cases
+
+#### Configuration
+
+##### Setting up MCP Config
+
+1. Create a configuration file at `~/.optillm/mcp_config.json` with the following structure:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/path/to/allowed/directory1",
+        "/path/to/allowed/directory2"
+      ],
+      "env": {}
+    }
+  },
+  "log_level": "INFO"
+}
+```
+
+Each server entry in `mcpServers` consists of:
+
+- **Server name**: A unique identifier for the server (e.g., "filesystem")
+- **command**: The executable to run the server
+- **args**: Command-line arguments for the server
+- **env**: Environment variables for the server process
+- **description** (optional): Description of the server's functionality
+
+#### Available MCP Servers
+
+You can use any of the [official MCP servers](https://modelcontextprotocol.io/examples) or third-party servers. Some popular options include:
+
+- **Filesystem**: `@modelcontextprotocol/server-filesystem` - File operations
+- **Git**: `mcp-server-git` - Git repository operations
+- **SQLite**: `@modelcontextprotocol/server-sqlite` - SQLite database access
+- **Brave Search**: `@modelcontextprotocol/server-brave-search` - Web search capabilities
+
+Example configuration for multiple servers:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
+      "env": {}
+    },
+    "search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "your-api-key-here"
+      }
+    }
+  },
+  "log_level": "INFO"
+}
+```
+
+#### Using the MCP Plugin
+
+Once configured, the MCP plugin will automatically:
+
+1. Connect to all configured MCP servers
+2. Discover available tools, resources, and prompts
+3. Make these capabilities available to the language model
+4. Handle tool calls and resource requests
+
+The plugin enhances the system prompt with MCP capabilities so the model knows which tools are available. When the model decides to use a tool, the plugin:
+
+1. Executes the tool with the provided arguments
+2. Returns the results to the model
+3. Allows the model to incorporate the results into its response
+
+#### Example Queries
+
+Here are some examples of queries that will engage MCP tools:
+
+- "List all the Python files in my documents directory" (Filesystem)
+- "What are the recent commits in my Git repository?" (Git)
+- "Search for the latest information about renewable energy" (Search)
+- "Query my database for all users who registered this month" (Database)
+
+#### Troubleshooting
+
+##### Logs
+
+The MCP plugin logs detailed information to:
+```
+~/.optillm/logs/mcp_plugin.log
+```
+
+Check this log file for connection issues, tool execution errors, and other diagnostic information.
+
+##### Common Issues
+
+1. **Command not found**: Make sure the server executable is available in your PATH, or use an absolute path in the configuration.
+
+2. **Connection failed**: Verify the server is properly configured and any required API keys are provided.
+
+3. **Method not found**: Some servers don't implement all MCP capabilities (tools, resources, prompts). Verify which capabilities the server supports.
+
+4. **Access denied**: For filesystem operations, ensure the paths specified in the configuration are accessible to the process.
+
 ## Implemented techniques
 
 | Approach                             | Slug               | Description                                                                                    |
