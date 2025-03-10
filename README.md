@@ -238,17 +238,20 @@ response = client.chat.completions.create(
 | PV Game                              | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
 | CoT Decoding                         |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 | Entropy Decoding                     |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
+| Thinkdeeper                          |  N/A for proxy     | Implements the `reasoning_effort` param from OpenAI for reasoning models like DeepSeek R1      |
 
 ## Implemented plugins
 
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| MCP Client              | `mcp`              | Implements the model context protocol (MCP) client, enabling you to use any LLM with any MCP Server  |
 | Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
 | Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
 | Memory                  | `memory`           | Implements a short term memory layer, enables you to use unbounded context length with any LLM |
 | Privacy                 | `privacy`          | Anonymize PII data in request and deanonymize it back to original value in response            |
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
 | Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
+| JSON                    | `json`             | Enables structured outputs using the outlines library, supports pydantic types and JSON schema |
 
 ## Available parameters
 
