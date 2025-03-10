@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.1.6",
+    version="0.1.7",
     packages=find_packages(include=['optillm', 'optillm.*']),  # This ensures all subpackages are included
     py_modules=['optillm'],
     package_data={
@@ -38,12 +38,13 @@ setup(
         "ipykernel",
         "peft",
         "bitsandbytes",
-        "gradio",
+        "gradio<5.16.0",
         # Constrain spacy version to avoid blis build issues on ARM64
         "spacy<3.8.0",
         "cerebras_cloud_sdk",
         "outlines[transformers]",
         "sentencepiece",
+        "mcp",
     ],
     entry_points={
         'console_scripts': [
