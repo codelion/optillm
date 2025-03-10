@@ -12,6 +12,8 @@ import asyncio
 import sys
 import time
 import re
+import shutil
+import subprocess
 from typing import Dict, List, Any, Optional, Tuple, Set, Union, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +42,115 @@ logger = logging.getLogger("optillm.mcp_plugin")
 
 # Plugin identifier
 SLUG = "mcp"
+
+def find_executable(cmd: str) -> Optional[str]:
+    """
+    Find the full path to an executable command.
+    
+    This function will:
+    1. Check if the command exists in PATH
+    2. Check common install locations 
+    3. Try npm prefix paths
+    
+    Args:
+        cmd: The command to find
+        
+    Returns:
+        Full path to the executable if found, None otherwise
+    """
+    # First check if it's already a full path
+    if os.path.isfile(cmd) and os.access(cmd, os.X_OK):
+        return cmd
+        
+    # Next check if it's in PATH
+    cmd_path = shutil.which(cmd)
+    if cmd_path:
+        logger.info(f"Found {cmd} in PATH at {cmd_path}")
+        return cmd_path
+    
+    # Try common locations for Node.js tools
+    common_paths = [
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/opt/homebrew/bin",  # macOS with Homebrew
+        "/opt/homebrew/opt/node/bin",  # Specific Homebrew Node.js location
+        "/usr/local/opt/node/bin",
+        os.path.expanduser("~/.npm-global/bin"),
+        os.path.expanduser("~/.nvm/current/bin"),
+        os.path.expanduser("~/npm/bin"),
+        os.path.expanduser("~/.npm/bin"),
+    ]
+    
+    for path in common_paths:
+        full_path = os.path.join(path, cmd)
+        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+            logger.info(f"Found {cmd} at {full_path}")
+            return full_path
+    
+    # Try using npm to find global bin path
+    try:
+        npm_bin_path = subprocess.run(
+            ["npm", "bin", "-g"], 
+            capture_output=True, 
+            text=True, 
+            check=True
+        ).stdout.strip()
+        
+        full_path = os.path.join(npm_bin_path, cmd)
+        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+            logger.info(f"Found {cmd} in npm global bin at {full_path}")
+            return full_path
+    except:
+        pass
+    
+    # If all else fails, create a wrapper script that sources profile files
+    wrapper_path = create_command_wrapper(cmd)
+    if wrapper_path:
+        logger.info(f"Created wrapper script for {cmd} at {wrapper_path}")
+        return wrapper_path
+        
+    logger.error(f"Could not find executable: {cmd}")
+    return None
+
+def create_command_wrapper(cmd: str) -> Optional[str]:
+    """
+    Create a shell wrapper script for a command that might be in PATH after shell initialization.
+    
+    Args:
+        cmd: The command to wrap
+        
+    Returns:
+        Path to the wrapper script if successful, None otherwise
+    """
+    try:
+        wrapper_dir = Path.home() / ".optillm" / "wrappers"
+        wrapper_dir.mkdir(parents=True, exist_ok=True)
+        
+        wrapper_path = wrapper_dir / f"{cmd}_wrapper.sh"
+        
+        with open(wrapper_path, 'w') as f:
+            f.write(f"""#!/bin/bash
+# Source profile to get correct PATH
+if [ -f ~/.bash_profile ]; then
+    source ~/.bash_profile
+elif [ -f ~/.profile ]; then
+    source ~/.profile
+elif [ -f ~/.zshrc ]; then
+    source ~/.zshrc
+fi
+
+# Run command with all arguments
+exec {cmd} "$@"
+""")
+        
+        # Make the script executable
+        os.chmod(wrapper_path, 0o755)
+        
+        return str(wrapper_path)
+    except Exception as e:
+        logger.error(f"Error creating wrapper script: {e}")
+        return None
 
 @dataclass
 class ServerConfig:
@@ -141,27 +252,36 @@ class MCPServer:
         try:
             logger.info(f"Connecting to MCP server: {self.server_name}")
             
-            # Create server parameters
+            # Find the full path to the command
+            full_command = find_executable(self.config.command)
+            if not full_command:
+                logger.error(f"Failed to find executable for command: {self.config.command}")
+                logger.error("Please make sure the command is in your PATH or use an absolute path")
+                return False
+                
+            # Create environment with PATH included
+            merged_env = os.environ.copy()
+            if self.config.env:
+                merged_env.update(self.config.env)
+            
+            # Create server parameters with the full command path
             server_params = StdioServerParameters(
-                command=self.config.command,
+                command=full_command,
                 args=self.config.args,
-                env=self.config.env
+                env=merged_env
             )
             
             # Create transport using async with
-            transport = None
             try:
-                # Using context manager in a way that's compatible with asyncio
+                # Using context manager directly with try/except/finally for cleanup
                 ctx = stdio_client(server_params)
                 transport = await ctx.__aenter__()
                 self.transport = transport
                 
                 read_stream, write_stream = transport
                 
-                # Create session
+                # Create and initialize session
                 self.session = ClientSession(read_stream, write_stream)
-                
-                # Initialize session
                 await self.session.initialize()
                 
                 # Discover capabilities
@@ -172,12 +292,9 @@ class MCPServer:
                 return True
                 
             except Exception as e:
-                # Make sure to clean up resources in case of an error
-                if transport:
-                    try:
-                        await ctx.__aexit__(type(e), e, e.__traceback__)
-                    except:
-                        pass
+                # Clean up resources in case of error
+                if 'ctx' in locals() and 'transport' in locals():
+                    await ctx.__aexit__(type(e), e, e.__traceback__)
                 raise
             
         except Exception as e:
