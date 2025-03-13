@@ -1,8 +1,9 @@
 import re
 import yaml
+import json
 
 from dataclasses import dataclass
-from typing import Literal, Any
+from typing import Literal, Any, Optional
 from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
 from openai import BadRequestError as OpenAIBadRequestError
 
@@ -23,6 +24,8 @@ class CepoConfig:
     planning_max_tokens_step2: int  # maximum number of tokens in step 2 of planning stage
     planning_max_tokens_step3: int  # maximum number of tokens in step 3 of planning stage
     planning_max_tokens_step4: int  # maximum number of tokens in step 4 of planning stage
+    use_plan_diversity: bool  # whether to use plan diversity
+    rating_model: Optional[str] = None # model to be used for rating
     print_output: bool = False  # whether to print the output of each stage
 
 
@@ -55,7 +58,7 @@ def extract_question_only(task: str) -> str:
     return question_only
 
 
-def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig) -> str:
+def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig, approach: Optional[str] = None) -> str:
     """
     Generates a completion based on the provided system prompt and task.
 
@@ -65,6 +68,7 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         client (Any): The client instance for interacting with the AI model.
         model (str): The model name to be used for generating completions.
         cepo_config (CepoConfig): Configuration parameters for CePO flow.
+        approach (str|None): optional approach that is used to seed plan generation.
 
     Returns:
         Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
@@ -76,9 +80,18 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
 
     for i in range(cepo_config.planning_m):  # m is the maximum number of attempts to generate n plans
         # Step 1 - Generate a plan
-        content = f"To answer this question, can you come up with a concise plan to solve it step-by-step but do not provide the "\
-                  f"final answer. Also, for each step, provide your confidence in the correctness of that step as well as your ability "\
-                  f"to execute it correctly. Here is the question:\n{question_only}\nRead the question again:\n\n{question_only}"
+        if cepo_config.use_plan_diversity:
+            assert approach
+            assert isinstance(approach, str)
+            content = f"To answer this question, can you come up with a concise plan using to solve it step-by-step but do not provide the "\
+                      f"final answer. Here is the approach you need to follow to generate the plan: {approach}. "\
+                      f"Also, for each step, provide your confidence in the correctness of that step as well as your ability "\
+                      f"to execute it correctly. Here is the question:\n{question_only}\nRead the question again:\n\n{question_only}"
+        else:
+            assert not approach
+            content = f"To answer this question, can you come up with a concise plan to solve it step-by-step but do not provide the "\
+                      f"final answer. Also, for each step, provide your confidence in the correctness of that step as well as your ability "\
+                      f"to execute it correctly. Here is the question:\n{question_only}\nRead the question again:\n\n{question_only}" 
 
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": content}]
         response = client.chat.completions.create(
@@ -174,6 +187,54 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     return response.choices[0].message.content, completion_tokens, cb_log
 
 
+def generate_approaches(system_prompt: str, initial_query: str, num_approach: int, client: Any, model: str, cepo_config: CepoConfig, max_retry: int = 2) -> tuple[list[str], int]:
+    completion_tokens = 0
+    question_only = extract_question_only(initial_query)
+    approaches = []
+    content = f'To answer the question: "{question_only}", please propose {num_approach} different high-level approaches to solve the problem. '\
+              f'All approaches should be fundamentally different from each other and easily excecutable without too much steps. Do not include a '\
+              f'step-by-step plan or the final answer. You must present the approaches in the following JSON format which is directly loadable:\n'\
+              f'{{\n'\
+              f'    "approach_1": "<Description of approach 1>",\n'\
+              f'    "approach_2": "<Description of approach 2>",\n'\
+              f'    "approach_3": "<Description of approach 3>",\n'\
+              f'    ...\n'\
+              f'}}'
+    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": content}]
+    
+    retries = 0
+    while retries < max_retry:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=cepo_config.planning_max_tokens_step0,
+                temperature=cepo_config.planning_temperature_step0,
+                stream=False,
+            )
+            completion_tokens += response.usage.completion_tokens
+            completion = response.choices[0].message.content 
+
+            # Try to parse the completion as JSON, escape latex math symbols
+            cleaned_completion = completion.replace('\\', '\\\\').replace('json','').replace("```", "")
+            for _, value in json.loads(cleaned_completion).items():
+                approaches.append(value.replace('\\\\', '\\'))
+            break  # Exit the loop if parsing is successful
+
+        except json.JSONDecodeError as e:
+            # If there's an error, print a message and regenerate the content
+            print(e)
+            print(f"Parsing Error when generating diverse approaches, retrying... ({retries + 1}/{max_retry})")
+           
+            retries += 1
+
+    if retries == max_retry:
+        print("Max retry attempts reached, returning empty list.")
+        return [], 0  # Default approach
+ 
+    return approaches, completion_tokens
+
+
 def generate_n_completions(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig) -> tuple[list[str], int, dict]:
     """
     Generates n completions for the Best of N step of CePO.
@@ -190,17 +251,35 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
     """
     completion_tokens = 0
     cb_log = {}
+    cb_log["system_prompt"] = system_prompt
+    cb_log["initial_query"] = initial_query
     completions = []
+
+    # Generate Approach and Descriptions
+    if cepo_config.use_plan_diversity:
+        approaches, approach_completion_tokens = generate_approaches(
+            system_prompt=system_prompt,
+            initial_query=initial_query,
+            num_approach=cepo_config.bestofn_n,
+            client=client,
+            model=model,
+            cepo_config=cepo_config,
+        )
+        cb_log["approaches"] = approaches
+        completion_tokens += approach_completion_tokens
+        if cepo_config.print_output:
+            print(f"\nCePO: Plan diversity approaches ({cepo_config.bestofn_n}):\n{approaches}\n")
 
     for i in range(cepo_config.bestofn_n):
         if cepo_config.print_output:
-            print(f"\nCePO: Generating completion {i + 1} out of {cepo_config.bestofn_n}")
-        response_i, completion_tokens_i, cb_log_i = generate_completion(system_prompt, initial_query, client, model, cepo_config)
+            print(f"\nCePO: Generating completion {i + 1} out of {cepo_config.bestofn_n} \n")
+        approach = approaches[i] if approaches else None
+        response_i, completion_tokens_i, cb_log_i = generate_completion(system_prompt, initial_query, client, model, cepo_config, approach)
         completions.append(response_i)
         completion_tokens += completion_tokens_i
         cb_log[f"completion_{i}_response"] = response_i
         cb_log[f"completion_{i}_log"] = cb_log_i
-        cb_log[f"completion_{i}_completion_tokens"] = completion_tokens_i    
+        cb_log[f"completion_{i}_completion_tokens"] = completion_tokens_i
 
     return completions, completion_tokens, cb_log
 
@@ -221,40 +300,31 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
         Tuple[str, int, dict]: The generated completion, number of tokens used, and a log dictionary.
     """
     completion_tokens = 0
-    rating_messages = [{"role": "system", "content": system_prompt},
-                       {"role": "user", "content": initial_query}]
-    content = "Please act as an impartial judge and evaluate the quality of the response provided by an AI assistant to "\
-              "the user question displayed below. Your evaluation should consider correctness as a primary factor as "\
-              "well as other factors such as the helpfulness, relevance, accuracy, depth, creativity, and level of "\
-              "detail of the response. Evaluation Criteria:\n"\
+    content = "Please act as an impartial judge and evaluate the accuracy of the response provided by an AI assistant to "\
+              "the user question displayed below. Your evaluation should consider only correctness and accuracy as the primary factor. "\
+              "Evaluation Criteria:\n"\
               "- Correctness: How free is it from errors or mistakes?\n"\
-              "- Helpfulness: How effectively does the response meet the user's needs?\n"\
-              "- Relevance: How directly does the response address the original question?\n"\
               "- Accuracy: Are the information and explanations factually correct?\n"\
-              "- Depth: Does the response provide comprehensive and meaningful insights?\n"\
-              "- Creativity: Does the response offer unique or innovative perspectives?\n"\
-              "- Clarity: Is the response well-organized, coherent, and easy to understand?\n"\
               "Evaluation Process:\n"\
               "1. Carefully review the user question and the AI assistant's response.\n"\
-              "2. Assess the response against each criterion.\n"\
-              "3. Provide a concise explanation of your overall evaluation.\n"\
-              "4. Rate the response on a 1-10 scale with the following guidelines:\n"\
-              "    - 1-2: Completely inadequate, fails to address the question\n"\
-              "    - 3-4: Minimal relevance, significant deficiencies\n"\
-              "    - 5-6: Partially helpful, requires substantial improvement\n"\
-              "    - 7-8: Good response with minor areas for enhancement\n"\
-              "    - 9-10: Correct, comprehensive, and highly insightful.\n"\
-              "Begin your evaluation by providing a short explanation. Be as objective as possible. After providing your "\
-              "explanation, please rate the response on a scale of 1 to 10 by strictly following this format:  \"Rating: "\
-              "[[rating]]\", for example: \"Rating: [[5]]\""
-    rating_messages.append({"role": "system", "content": content})
+              "2. Assess the response for any inaccuracies in reasoning as well as execution.\n"\
+              "3. Provide a detailed explanation of your step-by-step evaluation.\n"\
+              "4. Identify if the final answer is correct or not. \n"\
+              "Begin your evaluation by thinking through the given problem and response step-by-step. "\
+              "VERY IMPORTANT: Re-do any calculations present and check if you arrive at the same answer. "\
+              "Throughly check for any inaccuracies in reasoning and calculations for each step. "\
+              "Be as objective as possible. After providing your detailed explanation, "\
+              "please rate the response as 0 or 1, (0 for incorrect and 1 for correct) by strictly following this format: "\
+              "\"Rating: [[rating]]\", for example: \"Rating: [[0]]\""
+    rating_messages = [{"role": "system", "content": system_prompt + content},
+                       {"role": "user", "content": initial_query}]
     
     ratings = []
     for i, completion in enumerate(completions):
         rating_messages.append({"role": "assistant", "content": completion})
-        content = "Rate the above response beginning with a small evaluation blurb followed by a rating on a scale of 1 to 10 "\
+        content = "Rate the above response beginning with the detailed explanation followed by a rating of 0 or 1 "\
                   "by strictly following this format: \"Explanation: <reason for your rating>\n\nRating: [[rating]]\"."
-        rating_messages.append({"role": "system", "content": content})
+        rating_messages.append({"role": "user", "content": content})
 
         rating_response = client.chat.completions.create(
             model=model,
@@ -271,12 +341,12 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
 
         pattern = r"Rating: \[\[(\d+)\]\]"
         match = re.search(pattern, rating_response)
-        rating_response = match.group(1) if match else "0"
+        rating_response = match.group(1) if match else "-1"  # parsing error results in a rating of -1
 
         try:
             ratings.append(float(rating_response))
         except ValueError:
-            ratings.append(0)
+            ratings.append(-1)
         
         rating_messages = rating_messages[:-2]  # clear the last two messages to start over in the next iteration
     
@@ -404,7 +474,8 @@ def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_c
         rate_completions_fn = rate_completions_pairwise
     else:
         raise ValueError("Invalid rating type in cepo_config")
-
-    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, model, completions, cepo_config, cb_log)
+    rating_model = cepo_config.rating_model if cepo_config.rating_model else model
+    
+    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log)
     
     return best_completion, completion_tokens_planning + completion_tokens_rating
