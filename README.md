@@ -393,7 +393,7 @@ optillm supports various command-line arguments for configuration. When using Do
 | `--return-full-response` | Return the full response including the CoT with <thinking> tags | `False`         |
 | `--port`                 | Specify the port to run the proxy                               | 8000            |
 | `--optillm-api-key`      | Optional API key for client authentication to optillm           | `""`            |
-| `--cepo_*` | See CePO Parameters section below for detailed configuration options | Various |
+| `--cepo_*`               | See CePO Parameters section below for detailed config options   | Various         |
 
 <details>
 <summary><strong>CePO Parameters</strong></summary>
@@ -415,7 +415,9 @@ optillm supports various command-line arguments for configuration. When using Do
 | `--cepo_planning_max_tokens_step3` | Maximum number of tokens in step 3 of planning stage | 4096 |
 | `--cepo_planning_max_tokens_step4` | Maximum number of tokens in step 4 of planning stage | 4096 |
 | `--cepo_print_output` | Whether to print the output of each stage | `False` |
-| `--cepo_config_file` | Path to CePO configuration file | None |
+| `--cepo_config_file` | Path to CePO configuration file | `None` |
+| `--cepo_use_plan_diversity` | Use additional plan diversity step | `False` |
+| `--cepo_rating_model` | Specify a model for rating step if different than for completion | `None` |
 
 </details>
 
@@ -464,14 +466,17 @@ Authorization: Bearer your_secret_api_key
 
 ## SOTA results on benchmarks with optillm
 
-### CePO on math and code benchmarks (Jan 2025)
+### CePO on math and code benchmarks (Mar 2025)
 
-| Method                     | Math-L5 | MMLU-Pro (Math) | GPQA | CRUX | LiveCodeBench (pass@1) | Simple QA |
-| -------------------------: | :-----: | :-------------: | :--: | :--: | :--------------------: | :-------: |
-| Llama 3.1 70B              |  41.6   |      72.9       | 41.7 | 64.2 |          24.5          |    14.7   |
-| Llama 3.3 70B              |  51.0   |      78.6       | 49.1 | 72.6 |          27.1          |    20.9   |
-| Llama 3.1 405B             |  49.8   |      79.2       | 50.7 | 73.0 |          31.8          |    13.5   |
-| CePO (using Llama 3.3 70B) |  69.6   |      84.8       | 55.5 | 80.1 |          31.9          |    22.6   |
+| Method                         | Math-L5 | MMLU-Pro (Math) | CRUX | LiveCodeBench (pass@1) | Simple QA |
+| -----------------------------: | :-----: | :-------------: | :----: | :--------------------: | :-------: |
+| Llama 3.3 70B                  |  51.0   |      78.6       |  72.6  |          27.1          |    20.9   |
+| Llama 3.1 405B                 |  49.8   |      79.2       |  73.0  |          31.8          |    13.5   |
+| CePO (using Llama 3.3 70B)     |  69.6   |      84.8       |  80.1  |          31.9          |  **22.6** |
+| QwQ 32B                        |  61.4   |      90.8       |  82.5  |          44.3          |    7.8    |
+| CePO (using QwQ 32B)           |  88.1   |    **92.0**     |  86.3  |        **51.5**        |    8.2    |
+| DeepSeek R1 Llama              |  83.1   |      82.0       |  84.0  |          47.3          |    14.6   |
+| CePO (using DeepSeek R1 Llama) |**90.2** |      84.0       |**89.4**|          47.2          |    15.5   |
 
 ### coc-claude-3-5-sonnet-20241022 on AIME 2024 pass@1 (Nov 2024)
 
