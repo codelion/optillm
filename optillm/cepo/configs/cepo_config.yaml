@@ -13,5 +13,5 @@ planning_max_tokens_step2: 4096
 planning_max_tokens_step3: 4096
 planning_max_tokens_step4: 4096
 use_plan_diversity: False
-rating_model: None
+rating_model: null
 print_output: False
