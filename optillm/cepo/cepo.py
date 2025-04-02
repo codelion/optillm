@@ -254,6 +254,7 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
     cb_log["system_prompt"] = system_prompt
     cb_log["initial_query"] = initial_query
     completions = []
+    approaches = None
 
     # Generate Approach and Descriptions
     if cepo_config.use_plan_diversity:
