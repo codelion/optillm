@@ -467,31 +467,6 @@ Authorization: Bearer your_secret_api_key
 
 ## SOTA results on benchmarks with optillm
 
-### CePO on math and code benchmarks (Mar 2025)
-
-| Method                         | Math-L5 | MMLU-Pro (Math) | CRUX | LiveCodeBench (pass@1) | Simple QA |
-| -----------------------------: | :-----: | :-------------: | :----: | :--------------------: | :-------: |
-| Llama 3.3 70B                  |  51.0   |      78.6       |  72.6  |          27.1          |    20.9   |
-| Llama 3.1 405B                 |  49.8   |      79.2       |  73.0  |          31.8          |    13.5   |
-| CePO (using Llama 3.3 70B)     |  69.6   |      84.8       |  80.1  |          31.9          |  **22.6** |
-| QwQ 32B                        |  61.4   |      90.8       |  82.5  |          44.3          |    7.8    |
-| CePO (using QwQ 32B)           |  88.1   |    **92.0**     |  86.3  |        **51.5**        |    8.2    |
-| DeepSeek R1 Llama              |  83.1   |      82.0       |  84.0  |          47.3          |    14.6   |
-| CePO (using DeepSeek R1 Llama) |**90.2** |      84.0       |**89.4**|          47.2          |    15.5   |
-
-### coc-claude-3-5-sonnet-20241022 on AIME 2024 pass@1 (Nov 2024)
-
-| Model | Score |
-|-------|-----:|
-| o1-mini | 56.67 |
-| coc-claude-3-5-sonnet-20241022 | 46.67 |
-| coc-gemini/gemini-exp-1121 | 46.67 |
-| o1-preview | 40.00 |
-| gemini-exp-1114 | 36.67 |
-| claude-3-5-sonnet-20241022 | 20.00 |
-| gemini-1.5-pro-002 | 20.00 |
-| gemini-1.5-flash-002 | 16.67 |
-
 ### LongCePO on LongBench v2 (Apr 2025)
 
 | Model¹                             | Context window | Short samples (up to 32K words) | Medium samples (32–128K words) |
@@ -517,6 +492,31 @@ Authorization: Bearer your_secret_api_key
 | gpt-4o-2024-08-06 (full context) | 74.0          |
 
  ¹ Numbers in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
+
+### CePO on math and code benchmarks (Mar 2025)
+
+| Method                         | Math-L5 | MMLU-Pro (Math) | CRUX | LiveCodeBench (pass@1) | Simple QA |
+| -----------------------------: | :-----: | :-------------: | :----: | :--------------------: | :-------: |
+| Llama 3.3 70B                  |  51.0   |      78.6       |  72.6  |          27.1          |    20.9   |
+| Llama 3.1 405B                 |  49.8   |      79.2       |  73.0  |          31.8          |    13.5   |
+| CePO (using Llama 3.3 70B)     |  69.6   |      84.8       |  80.1  |          31.9          |  **22.6** |
+| QwQ 32B                        |  61.4   |      90.8       |  82.5  |          44.3          |    7.8    |
+| CePO (using QwQ 32B)           |  88.1   |    **92.0**     |  86.3  |        **51.5**        |    8.2    |
+| DeepSeek R1 Llama              |  83.1   |      82.0       |  84.0  |          47.3          |    14.6   |
+| CePO (using DeepSeek R1 Llama) |**90.2** |      84.0       |**89.4**|          47.2          |    15.5   |
+
+### coc-claude-3-5-sonnet-20241022 on AIME 2024 pass@1 (Nov 2024)
+
+| Model | Score |
+|-------|-----:|
+| o1-mini | 56.67 |
+| coc-claude-3-5-sonnet-20241022 | 46.67 |
+| coc-gemini/gemini-exp-1121 | 46.67 |
+| o1-preview | 40.00 |
+| gemini-exp-1114 | 36.67 |
+| claude-3-5-sonnet-20241022 | 20.00 |
+| gemini-1.5-pro-002 | 20.00 |
+| gemini-1.5-flash-002 | 16.67 |
 
 ### readurls&memory-gpt-4o-mini on Google FRAMES Benchmark (Oct 2024)
 | Model | Accuracy |
