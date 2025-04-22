@@ -1,6 +1,6 @@
 # optillm
 
-optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries. 
+optillm is an OpenAI API compatible optimizing inference proxy which implements several state-of-the-art techniques that can improve the accuracy and performance of LLMs. The current focus is on implementing techniques that improve reasoning over coding, logical and mathematical queries.
 
 It is possible to beat the frontier models using these techniques across diverse tasks by doing additional compute at inference time. A good example of how to combine such techniques together is the [CePO approach](optillm/cepo) from Cerebras.
 
@@ -14,7 +14,7 @@ It is possible to beat the frontier models using these techniques across diverse
 
 ```bash
 pip install optillm
-optillm             
+optillm
 2024-10-22 07:45:05,612 - INFO - Loaded plugin: privacy
 2024-10-22 07:45:06,293 - INFO - Loaded plugin: memory
 2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
@@ -52,7 +52,7 @@ We support all major LLM providers and models for inference. You need to set the
 
 | Provider | Required Environment Variables | Additional Notes |
 |----------|-------------------------------|------------------|
-| OptiLLM | `OPTILLM_API_KEY` | Uses the inbuilt local server for inference, supports logprobs and decoding techniques like `cot_decoding` & `entropy_decoding` | 
+| OptiLLM | `OPTILLM_API_KEY` | Uses the inbuilt local server for inference, supports logprobs and decoding techniques like `cot_decoding` & `entropy_decoding` |
 | OpenAI | `OPENAI_API_KEY` | You can use this with any OpenAI compatible endpoint (e.g. OpenRouter) by setting the `base_url` |
 | Cerebras | `CEREBRAS_API_KEY` | You can use this for fast inference with supported models, see [docs for details](https://inference-docs.cerebras.ai/introduction) |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY`<br>`AZURE_API_VERSION`<br>`AZURE_API_BASE` | - |
@@ -98,7 +98,7 @@ response = client.chat.completions.create(
 
 print(response)
 ```
-The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key. 
+The code above applies to both OpenAI and Azure OpenAI, just remember to populate the `OPENAI_API_KEY` env variable with the proper key.
 There are multiple ways to control the optimization techniques, they are applied in the follow order of preference:
 
 - You can control the technique you use for optimization by prepending the slug to the model name `{slug}-model-name`. E.g. in the above code we are using `moa` or mixture of agents as the optimization approach. In the proxy logs you will see the following showing the `moa` is been used with the base model as `gpt-4o-mini`.
@@ -135,28 +135,28 @@ response = client.chat.completions.create(
 > You can also combine different techniques either by using symbols `&` and `|`. When you use `&` the techniques are processed in the order from left to right in a pipeline
 > with response from previous stage used as request to the next. While, with `|` we run all the requests in parallel and generate multiple responses that are returned as a list.
 
-Please note that the convention described above works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.  
+Please note that the convention described above works only when the optillm server has been started with inference approach set to `auto`. Otherwise, the `model` attribute in the client request must be set with the model name only.
 
 We now suport all LLM providers (by wrapping around the [LiteLLM sdk](https://docs.litellm.ai/docs/#litellm-python-sdk)). E.g. you can use the Gemini Flash model with `moa` by setting passing the api key in the environment variable `os.environ['GEMINI_API_KEY']` and then calling the model `moa-gemini/gemini-1.5-flash-002`. In the output you will then see that LiteLLM is being used to call the base model.
 
 ```bash
-9:43:21 - LiteLLM:INFO: utils.py:2952 - 
+9:43:21 - LiteLLM:INFO: utils.py:2952 -
 LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
-2024-09-29 19:43:21,011 - INFO - 
+2024-09-29 19:43:21,011 - INFO -
 LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
 2024-09-29 19:43:21,481 - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=[redacted] "HTTP/1.1 200 OK"
 19:43:21 - LiteLLM:INFO: utils.py:988 - Wrapper: Completed Call, calling success_handler
 2024-09-29 19:43:21,483 - INFO - Wrapper: Completed Call, calling success_handler
-19:43:21 - LiteLLM:INFO: utils.py:2952 - 
+19:43:21 - LiteLLM:INFO: utils.py:2952 -
 LiteLLM completion() model= gemini-1.5-flash-002; provider = gemini
 ```
 
 > [!TIP]
-> optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes 
+> optillm is a transparent proxy and will work with any LLM API or provider that has an OpenAI API compatible chat completions endpoint, and in turn, optillm also exposes
 the same OpenAI API compatible chat completions endpoint. This should allow you to integrate it into any existing tools or frameworks easily. If the LLM you want to use
 doesn't have an OpenAI API compatible endpoint (like Google or Anthropic) you can use [LiteLLM proxy server](https://docs.litellm.ai/docs/proxy/quick_start) that supports most LLMs.
 
-The following sequence diagram illustrates how the request and responses go through optillm. 
+The following sequence diagram illustrates how the request and responses go through optillm.
 
 ![Sequance diagram showing optillm in use](https://raw.githubusercontent.com/codelion/optillm/main/optillm-sequence-diagram.png)
 
@@ -170,7 +170,7 @@ or your own code where you want to use the results from optillm. You can use it 
 
 We support loading any HuggingFace model or LoRA directly in optillm. To use the built-in inference server set the `OPTILLM_API_KEY` to any value (e.g. `export OPTILLM_API_KEY="optillm"`)
 and then use the same in your OpenAI client. You can pass any HuggingFace model in model field. If it is a private model make sure you set the `HF_TOKEN` environment variable
-with your HuggingFace key. We also support adding any number of LoRAs on top of the model by using the `+` separator. 
+with your HuggingFace key. We also support adding any number of LoRAs on top of the model by using the `+` separator.
 
 E.g. The following code loads the base model `meta-llama/Llama-3.2-1B-Instruct` and then adds two LoRAs on top - `patched-codes/Llama-3.2-1B-FixVulns` and `patched-codes/Llama-3.2-1B-FastApply`.
 You can specify which LoRA to use using the `active_adapter` param in `extra_args` field of OpenAI SDK client. By default we will load the last specified adapter.
@@ -343,7 +343,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 | Approach                             | Slug               | Description                                                                                    |
 | ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Cerebras Planning and Optimimization | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
+| Cerebras Planning and Optimization | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
 | CoT with Reflection                  | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch                           | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | ReRead                               | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
@@ -364,6 +364,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Long-Context Cerebras Planning and Optimization              | `longcepo`              | Combines planning and divide-and-conquer processing of long documents to enable infinite context  |
 | MCP Client              | `mcp`              | Implements the model context protocol (MCP) client, enabling you to use any LLM with any MCP Server  |
 | Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
 | Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
@@ -491,10 +492,36 @@ Authorization: Bearer your_secret_api_key
 | gemini-1.5-pro-002 | 20.00 |
 | gemini-1.5-flash-002 | 16.67 |
 
+### LongCePO on LongBench v2 (Apr 2025)
+
+| Model¹                             | Context window | Short samples (up to 32K words) | Medium samples (32–128K words) |
+|----------------------------------|----------------|------------------|----------------|
+| Llama 3.3 70B Instruct           | 128K           | 36.7 (45.0)               | 27.0 (33.0)            |
+| **LongCePO + Llama 3.3 70B Instruct** | **8K**             | **36.8 ± 1.38**        |  **38.7 ± 2.574 (39.735)²**             |
+| Mistral-Large-Instruct-2411     | 128K           | 41.7 (46.1)                 | 30.7 (34.9)             |
+| o1-mini-2024-09-12               | 128K           | 48.6 (48.9)                | 33.3 (32.9)            |
+| Claude-3.5-Sonnet-20241022       | 200K           | 46.1 (53.9)                | 38.6 (41.9)            |
+| Llama-4-Maverick-17B-128E-Instruct | 524K         | 32.22 (50.56)                  | 28.84 (41.86)               |
+
+ ¹ Performance numbers reported by LongBench v2 authors, except for LongCePO and Llama-4-Maverick results.
+
+ ² Numbers in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
+
+### LongCePO on HELMET - InfiniteBench En.MC, 128K length (Apr 2025)
+
+| Model   | Accuracy (%) |
+|---------|---------------|
+| Llama 3.3 70B Instruct  (full context)  | 58.0          |
+| **LongCePO + Llama 3.3 70B Instruct (8K context)** | **71.6 ± 1.855 (73.0)¹**  |
+| o1-mini-2024-09-12 (full context) | 58.0          |
+| gpt-4o-2024-08-06 (full context) | 74.0          |
+
+ ¹ Numbers in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
+
 ### readurls&memory-gpt-4o-mini on Google FRAMES Benchmark (Oct 2024)
-| Model | Accuracy | 
+| Model | Accuracy |
 | ----- | -------- |
-| readurls&memory-gpt-4o-mini | 61.29 | 
+| readurls&memory-gpt-4o-mini | 61.29 |
 | gpt-4o-mini | 50.61 |
 | readurls&memory-Gemma2-9b | 30.1 |
 | Gemma2-9b | 5.1 |
@@ -519,12 +546,13 @@ Authorization: Bearer your_secret_api_key
 ### optillm with Patchwork (July 2024)
 
 Since optillm is a drop-in replacement for OpenAI API you can easily integrate it with existing tools and frameworks using the OpenAI client. We used optillm with [patchwork](https://github.com/patched-codes/patchwork) which is an open-source framework that automates development gruntwork like PR reviews, bug fixing, security patching using workflows
-called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixture of agents approach (moa). 
+called patchflows. We saw huge performance gains across all the supported patchflows as shown below when using the mixture of agents approach (moa).
 
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
 ## References
 - [CePO: Empowering Llama with Reasoning using Test-Time Compute](https://cerebras.ai/blog/cepo) - [Implementation](optillm/cepo)
+- [LongCePO: Empowering LLMs to efficiently leverage infinite context](https://cerebras.ai/blog/longcepo) - [Implementation](optillm/plugins/longcepo/main.py)
 - [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](optillm/plugins/coc_plugin.py)
 - [Entropy Based Sampling and Parallel CoT Decoding](https://github.com/xjdr-alt/entropix) - [Implementation](optillm/entropy_decoding.py)
 - [Fact, Fetch, and Reason: A Unified Evaluation of Retrieval-Augmented Generation](https://arxiv.org/abs/2409.12941) - [Evaluation script](scripts/eval_frames_benchmark.py)
