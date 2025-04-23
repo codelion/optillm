@@ -575,7 +575,7 @@ class ModelManager:
             logger.info(f"Using device: {device}")
             
             # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
             
             # Base kwargs for model loading
             model_kwargs = {
@@ -1545,7 +1545,7 @@ class InferenceClient:
             try:
                 import requests
                 response = requests.get(
-                    "https://huggingface.co/api/models?sort=downloads&direction=-1&limit=100"
+                    "https://huggingface.co/api/models?sort=downloads&direction=-1&filter=text-generation&limit=20"
                 )
                 models = response.json()
                 model_list = []

@@ -726,7 +726,7 @@ def proxy_models():
         models_response = client.models.list()
 
         logger.debug('Models retrieved successfully')
-        return models_response.model_dump(), 200
+        return models_response, 200
     except Exception as e:
         logger.error(f"Error fetching models: {str(e)}")
         return jsonify({"error": f"Error fetching models: {str(e)}"}), 500
