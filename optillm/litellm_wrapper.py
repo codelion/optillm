@@ -1,7 +1,12 @@
 import os
+import time
 import litellm
 from litellm import completion
+from litellm.utils import get_valid_models
 from typing import List, Dict, Any, Optional
+
+# Configure litellm to drop unsupported parameters
+litellm.drop_params = True
 
 SAFETY_SETTINGS = [
     {"category": cat, "threshold": "BLOCK_NONE"}
@@ -36,16 +41,36 @@ class LiteLLMWrapper:
     class Models:
         @staticmethod
         def list():
-            # Since LiteLLM doesn't have a direct method to list models,
-            # we'll return a predefined list of supported models.
-            # This list can be expanded as needed.
-            return {
-                "data": [
-                    {"id": "gpt-4o-mini"},
-                    {"id": "gpt-4o"},
-                    {"id": "command-nightly"},
-                    # Add more models as needed
-                ]
-            }
-
+            try:
+                # Get all valid models from LiteLLM
+                valid_models = get_valid_models()
+                
+                # Format the response to match OpenAI's API format
+                model_list = []
+                for model in valid_models:
+                    model_list.append({
+                        "id": model,
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": "litellm"
+                    })
+                
+                return {
+                    "object": "list",
+                    "data": model_list
+                }
+            except Exception as e:
+                # Fallback to a basic list if there's an error
+                print(f"Error fetching LiteLLM models: {str(e)}")
+                return {
+                    "object": "list",
+                    "data": [
+                        {"id": "gpt-4o-mini", "object": "model", "created": int(time.time()), "owned_by": "litellm"},
+                        {"id": "gpt-4o", "object": "model", "created": int(time.time()), "owned_by": "litellm"},
+                        {"id": "command-nightly", "object": "model", "created": int(time.time()), "owned_by": "litellm"},
+                        {"id": "claude-3-opus-20240229", "object": "model", "created": int(time.time()), "owned_by": "litellm"},
+                        {"id": "claude-3-sonnet-20240229", "object": "model", "created": int(time.time()), "owned_by": "litellm"},
+                        {"id": "gemini-1.5-pro-latest", "object": "model", "created": int(time.time()), "owned_by": "litellm"}
+                    ]
+                }
     models = Models()
