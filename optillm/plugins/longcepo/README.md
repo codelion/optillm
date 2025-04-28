@@ -30,9 +30,9 @@ LongCePO excels at tasks with long context (128K tokens and more) which is demon
 | Claude-3.5-Sonnet-20241022       | 200K           | 46.1 (53.9)                | 38.6 (41.9)            |
 | Llama-4-Maverick-17B-128E-Instruct | 524K         | 32.22 (50.56)                  | 28.84 (41.86)               |
 
- ¹ Performance numbers reported by LongBench v2 authors, except for LongCePO and Llama-4-Maverick results.
+ ¹ Performance numbers reported by LongBench v2 authors, except for LongCePO and Llama-4-Maverick results. Results in parentheses reported in LongBench v2 correspond to Chain-of-Thought prompting.
 
- ² Numbers in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
+ ² Results in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
 
 ### HELMET (InfiniteBench En.MC, 128K length)
 
@@ -63,6 +63,9 @@ LongCePO excels at tasks with long context (128K tokens and more) which is demon
 ## LongCePO Methodology
 
 LongCePO is based on the [LLM×MapReduce](https://arxiv.org/abs/2410.09342) approach to long document processing, adding a planning layer on top of a map-reduce-based question-answering engine. We also improve upon the map-reduce approach itself by (i) adding query-aware summaries of neighboring document chunks during the map stage of the processing, (ii) reducing the collapse (merging) stage to a minimum required number of collapse iterations by using a sliding window to iteratively merge pairs of summaries, (iii) using a customized system prompt produced with an [OPRO-like](https://arxiv.org/abs/2309.03409) optimization approach to enhance question-anwering performance. Given a user query, a plan consisting of sub-queries is generated from a normalized query; a map-reduce question-answering engine is then run for each sub-query consecutively, conditioned on the answers to previous sub-queries. Finally, the answer to original user's query is produced via map-reduce conditioned on answers to the whole plan. Similarly to [LLM×MapReduce](https://arxiv.org/abs/2410.09342), we retain the structured information protocol for producing document chunk summaries. We find that splitting the document into chunks of size smaller than the available context window (e.g. chunks of 4K size with available context window of 8K) leads to better performance, and use the remaning context budget to incorporate summaries from neighboring chunks into the map stage for each respective chunks, leading to a further boost in overall performance.
+
+Note: the system prompt for Map/Collapse/Reduce stages has been optimized for the Llama3.3-70B-Instruct model, when using other base models with LongCePO, a more general system prompt can be used ([example](https://github.com/DenisSergeevitch/chatgpt-custom-instructions)).
+
 
 ## LongCePO Current Status
 
