@@ -3,27 +3,33 @@ import json
 import os
 import logging
 import re
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List, Tuple
 from datasets import load_dataset
 from tqdm import tqdm
 from openai import OpenAI
+import matplotlib.pyplot as plt
+import pandas as pd
+from datetime import datetime
 
 # Enhanced logging configuration
-# logging.basicConfig(
-#     level=logging.DEBUG,
-#     format='%(asctime)s - %(levelname)s - %(message)s',
-#     handlers=[
-#         logging.FileHandler('math500_debug.log'),
-#         logging.StreamHandler()
-#     ]
-# )
 logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
-client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
-# client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
+# client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-SYSTEM_PROMPT = '''You are solving mathematics problems.
+# Define the three system prompts for our experiment
+STANDARD_PROMPT = '''You are solving mathematics problems.
+
+Important: Provide your final answer in this format:
+
+\\[
+\\boxed{your_answer_here}
+\\]
+
+The entire answer should be contained completely within the \\boxed{} command.'''
+
+COT_PROMPT = '''You are solving mathematics problems.
 
 Please think step by step.
 
@@ -34,6 +40,25 @@ Important: Always end your solution with the final answer in this format:
 \\]
 
 The entire answer should be contained completely within the \\boxed{} command.'''
+
+GIBBERISH_PROMPT = '''You are solving mathematics problems.
+
+First, write some meaningless text of similar length to what you would use for step-by-step reasoning. This text should be complete nonsense with no actual reasoning. Make sure it has a similar number of paragraphs and similar length to how you would normally explain the problem, but ensure the content is completely unrelated to the solution.
+
+Important: Always end your solution with the final answer in this format:
+
+\\[
+\\boxed{your_answer_here}
+\\]
+
+The entire answer should be contained completely within the \\boxed{} command.'''
+
+# Dictionary to map prompt types to their actual text
+PROMPTS = {
+    "standard": STANDARD_PROMPT,
+    "cot": COT_PROMPT,
+    "gibberish": GIBBERISH_PROMPT
+}
 
 def load_math500_dataset() -> list[dict]:
     """
@@ -674,23 +699,26 @@ def compare_answers(correct_answer: str, predicted_answer: Optional[str]) -> boo
     logger.debug(f"Comparison result: {result}")
     return result
 
-def get_llm_response(problem: str, model: str) -> str:
+def get_llm_response(problem: str, model: str, prompt_type: str = "cot") -> str:
     """
     Get response from the LLM for a given problem.
     
     Args:
         problem (str): The problem text
         model (str): The model identifier
+        prompt_type (str): Type of system prompt to use ('standard', 'cot', or 'gibberish')
         
     Returns:
         str: Model's response
     """
     try:
+        selected_prompt = PROMPTS.get(prompt_type, COT_PROMPT)
+        
         response = client.chat.completions.create(
             model=model,
             temperature=0.6,  # Lower temperature for more consistent answers
             messages=[
-                {"role": "user", "content": SYSTEM_PROMPT + "\n" + problem}
+                {"role": "user", "content": selected_prompt + "\n" + problem}
             ],
             max_tokens=32768, # for thinking models, we need to use a lot more tokens
             # extra_body = {
@@ -718,72 +746,408 @@ def save_result(filename: str, result: Dict):
     with open(filename, 'w') as f:
         json.dump(results, f, indent=2)
 
-def analyze_results(results: list[Dict]):
+def analyze_results(results: list[Dict], prompt_type: str = None):
     """
     Analyze and print summary statistics of the results.
     
     Args:
         results (list[Dict]): List of evaluation results
+        prompt_type (str, optional): The prompt type used for these results
     """
     total = len(results)
     correct = sum(1 for r in results if r['is_correct'])
     accuracy = correct / total if total > 0 else 0
     
-    print("\n=== Results Summary ===")
+    prefix = f"[{prompt_type.upper()}] " if prompt_type else ""
+    print(f"\n=== {prefix}Results Summary ===")
     print(f"Total problems: {total}")
     print(f"Correct answers: {correct}")
     print(f"Accuracy: {accuracy:.2%}")
     
-    print("\n=== Incorrect Problems ===")
+    print(f"\n=== {prefix}Incorrect Problems ===")
     for r in results:
         if not r['is_correct']:
             print(f"Problem {r['index']}:")
             print(f"Expected: {r['correct_answer']}")
             print(f"Predicted: {r['predicted_answer']}")
             print("---")
-
-def main(model: str):
-    """Main evaluation function."""
-    os.makedirs("results", exist_ok=True)
-    results_file = f"evaluation_results_math500_{model.replace('/', '_')}.json"
     
-    dataset = load_math500_dataset()
+    return {
+        "total": total,
+        "correct": correct,
+        "accuracy": accuracy
+    }
+
+def estimate_reasoning_quality(response: str) -> float:
+    """
+    Estimate the quality of reasoning in a response.
+    This is a simple heuristic to check if the text contains mathematical symbols,
+    numbers, and relevant keywords.
+    
+    Args:
+        response (str): The model's response
+    
+    Returns:
+        float: A score between 0 and 1 indicating reasoning quality
+    """
+    # Check for common mathematical symbols and expressions
+    math_symbols = ['=', '+', '-', '*', '/', '\\frac', '\\sqrt', '\\pi', '^', '<', '>']
+    symbol_score = sum(1 for symbol in math_symbols if symbol in response) / len(math_symbols)
+    
+    # Check for numbers in the response
+    number_count = len(re.findall(r'\d+', response))
+    number_score = min(1.0, number_count / 20)  # Cap at 20 numbers
+    
+    # Check for reasoning keywords
+    reasoning_keywords = ['therefore', 'thus', 'since', 'because', 'we have', 'we get', 'we find', 'we need to', 'let', 'first', 'second', 'finally']
+    keyword_score = sum(1 for keyword in reasoning_keywords if keyword.lower() in response.lower()) / len(reasoning_keywords)
+    
+    # Combine scores with weights
+    total_score = (0.4 * symbol_score) + (0.3 * number_score) + (0.3 * keyword_score)
+    return total_score
+
+def estimate_gibberish_level(response: str) -> float:
+    """
+    Estimate how gibberish-like a response is.
+    This checks for coherent mathematical content vs random text.
+    
+    Args:
+        response (str): The model's response
+    
+    Returns:
+        float: A score between 0 and 1 indicating gibberish level (higher = more gibberish)
+    """
+    # Extract everything before the answer box
+    reasoning_part = response.split('\\boxed{')[0] if '\\boxed{' in response else response
+    
+    # Check for mathematical coherence (inverse of reasoning quality)
+    math_coherence = 1 - estimate_reasoning_quality(reasoning_part)
+    
+    # Check for unusual word patterns
+    unusual_patterns = re.findall(r'\b\w{15,}\b', reasoning_part)  # Very long words
+    unusual_pattern_score = min(1.0, len(unusual_patterns) / 5)  # Cap at 5 occurrences
+    
+    # Check for repetition
+    words = re.findall(r'\b\w+\b', reasoning_part.lower())
+    word_counts = {}
+    for word in words:
+        word_counts[word] = word_counts.get(word, 0) + 1
+    
+    repetition_score = 0
+    if words:
+        repetition_score = sum(1 for count in word_counts.values() if count > 3) / len(word_counts)
+    
+    # Combine scores
+    total_score = (0.5 * math_coherence) + (0.3 * unusual_pattern_score) + (0.2 * repetition_score)
+    return total_score
+
+def analyze_response_length(results: list[Dict]) -> dict:
+    """
+    Analyze the length of responses.
+    
+    Args:
+        results (list[Dict]): List of evaluation results
+    
+    Returns:
+        dict: Statistics about response lengths
+    """
+    lengths = [len(r['response']) for r in results if 'response' in r]
+    
+    if not lengths:
+        return {
+            "avg_length": 0,
+            "min_length": 0,
+            "max_length": 0,
+            "median_length": 0
+        }
+    
+    return {
+        "avg_length": sum(lengths) / len(lengths),
+        "min_length": min(lengths),
+        "max_length": max(lengths),
+        "median_length": sorted(lengths)[len(lengths) // 2]
+    }
+
+def generate_comparison_report(results_by_type: Dict[str, list]) -> str:
+    """
+    Generate a detailed comparison report.
+    
+    Args:
+        results_by_type (Dict[str, list]): Dictionary mapping prompt types to results
+    
+    Returns:
+        str: Formatted report text
+    """
+    # Analyze basic stats for each prompt type
+    summary_stats = {}
+    length_stats = {}
+    quality_stats = {}
+    gibberish_stats = {}
+    
+    for prompt_type, results in results_by_type.items():
+        summary_stats[prompt_type] = analyze_results(results, prompt_type)
+        length_stats[prompt_type] = analyze_response_length(results)
+        
+        # Calculate reasoning quality and gibberish estimates
+        qualities = [estimate_reasoning_quality(r['response']) for r in results if 'response' in r]
+        gibberish_levels = [estimate_gibberish_level(r['response']) for r in results if 'response' in r]
+        
+        quality_stats[prompt_type] = sum(qualities) / len(qualities) if qualities else 0
+        gibberish_stats[prompt_type] = sum(gibberish_levels) / len(gibberish_levels) if gibberish_levels else 0
+    
+    # Build the report
+    report = "# Chain of Thought (CoT) Experiment Report\n\n"
+    report += f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    
+    report += "## Experiment Overview\n\n"
+    report += "This experiment tests whether Chain of Thought (CoT) reasoning provides value through coherent reasoning or simply by giving models more computation time/tokens to produce answers.\n\n"
+    
+    report += "Three different prompting strategies were compared:\n\n"
+    report += "1. **Standard**: Direct answer with no reasoning steps\n"
+    report += "2. **Chain of Thought (CoT)**: Structured reasoning before the answer\n"
+    report += "3. **Gibberish CoT**: Meaningless text of similar length to CoT before the answer\n\n"
+    
+    report += "## Accuracy Results\n\n"
+    report += "| Prompt Type | Problems | Correct | Accuracy |\n"
+    report += "|-------------|----------|---------|----------|\n"
+    
+    for prompt_type, stats in summary_stats.items():
+        report += f"| {prompt_type.capitalize()} | {stats['total']} | {stats['correct']} | {stats['accuracy']:.2%} |\n"
+    
+    report += "\n## Response Characteristics\n\n"
+    report += "| Prompt Type | Avg Length | Reasoning Quality | Gibberish Level |\n"
+    report += "|-------------|------------|-------------------|----------------|\n"
+    
+    for prompt_type in summary_stats.keys():
+        report += (f"| {prompt_type.capitalize()} | {length_stats[prompt_type]['avg_length']:.1f} | "
+                  f"{quality_stats[prompt_type]:.2f} | {gibberish_stats[prompt_type]:.2f} |\n")
+    
+    report += "\n## Analysis\n\n"
+    
+    # Add comparative analysis
+    std_acc = summary_stats.get('standard', {}).get('accuracy', 0)
+    cot_acc = summary_stats.get('cot', {}).get('accuracy', 0)
+    gib_acc = summary_stats.get('gibberish', {}).get('accuracy', 0)
+    
+    # Compare CoT vs Standard
+    cot_vs_std = (cot_acc - std_acc) / std_acc * 100 if std_acc > 0 else 0
+    report += f"- CoT improved accuracy by {cot_vs_std:.1f}% compared to the standard prompt.\n"
+    
+    # Compare Gibberish vs Standard
+    gib_vs_std = (gib_acc - std_acc) / std_acc * 100 if std_acc > 0 else 0
+    report += f"- Gibberish CoT improved accuracy by {gib_vs_std:.1f}% compared to the standard prompt.\n"
+    
+    # Compare CoT vs Gibberish
+    if gib_acc > 0:
+        cot_vs_gib = (cot_acc - gib_acc) / gib_acc * 100
+        report += f"- CoT was {cot_vs_gib:.1f}% more accurate than Gibberish CoT.\n\n"
+    
+    # Conclusions based on the results
+    report += "## Conclusions\n\n"
+    
+    if cot_acc > gib_acc > std_acc:
+        report += ("The results suggest that both structured reasoning (CoT) and additional computation time "
+                  "(Gibberish CoT) improve performance compared to direct answers. However, since CoT outperforms "
+                  "Gibberish CoT, there appears to be value in the structured reasoning process beyond just "
+                  "the additional computation time.\n\n")
+    elif gib_acc >= cot_acc > std_acc:
+        report += ("The results suggest that the primary benefit of Chain of Thought may indeed be the additional "
+                  "computation time rather than the structured reasoning itself, as Gibberish CoT performed "
+                  "similarly to or better than standard CoT. This supports the hypothesis that CoT is primarily "
+                  "providing value through extended computation.\n\n")
+    elif cot_acc > std_acc >= gib_acc:
+        report += ("The results strongly suggest that structured reasoning is crucial for improved performance. "
+                  "Since Gibberish CoT did not improve over the standard prompt while CoT did, the benefit "
+                  "appears to come from the reasoning process itself rather than just extra computation time.\n\n")
+    else:
+        report += ("The results show an interesting pattern that warrants further investigation. The relationship "
+                  "between reasoning structure and performance appears more complex than initially hypothesized.\n\n")
+    
+    report += "## Future Work\n\n"
+    report += ("- Expand testing to different problem domains beyond mathematics\n"
+              "- Test with different model architectures to see if the pattern holds\n"
+              "- Analyze intermediate activation patterns during reasoning vs gibberish generation\n"
+              "- Investigate whether fine-tuning on gibberish CoT would yield similar benefits to CoT fine-tuning\n")
+    
+    return report
+
+def create_comparison_plots(results_by_type: Dict[str, list], model_name: str) -> str:
+    """
+    Create visualization plots comparing the different prompt types.
+    
+    Args:
+        results_by_type (Dict[str, list]): Dictionary mapping prompt types to results
+        model_name (str): Name of the model used
+        
+    Returns:
+        str: Filename of the saved plot
+    """
+    # Calculate accuracy for each prompt type
+    accuracies = {}
+    for prompt_type, results in results_by_type.items():
+        total = len(results)
+        correct = sum(1 for r in results if r['is_correct'])
+        accuracies[prompt_type] = (correct / total) if total > 0 else 0
+    
+    # Create the accuracy bar chart
+    plt.figure(figsize=(10, 6))
+    
+    # Bar colors
+    colors = {'standard': '#3498db', 'cot': '#2ecc71', 'gibberish': '#e74c3c'}
+    
+    # Plot bars
+    bars = plt.bar(accuracies.keys(), [acc * 100 for acc in accuracies.values()], color=[colors.get(k, 'gray') for k in accuracies.keys()])
+    
+    # Add value labels on top of the bars
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 1,
+                 f'{height:.1f}%', ha='center', va='bottom', fontweight='bold')
+    
+    # Add titles and labels
+    plt.title(f'Accuracy Comparison of Different Prompting Strategies\nModel: {model_name}', fontsize=14, fontweight='bold')
+    plt.ylabel('Accuracy (%)', fontsize=12)
+    plt.ylim(0, max([acc * 100 for acc in accuracies.values()]) + 10)  # Add some margin at the top
+    
+    # Add grid for better readability
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    
+    # Custom x-axis labels
+    x_labels = {'standard': 'Standard\n(Direct Answer)', 'cot': 'Chain of Thought\n(Reasoning)', 'gibberish': 'Gibberish CoT\n(Nonsense Text)'}
+    plt.xticks(range(len(accuracies)), [x_labels.get(k, k) for k in accuracies.keys()], fontsize=10)
+    
+    # Save the plot
+    plot_filename = f"cot_experiment_results_{model_name.replace('/', '_')}.png"
+    plt.tight_layout()
+    plt.savefig(plot_filename, dpi=300)
+    plt.close()
+    
+    return plot_filename
+
+def evaluate_with_prompt_type(model: str, dataset, prompt_type: str, results_file: str, limit: int = None):
+    """
+    Evaluate model performance using a specific prompt type.
+    
+    Args:
+        model (str): The model identifier
+        dataset: The dataset to evaluate on
+        prompt_type (str): Type of prompt to use
+        results_file (str): File to save results to
+        limit (int, optional): Maximum number of problems to evaluate
+    
+    Returns:
+        list: List of evaluation results
+    """
     existing_results = load_existing_results(results_file)
     
     # Create a set of already processed indexes for efficient lookup
     processed_indexes = {result['index'] for result in existing_results}
     
-    for idx, item in enumerate(tqdm(dataset, desc="Evaluating problems")):
+    # Instead of slicing the dataset, use a counter
+    processed_count = 0
+    
+    for idx, item in enumerate(tqdm(dataset, desc=f"Evaluating with {prompt_type}")):
         # Skip if this index has already been processed
         if idx in processed_indexes:
             continue
+        
+        # Break if we've hit the limit
+        if limit is not None and processed_count >= limit:
+            break
             
         problem_text = item['problem']
         correct_answer = item['answer']
         
-        # Get model's response
-        response = get_llm_response(problem_text, model)
+        # Get model's response with the specified prompt type
+        response = get_llm_response(problem_text, model, prompt_type)
         predicted_answer = extract_answer(response)
 
-        # Compare answers using the new comparison function
+        # Compare answers
         is_correct = compare_answers(correct_answer, predicted_answer)
         
         result = {
             "index": idx,
             "problem": problem_text,
+            "prompt_type": prompt_type,
             "response": response,
             "correct_answer": correct_answer,
             "predicted_answer": predicted_answer,
             "is_correct": is_correct
         }
         save_result(results_file, result)
+        
+        # Increment our counter
+        processed_count += 1
     
-    final_results = load_existing_results(results_file)
-    analyze_results(final_results)
+    # Load all results for this prompt type
+    all_results = load_existing_results(results_file)
+    prompt_results = [r for r in all_results if r.get('prompt_type') == prompt_type]
+    
+    return prompt_results
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate LLM performance on MATH-500 problems")
+def main():
+    """Main evaluation function."""
+    parser = argparse.ArgumentParser(description="Evaluate LLM performance on MATH-500 problems with different prompting strategies")
     parser.add_argument("--model", type=str, required=True, help="OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)")
+    parser.add_argument("--compare", action="store_true", help="Compare all three prompting strategies")
+    parser.add_argument("--prompt", type=str, choices=["standard", "cot", "gibberish"], default="cot", 
+                        help="Type of prompt to use if not comparing all")
+    parser.add_argument("--limit", type=int, default=None, help="Limit the number of problems to evaluate")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     
-    main(args.model)
+    if args.debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('math500_debug.log'),
+                logging.StreamHandler()
+            ]
+        )
+    else:
+        logging.basicConfig(level=logging.INFO)
+    
+    # Create results directory
+    os.makedirs("results", exist_ok=True)
+    
+    dataset = load_math500_dataset()
+    
+    if args.compare:
+        print("Running comparative evaluation of all three prompting strategies...")
+        
+        # Results for each prompt type
+        results_by_type = {}
+        
+        # Process each prompt type
+        for prompt_type in ["standard", "cot", "gibberish"]:
+            results_file = f"results/evaluation_results_math500_{args.model.replace('/', '_')}_{prompt_type}.json"
+            prompt_results = evaluate_with_prompt_type(args.model, dataset, prompt_type, results_file, args.limit)
+            results_by_type[prompt_type] = prompt_results
+            
+            # Print individual summary
+            analyze_results(prompt_results, prompt_type)
+        
+        # Generate comprehensive comparison report
+        report = generate_comparison_report(results_by_type)
+        report_filename = f"cot_experiment_report_{args.model.replace('/', '_')}.md"
+        
+        with open(report_filename, "w") as f:
+            f.write(report)
+        
+        # Generate visualization
+        plot_filename = create_comparison_plots(results_by_type, args.model)
+        
+        print(f"\nComparison complete!")
+        print(f"Report saved to: {report_filename}")
+        print(f"Visualization saved to: {plot_filename}")
+    else:
+        # Single prompt type evaluation
+        results_file = f"results/evaluation_results_math500_{args.model.replace('/', '_')}_{args.prompt}.json"
+        prompt_results = evaluate_with_prompt_type(args.model, dataset, args.prompt, results_file, args.limit)
+        
+        # Analyze and print results
+        analyze_results(prompt_results, args.prompt)
+
+if __name__ == "__main__":
+    main()
