@@ -545,20 +545,21 @@ class SteeringHook:
         Try to match the current context with a steering vector.
         Only allows one pattern to be selected for the entire generation.
         """
-        # If we already have an active pattern for this generation, don't try to match again
-        if self.generation_started and self.active_pattern:
+        # If we already have an active pattern, don't try to match again
+        if self.active_pattern:
             return False
         
-        # Only attempt pattern matching at the beginning of generation
-        self.generation_started = True
-            
         # Use token-based matching or text-based matching as appropriate
+        match_result = False
         if self.tokenizer is not None and hasattr(self.manager, 'tokenized_contexts') and self.manager.tokenized_contexts:
             # Token-based matching (similar to guided mode)
             match_result = self._try_token_match()
         else:
             # Text-based matching as fallback
             match_result = self._try_text_match()
+            
+        # Set generation started flag AFTER trying to match
+        self.generation_started = True
             
         # If a match is found, set this as the permanent pattern for this generation
         if match_result and self.current_vector:

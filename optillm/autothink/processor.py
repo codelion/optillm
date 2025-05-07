@@ -345,9 +345,8 @@ class AutoThinkProcessor:
                     for hook, _ in self.steering_hooks:
                         # Update token history with the new token
                         hook.update_token_history([next_token])
-                        # Check for matches occasionally during generation
-                        if random.random() < 0.1:  # 10% chance per token
-                            hook.try_match()
+                        # Check for matches on EVERY token
+                        hook.try_match()
                 
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
             
