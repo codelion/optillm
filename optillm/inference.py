@@ -20,6 +20,7 @@ import traceback
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
 from optillm.thinkdeeper import thinkdeeper_decode
+from optillm.autothink import autothink_decode
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1464,6 +1465,34 @@ class InferenceClient:
                                 messages,
                                 thinkdeeper_config
                                 )
+                            responses = [result]
+                            logprobs_results = [None]
+                            completion_tokens = len(pipeline.tokenizer.encode(result))
+                        elif decoding == "autothink":
+                            # Get steering dataset configuration
+                            steering_dataset = kwargs.get("steering_dataset", "codelion/Qwen3-0.6B-pts-steering-vectors")
+                            target_layer = kwargs.get("target_layer", 19)
+                            
+                            # Prepare AutoThink configuration
+                            autothink_config = {
+                                "steering_dataset": steering_dataset,
+                                "target_layer": target_layer,
+                                "pattern_strengths": kwargs.get("pattern_strengths", {
+                                    "depth_and_thoroughness": 2.5,
+                                    "numerical_accuracy": 2.0,
+                                    "self_correction": 3.0,
+                                    "exploration": 2.0,
+                                    "organization": 1.5
+                                })
+                            }
+                            
+                            # Process with AutoThink
+                            result = autothink_decode(
+                                pipeline.current_model,
+                                pipeline.tokenizer,
+                                messages,
+                                autothink_config
+                            )
                             responses = [result]
                             logprobs_results = [None]
                             completion_tokens = len(pipeline.tokenizer.encode(result))

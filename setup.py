@@ -45,6 +45,7 @@ setup(
         "outlines[transformers]",
         "sentencepiece",
         "mcp",
+        "adaptive-classifier",
     ],
     entry_points={
         'console_scripts': [

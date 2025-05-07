@@ -343,7 +343,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 | Approach                             | Slug               | Description                                                                                    |
 | ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Cerebras Planning and Optimization | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
+| Cerebras Planning and Optimization   | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
 | CoT with Reflection                  | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch                           | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | ReRead                               | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
@@ -359,6 +359,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | CoT Decoding                         |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 | Entropy Decoding                     |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
 | Thinkdeeper                          |  N/A for proxy     | Implements the `reasoning_effort` param from OpenAI for reasoning models like DeepSeek R1      |
+| AutoThink                            |  N/A for proxy     | Combines query complexity classification with steering vectors to enhance reasoning            |
 
 ## Implemented plugins
 
