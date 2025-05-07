@@ -303,10 +303,14 @@ class SteeringHook:
                 # Keep strength within safe bounds
                 safe_strength = min(max(strength, 0.1), 2.0)
                 
-                # Log when pattern changes
+                # Log when pattern changes or is applied
                 if pattern != self.last_pattern:
-                    logger.info(f"Switching to {pattern} reasoning pattern with strength {safe_strength}")
+                    logger.info(f"[STEERING ACTIVATED] Switching to {pattern} reasoning pattern with strength {safe_strength}")
                     self.last_pattern = pattern
+                else:
+                    # Log periodically that steering is still active (every ~20 tokens)
+                    if random.random() < 0.05:
+                        logger.info(f"[STEERING ACTIVE] Applying {pattern} pattern with strength {safe_strength}")
                 
                 # Apply the steering vector
                 try:
@@ -478,6 +482,11 @@ class SteeringHook:
             'is_partial': True
         }
         
+        # Log token history periodically
+        if random.random() < 0.01:
+            history_sample = self.token_history[-5:] if len(self.token_history) >= 5 else self.token_history
+            logger.debug(f"Token matching with history (last {len(history_sample)} of {len(self.token_history)} tokens): {history_sample}")
+        
         # Check for matches in tokenized contexts
         for tokenized_context, vector in self.manager.tokenized_contexts.items():
             token_list = list(tokenized_context)
@@ -519,7 +528,12 @@ class SteeringHook:
             self.match_found = True
             self.current_vector = best_match['vector']
             pattern = best_match['vector'].get("reasoning_pattern", "unknown")
-            logger.info(f"Found {match_type} token match ({best_match['match_len']}/{best_match['token_len']} tokens) for {pattern} pattern")
+            pivot_token = best_match['vector'].get("pivot_token", "")
+            
+            logger.info(f"[STEERING MATCH FOUND] {match_type} token match for '{pattern}' pattern")
+            logger.info(f"[STEERING DETAILS] Match quality: {best_match['match_len']}/{best_match['token_len']} tokens")
+            logger.info(f"[STEERING DETAILS] Pivot token: '{pivot_token}'")
+            
             return True
         
         return False
