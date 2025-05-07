@@ -135,10 +135,10 @@ class AutoThinkProcessor:
                 self.tokenizer
             )
             
-            logger.info(f"Set up steering with {len(self.steering_hooks)} hooks")
+            logger.info(f"STEERING: Set up steering with {len(self.steering_hooks)} hooks")
         
         except Exception as e:
-            logger.error(f"Error setting up steering: {e}")
+            logger.error(f"STEERING: Error setting up steering: {e}")
             self.steering_manager = None
             self.steering_hooks = []
     
@@ -147,6 +147,7 @@ class AutoThinkProcessor:
         if self.steering_hooks:
             remove_steering_hooks(self.steering_hooks)
             self.steering_hooks = []
+            logger.info("STEERING: Hooks removed successfully")
     
     def classify_complexity(self, query: str) -> Tuple[str, float]:
         """
@@ -338,6 +339,16 @@ class AutoThinkProcessor:
                 response_chunks.append(next_str)
                 if not seen_end_think:
                     n_thinking_tokens += 1
+                
+                # Update steering hooks with new token
+                if self.steering_hooks:
+                    for hook, _ in self.steering_hooks:
+                        # Update token history with the new token
+                        hook.update_token_history([next_token])
+                        # Check for matches occasionally during generation
+                        if random.random() < 0.1:  # 10% chance per token
+                            hook.try_match()
+                
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
             
             # Clean up steering hooks

@@ -163,11 +163,12 @@ class SteeringVectorManager:
     def create_tokenized_contexts(self, tokenizer):
         """
         Pre-tokenize context patterns for efficient matching during generation.
+        Similar to how guided mode does token-based matching.
         
         Args:
             tokenizer: Tokenizer for encoding contexts
         """
-        # Get configurations
+        # Get configurations - use similar defaults as ThinkDeeperProcessor
         max_pts_tokens = 256  # Maximum tokens to store for matching
         
         count = 0
@@ -177,29 +178,32 @@ class SteeringVectorManager:
             if not context:
                 continue
                 
-            # Pre-tokenize the context for faster matching
+            # Pre-tokenize the context for faster matching during generation
             tokenized_context = tokenizer.encode(context, add_special_tokens=False)
             
-            # Keep only up to max_pts_tokens
+            # Keep only up to max_pts_tokens - no point storing more than our history capacity
             if len(tokenized_context) > max_pts_tokens:
+                # Get only the last max_pts_tokens (most important for matching)
                 tokenized_context = tokenized_context[-max_pts_tokens:]
             
-            # Store the tokenized context with its vector
+            # Store the tokenized context with its corresponding vector
             tuple_key = tuple(tokenized_context)
             self.tokenized_contexts[tuple_key] = vector
             
-            # Store additional shorter versions for partial matching
+            # Store additional shorter versions for partial matching during early generation
+            # Create shorter suffixes for early matching when context is still building up
             for suffix_len in [4, 8, 12]:
                 if len(tokenized_context) > suffix_len:
                     suffix = tokenized_context[-suffix_len:]
                     suffix_tuple = tuple(suffix)
+                    # Only store if not already present (avoid overwriting longer matches)
                     if suffix_tuple not in self.tokenized_contexts:
                         self.tokenized_contexts[suffix_tuple] = vector
             
             count += 1
             
-        # Log statistics
-        logger.info(f"Pre-tokenized {count} contexts into {len(self.tokenized_contexts)} token patterns")
+        # Log statistics about the tokenized contexts
+        logger.info(f"STEERING: Pre-tokenized {count} contexts into {len(self.tokenized_contexts)} token patterns")
         
         # Count patterns by length for debugging
         length_counts = {}
@@ -209,7 +213,7 @@ class SteeringVectorManager:
                 length_counts[length] = 0
             length_counts[length] += 1
         
-        logger.info(f"Token pattern length distribution: {sorted(length_counts.items())}")
+        logger.info(f"STEERING: Token pattern length distribution: {sorted(length_counts.items())}")
     
     def get_steering_strength(self, pattern: str) -> float:
         """
@@ -232,7 +236,7 @@ class SteeringVectorManager:
             strength: The steering strength
         """
         self.pattern_strengths[pattern] = strength
-        logger.info(f"Set strength for {pattern} to {strength}")
+        logger.info(f"STEERING: Set strength for {pattern} to {strength}")
     
     def get_pattern_vectors(self, pattern: str) -> List[Dict[str, Any]]:
         """
@@ -245,6 +249,38 @@ class SteeringVectorManager:
             List of steering vectors
         """
         return self.pattern_to_vectors.get(pattern, [])
+        
+    def get_steering_vector(self, context: str, match_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get the most appropriate steering vector for a context.
+        
+        Args:
+            context: The current generation context.
+            match_key: Optional key for matching.
+            
+        Returns:
+            Dictionary with steering data or None if no match.
+        """
+        if match_key is not None:
+            # Try exact matching by key
+            for vector in self.steering_vectors:
+                # Get the last 100 chars of the pivot_context for comparison
+                vector_context = vector.get("pivot_context", "")
+                vector_key = vector_context[-100:] if len(vector_context) >= 100 else vector_context
+                
+                # Perform exact match comparison and log for debugging
+                if vector_key == match_key:
+                    logger.debug(f"STEERING: Context match found for '{vector.get('pivot_token', '')}' with pattern {vector.get('reasoning_pattern', 'unknown')}")
+                    return vector
+                
+                # For first 5 attempts, log debugging info when match fails
+                if random.random() < 0.001:  # Log a small random sample for debugging
+                    logger.debug(f"STEERING: Match failed - key length: {len(match_key)}, vector key length: {len(vector_key)}")
+                    logger.debug(f"STEERING: Match key sample: '{match_key[:20]}...'")
+                    logger.debug(f"STEERING: Vector key sample: '{vector_key[:20]}...'")
+        
+        # If no match found, return None
+        return None
 
 class SteeringHook:
     """Hook for applying steering vectors during generation."""
@@ -262,7 +298,10 @@ class SteeringHook:
         self.layer_num = layer_num
         self.tokenizer = tokenizer
         
-        # For token-based matching
+        # For text-based matching (original approach)
+        self.context_buffer = ""
+        
+        # For token-based matching (guided-style approach)
         self.token_history = []  # Store token IDs for matching
         self.max_history = 256   # Maximum tokens to keep in history
         
@@ -275,7 +314,7 @@ class SteeringHook:
         self.active_pattern = None  # Currently active pattern
         self.generation_started = False
         
-        logger.info(f"Initialized hook for layer {layer_num}")
+        logger.info(f"STEERING: Initialized hook for layer {layer_num}")
     
     def __call__(self, module, input_tensors, output):
         """
@@ -289,53 +328,66 @@ class SteeringHook:
         Returns:
             Modified output tensor
         """
+        # Use a try-except block around the entire function to prevent crashing
         try:
             # Skip if no active pattern is set
             if not self.active_pattern:
                 return output
             
-            # Apply steering vector if available
+            # Apply steering vector (only if we have an active pattern)
             if self.current_vector is not None:
                 # Get the appropriate steering strength
                 pattern = self.current_vector.get("reasoning_pattern", "unknown")
                 strength = self.manager.get_steering_strength(pattern)
                 
-                # Keep strength within safe bounds
-                safe_strength = min(max(strength, 0.1), 2.0)
+                # Keep strength within safe bounds - use lower values for better stability
+                safe_strength = min(max(strength, 0.1), 2.0)  # Limit between 0.1 and 2.0
                 
-                # Log when pattern changes or is applied
+                # Log when pattern changes
                 if pattern != self.last_pattern:
-                    logger.info(f"[STEERING ACTIVATED] Switching to {pattern} reasoning pattern with strength {safe_strength}")
+                    logger.info(f"STEERING: Switching to {pattern} reasoning pattern with strength {safe_strength}")
                     self.last_pattern = pattern
                 else:
-                    # Log periodically that steering is still active (every ~20 tokens)
+                    # Log periodically that steering is still active
                     if random.random() < 0.05:
-                        logger.info(f"[STEERING ACTIVE] Applying {pattern} pattern with strength {safe_strength}")
+                        logger.info(f"STEERING: Still applying {pattern} pattern with strength {safe_strength}")
                 
-                # Apply the steering vector
+                # Apply the steering vector using our safer function
                 try:
                     if isinstance(output, tuple):
-                        # Some models return a tuple
+                        # Some models return a tuple where the first element is the hidden states
                         hidden_states = output[0]
-                        modified_hidden_states = self._apply_steering_vector(hidden_states, self.current_vector, safe_strength)
                         
-                        # Validate the result
-                        if modified_hidden_states.shape == hidden_states.shape:
-                            return (modified_hidden_states,) + output[1:]
-                        else:
-                            logger.error(f"Modified hidden states have wrong shape. Expected {hidden_states.shape}, got {modified_hidden_states.shape}")
+                        # Apply steering - if it fails, return original
+                        try:
+                            # Create a new reference for the modified hidden states
+                            modified_hidden_states = self._apply_steering_vector(hidden_states, self.current_vector, safe_strength)
+                            # Validate the result has the right shape
+                            if modified_hidden_states.shape == hidden_states.shape:
+                                # Create a new tuple with the modified hidden states
+                                return (modified_hidden_states,) + output[1:]
+                            else:
+                                logger.error(f"STEERING: Modified hidden states have wrong shape. Expected {hidden_states.shape}, got {modified_hidden_states.shape}")
+                                return output
+                        except Exception as e:
+                            logger.error(f"STEERING: Error applying steering to tuple output: {e}")
                             return output
                     else:
                         # Direct tensor output
-                        return self._apply_steering_vector(output, self.current_vector, safe_strength)
+                        try:
+                            # Apply steering directly
+                            return self._apply_steering_vector(output, self.current_vector, safe_strength)
+                        except Exception as e:
+                            logger.error(f"STEERING: Error applying steering to direct output: {e}")
+                            return output
                         
                 except Exception as e:
-                    logger.error(f"Error applying steering: {e}")
+                    logger.error(f"STEERING: Unexpected error in steering application: {e}")
                     return output
             
             return output
         except Exception as e:
-            logger.error(f"Critical error in hook: {e}")
+            logger.error(f"STEERING: Critical error in hook: {e}")
             return output
     
     def _apply_steering_vector(self, hidden_states: torch.Tensor, 
@@ -353,11 +405,11 @@ class SteeringHook:
             Modified hidden states tensor
         """
         try:
-            # Make a deep clone
+            # Make a DEEP clone to avoid in-place modification issues
             hidden_states_clone = hidden_states.clone().detach()
             
             # Check what kind of vector we're using
-            vector_data = None
+            vector_type = None
             if "steering_vector" in steering_vector:
                 vector_data = steering_vector["steering_vector"]
                 vector_type = "steering_vector"
@@ -365,61 +417,110 @@ class SteeringHook:
                 vector_data = steering_vector["cluster_vector"]
                 vector_type = "cluster_vector"
             else:
-                logger.warning("No valid vector found in steering data")
-                return hidden_states
+                logger.warning("STEERING: No valid vector found in steering data")
+                return hidden_states  # No steering vector found
             
-            # Convert vector to tensor
-            vector = torch.tensor(vector_data, 
-                                 dtype=hidden_states.dtype, 
-                                 device=hidden_states.device)
+            # Safely convert vector to tensor
+            try:
+                vector = torch.tensor(vector_data, 
+                                   dtype=hidden_states.dtype, 
+                                   device=hidden_states.device)
+            except Exception as e:
+                logger.error(f"STEERING: Error converting vector to tensor: {e}")
+                return hidden_states
             
             # Log vector info
             pattern = steering_vector.get("reasoning_pattern", "unknown")
-            logger.debug(f"Applying {vector_type} for pattern '{pattern}' with scaling {scaling_factor}")
+            logger.debug(f"STEERING: Applying {vector_type} for pattern '{pattern}' with base scaling {scaling_factor}")
             
             # Apply scaling based on prob_delta if available
             if "prob_delta" in steering_vector:
                 prob_delta = abs(steering_vector["prob_delta"])
+                # Limit the impact of prob_delta to prevent extreme scaling
                 prob_delta_capped = min(max(prob_delta, 0.1), 2.0)
                 scaling_factor *= prob_delta_capped
+                logger.debug(f"STEERING: Adjusted scaling by prob_delta {prob_delta_capped} to {scaling_factor}")
             
             # Check if the token is positive or negative
             is_positive = steering_vector.get("is_positive", True)
             
-            # Verify shapes are compatible
+            # Log tensor shapes and verify compatibility
             hs_shape = hidden_states.shape
             vector_shape = vector.shape
+            logger.debug(f"STEERING: hidden_states shape: {hs_shape}, vector shape: {vector_shape}")
             
+            # Verify shapes are compatible
             if len(vector_shape) != 1 or vector_shape[0] != hs_shape[-1]:
-                logger.error(f"Shape mismatch - hidden_states: {hs_shape}, vector: {vector_shape}")
+                logger.error(f"STEERING: Shape mismatch - hidden_states: {hs_shape}, vector: {vector_shape}")
                 return hidden_states
             
-            # Bound scaling factor for safety
-            safe_scaling = min(max(scaling_factor, 0.0), 3.0)
+            # Bound scaling factor for safety - using a tighter range to prevent instability
+            safe_scaling = min(max(scaling_factor, 0.0), 3.0)  # Limit between 0 and 3
             
-            # Apply steering
-            if len(hs_shape) >= 3 and hs_shape[0] > 0 and hs_shape[1] > 0:
-                # Apply to the last token's representation
-                if is_positive:
-                    # Normalize vector to prevent numerical instability
-                    vector_norm = torch.nn.functional.normalize(vector, dim=0)
-                    hidden_states_clone[-1, -1, :] = hidden_states_clone[-1, -1, :] + safe_scaling * vector_norm
+            # Apply steering with safe indexing - with additional safeguards
+            try:
+                if len(hs_shape) >= 3 and hs_shape[0] > 0 and hs_shape[1] > 0:
+                    # Apply to the last token's representation (safe indexing)
+                    if is_positive:
+                        # For positive tokens, add the vector
+                        # Normalize vector first to prevent numerical instability
+                        vector_norm = torch.nn.functional.normalize(vector, dim=0)
+                        hidden_states_clone[-1, -1, :] = hidden_states_clone[-1, -1, :] + safe_scaling * vector_norm
+                    else:
+                        # For negative tokens, subtract the vector
+                        vector_norm = torch.nn.functional.normalize(vector, dim=0)
+                        hidden_states_clone[-1, -1, :] = hidden_states_clone[-1, -1, :] - safe_scaling * vector_norm
+                    
+                    # Check for NaN or inf values after modification
+                    if torch.isnan(hidden_states_clone).any() or torch.isinf(hidden_states_clone).any():
+                        logger.error("STEERING: NaN or inf values detected after applying vector, reverting to original")
+                        return hidden_states
                 else:
-                    vector_norm = torch.nn.functional.normalize(vector, dim=0)
-                    hidden_states_clone[-1, -1, :] = hidden_states_clone[-1, -1, :] - safe_scaling * vector_norm
-                
-                # Check for NaN or inf values
-                if torch.isnan(hidden_states_clone).any() or torch.isinf(hidden_states_clone).any():
-                    logger.error("NaN or inf values detected after applying vector, reverting to original")
+                    logger.error(f"STEERING: Hidden states shape not suitable for steering: {hs_shape}")
                     return hidden_states
-            else:
-                logger.error(f"Hidden states shape not suitable for steering: {hs_shape}")
+            except IndexError as e:
+                logger.error(f"STEERING: IndexError when applying vector: {e}")
+                logger.error(f"STEERING: Indices: [-1, -1, :], tensor shape: {hidden_states.shape}")
                 return hidden_states
             
             return hidden_states_clone
         except Exception as e:
-            logger.error(f"Unexpected error applying steering vector: {e}")
+            logger.error(f"STEERING: Unexpected error applying steering vector: {e}")
             return hidden_states
+    
+    def update_context(self, new_tokens: str):
+        """
+        Update the context buffer with new tokens.
+        
+        Args:
+            new_tokens: New tokens to add to the context.
+        """
+        # Both methods - text-based and token-based
+        if self.tokenizer is not None:
+            # Token-based approach (similar to guided mode)
+            # Tokenize the new text
+            token_ids = self.tokenizer.encode(new_tokens, add_special_tokens=False)
+            
+            if token_ids:  # Only proceed if we got tokens
+                # Add to token history
+                self.token_history.extend(token_ids)
+                
+                # Trim history if needed
+                if len(self.token_history) > self.max_history:
+                    self.token_history = self.token_history[-self.max_history:]
+                
+                # Log token updates periodically
+                if random.random() < 0.01:
+                    logger.debug(f"STEERING: Token history updated, now has {len(self.token_history)} tokens")
+        else:
+            # Original text-based approach as fallback
+            # Update context buffer
+            self.context_buffer += new_tokens
+            
+            # Keep only the last 500 characters
+            if len(self.context_buffer) > 500:
+                self.context_buffer = self.context_buffer[-500:]
+                logger.debug(f"STEERING: Context buffer trimmed to {len(self.context_buffer)} chars")
     
     def update_token_history(self, new_tokens: List[int]):
         """
@@ -437,44 +538,45 @@ class SteeringHook:
         
         # Log token updates periodically
         if random.random() < 0.01:
-            logger.debug(f"Token history updated, now has {len(self.token_history)} tokens")
+            logger.debug(f"STEERING: Token history updated, now has {len(self.token_history)} tokens")
     
-    def try_match(self) -> bool:
+    def try_match(self):
         """
         Try to match the current context with a steering vector.
-        
-        Returns:
-            Boolean indicating if a match was found
+        Only allows one pattern to be selected for the entire generation.
         """
-        # If we already have an active pattern, don't try to match again
+        # If we already have an active pattern for this generation, don't try to match again
         if self.generation_started and self.active_pattern:
             return False
         
         # Only attempt pattern matching at the beginning of generation
         self.generation_started = True
-        
-        # Try token-based matching
-        match_result = self._try_token_match()
-        
+            
+        # Use token-based matching or text-based matching as appropriate
+        if self.tokenizer is not None and hasattr(self.manager, 'tokenized_contexts') and self.manager.tokenized_contexts:
+            # Token-based matching (similar to guided mode)
+            match_result = self._try_token_match()
+        else:
+            # Text-based matching as fallback
+            match_result = self._try_text_match()
+            
         # If a match is found, set this as the permanent pattern for this generation
         if match_result and self.current_vector:
             new_pattern = self.current_vector.get("reasoning_pattern", "unknown")
             self.active_pattern = new_pattern
-            logger.info(f"Selected '{new_pattern}' pattern for this request")
-        
+            logger.info(f"STEERING: Selected '{new_pattern}' pattern for this request")
+            
         return match_result
     
-    def _try_token_match(self) -> bool:
+    def _try_token_match(self):
         """
-        Try to match using token-based context.
-        
-        Returns:
-            Boolean indicating if a match was found
+        Try to match using token-based context (similar to guided mode).
         """
         # Ensure we have enough tokens
         if len(self.token_history) < 4:
+            logger.debug(f"STEERING: Not enough tokens to match ({len(self.token_history)})")
             return False
-        
+            
         # Track best match
         best_match = {
             'length': 0, 
@@ -485,7 +587,7 @@ class SteeringHook:
         # Log token history periodically
         if random.random() < 0.01:
             history_sample = self.token_history[-5:] if len(self.token_history) >= 5 else self.token_history
-            logger.debug(f"Token matching with history (last {len(history_sample)} of {len(self.token_history)} tokens): {history_sample}")
+            logger.debug(f"STEERING: Token matching with history (last {len(history_sample)} of {len(self.token_history)} tokens): {history_sample}")
         
         # Check for matches in tokenized contexts
         for tokenized_context, vector in self.manager.tokenized_contexts.items():
@@ -494,11 +596,11 @@ class SteeringHook:
             
             # Try partial matching for shorter contexts
             if len(self.token_history) < token_len:
-                # Only try partial matching if we have enough context tokens
+                # Only try partial matching if we have enough context tokens (at least 4)
                 if len(self.token_history) >= 4:
-                    # Calculate how many tokens to match
+                    # Calculate how many tokens to match - minimum of context length or 1/2 of token sequence
                     match_len = min(len(self.token_history), max(4, token_len // 2))
-                    # Try to match the end of the token sequence
+                    # Try to match the end of the token sequence with the context tokens
                     if self.token_history[-match_len:] == token_list[-match_len:]:
                         # Track this match - prefer longer matches
                         if match_len > best_match['length']:
@@ -530,10 +632,82 @@ class SteeringHook:
             pattern = best_match['vector'].get("reasoning_pattern", "unknown")
             pivot_token = best_match['vector'].get("pivot_token", "")
             
-            logger.info(f"[STEERING MATCH FOUND] {match_type} token match for '{pattern}' pattern")
-            logger.info(f"[STEERING DETAILS] Match quality: {best_match['match_len']}/{best_match['token_len']} tokens")
-            logger.info(f"[STEERING DETAILS] Pivot token: '{pivot_token}'")
+            logger.info(f"STEERING: Found {match_type} token match ({best_match['match_len']}/{best_match['token_len']} tokens) for {pattern} pattern")
+            logger.info(f"STEERING: Pivot token: '{pivot_token}'")
             
+            return True
+            
+        # If no match, try fuzzy matching with 70% similarity threshold
+        if len(self.token_history) >= 8 and not self.match_found:
+            logger.debug("STEERING: No exact match found, trying fuzzy matching")
+            for tokenized_context, vector in self.manager.tokenized_contexts.items():
+                token_list = list(tokenized_context)
+                token_len = len(token_list)
+                
+                if token_len >= 8:  # Only try fuzzy matching for contexts with enough tokens
+                    match_len = min(len(self.token_history), token_len)
+                    last_tokens = self.token_history[-match_len:]
+                    context_tokens = token_list[-match_len:]
+                    
+                    # Count matching tokens
+                    matches = sum(1 for a, b in zip(last_tokens, context_tokens) if a == b)
+                    similarity = matches / match_len
+                    
+                    if similarity >= 0.7:  # 70% similarity threshold
+                        if match_len > best_match['length']:
+                            best_match = {
+                                'length': match_len,
+                                'vector': vector,
+                                'is_partial': True,
+                                'match_len': match_len,
+                                'token_len': token_len,
+                                'similarity': similarity
+                            }
+                            
+            # Apply fuzzy match if found
+            if best_match['vector'] is not None:
+                self.match_found = True
+                self.current_vector = best_match['vector']
+                pattern = best_match['vector'].get("reasoning_pattern", "unknown")
+                pivot_token = best_match['vector'].get("pivot_token", "")
+                similarity = best_match.get('similarity', 0.0)
+                
+                logger.info(f"STEERING: Found fuzzy match ({similarity:.2f} similarity) for {pattern} pattern")
+                logger.info(f"STEERING: Pivot token: '{pivot_token}'")
+                
+                return True
+        
+        # TEMPORARY: Force a match for testing purposes sometimes
+        if not self.match_found and len(self.manager.steering_vectors) > 0 and random.random() < 0.05:
+            logger.info("STEERING: Forcing a random steering vector match for testing")
+            # Pick a random vector
+            random_vector = random.choice(self.manager.steering_vectors)
+            self.match_found = True
+            self.current_vector = random_vector
+            pattern = random_vector.get("reasoning_pattern", "unknown")
+            logger.info(f"STEERING: Forced '{pattern}' pattern for testing")
+            return True
+            
+        return False
+    
+    def _try_text_match(self):
+        """Try to match using text-based context (original approach)."""
+        # Get the last 100 characters as the match key
+        match_key = self.context_buffer[-100:] if len(self.context_buffer) >= 100 else self.context_buffer
+        
+        # Log context buffer periodically to debug
+        if random.random() < 0.01:  # Log occasionally to avoid spam
+            logger.debug(f"STEERING: Current context buffer (last 50 chars): '{self.context_buffer[-50:]}'") 
+            logger.debug(f"STEERING: Matching with key (length {len(match_key)}): '{match_key[:20]}...'")
+        
+        # Try to find a matching steering vector using original matching
+        vector = self.manager.get_steering_vector(self.context_buffer, match_key)
+        
+        if vector is not None:
+            self.match_found = True
+            self.current_vector = vector
+            pattern = vector.get("reasoning_pattern", "unknown")
+            logger.info(f"STEERING: Found text match for {pattern} reasoning pattern: '{vector.get('pivot_token', '')}'")
             return True
         
         return False
@@ -542,8 +716,11 @@ class SteeringHook:
         """Reset the hook state."""
         self.match_found = False
         self.current_vector = None
+        self.context_buffer = ""
         self.token_history = []
         self.last_pattern = None
+        
+        # Reset pattern tracking
         self.active_pattern = None
         self.generation_started = False
 
@@ -563,34 +740,36 @@ def install_steering_hooks(model, manager: SteeringVectorManager, tokenizer=None
     
     # Target layer is specified in the manager
     layer_num = manager.target_layer
-    logger.info(f"Attempting to install hook on layer {layer_num}")
+    logger.info(f"STEERING: Attempting to install hook on layer {layer_num}")
     
     # First, log model structure to help with debugging
     model_type = type(model).__name__
-    logger.info(f"Model type is {model_type}")
+    logger.info(f"STEERING: Model type is {model_type}")
+    if hasattr(model, 'config'):
+        logger.info(f"STEERING: Model architecture is {model.config.architectures[0] if hasattr(model.config, 'architectures') else 'unknown'}")
     
     # Find the appropriate module - depends on model architecture
     module = None
     if hasattr(model, 'transformer'):
-        logger.info("Model has 'transformer' attribute")
+        logger.info("STEERING: Model has 'transformer' attribute")
         if hasattr(model.transformer, 'h') and layer_num < len(model.transformer.h):
             module = model.transformer.h[layer_num]
-            logger.info(f"Using transformer.h[{layer_num}]")
+            logger.info(f"STEERING: Using transformer.h[{layer_num}]")
     elif hasattr(model, 'model'):
-        logger.info("Model has 'model' attribute")
+        logger.info("STEERING: Model has 'model' attribute")
         if hasattr(model.model, 'layers') and layer_num < len(model.model.layers):
             module = model.model.layers[layer_num]
-            logger.info(f"Using model.layers[{layer_num}]")
+            logger.info(f"STEERING: Using model.layers[{layer_num}]")
         elif hasattr(model.model, 'decoder') and hasattr(model.model.decoder, 'layers') and layer_num < len(model.model.decoder.layers):
             module = model.model.decoder.layers[layer_num]
-            logger.info(f"Using model.decoder.layers[{layer_num}]")
+            logger.info(f"STEERING: Using model.decoder.layers[{layer_num}]")
     elif hasattr(model, 'layers') and layer_num < len(model.layers):
         module = model.layers[layer_num]
-        logger.info(f"Using layers[{layer_num}]")
+        logger.info(f"STEERING: Using layers[{layer_num}]")
     
     if module is None:
-        logger.error(f"Could not find appropriate module for layer {layer_num}")
-        logger.error("Model structure not compatible with current hook installation logic")
+        logger.error(f"STEERING: Could not find appropriate module for layer {layer_num}")
+        logger.error("STEERING: Model structure not compatible with current hook installation logic")
         return []
     
     # Create and register hook
@@ -600,7 +779,7 @@ def install_steering_hooks(model, manager: SteeringVectorManager, tokenizer=None
     # Return both hook object and handle for later removal
     hooks.append((hook, handle))
     
-    logger.info(f"Installed hook on layer {layer_num} successfully")
+    logger.info(f"STEERING: Installed hook on layer {layer_num} successfully")
     
     return hooks
 
@@ -614,4 +793,4 @@ def remove_steering_hooks(hooks):
     for _, handle in hooks:
         handle.remove()
     
-    logger.info(f"Removed {len(hooks)} hooks")
+    logger.info(f"STEERING: Removed {len(hooks)} hooks")
