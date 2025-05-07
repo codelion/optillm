@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from .processor import AutoThinkProcessor
+from .processor import AutoThinkProcessor as InternalProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,11 @@ class AutoThinkProcessor:
         self.tokenizer = tokenizer
     
     def __call__(self, messages: List[Dict[str, str]]) -> str:
-        """
-        Process messages with AutoThink's controlled thinking.
+        """Process messages with AutoThink's controlled thinking."""
+        return self.process(messages)
+        
+    def process(self, messages: List[Dict[str, str]]) -> str:
+        """Process messages with AutoThink's controlled thinking.
         
         Args:
             messages: List of message dictionaries
@@ -51,7 +54,7 @@ class AutoThinkProcessor:
     
     def _create_processor(self):
         """Create the internal processor instance."""
-        return AutoThinkProcessor(self.config, self.tokenizer, self.model)
+        return InternalProcessor(self.config, self.tokenizer, self.model)
 
 def autothink_decode(
     model: PreTrainedModel, 
@@ -80,7 +83,7 @@ def autothink_decode(
     
     try:
         processor = AutoThinkProcessor(model, tokenizer, config)
-        response = processor(messages)
+        response = processor.process(messages)
         return response
         
     except Exception as e:
