@@ -666,29 +666,18 @@ class SteeringHook:
                             
             # Apply fuzzy match if found
             if best_match['vector'] is not None:
-                self.match_found = True
-                self.current_vector = best_match['vector']
-                pattern = best_match['vector'].get("reasoning_pattern", "unknown")
-                pivot_token = best_match['vector'].get("pivot_token", "")
-                similarity = best_match.get('similarity', 0.0)
-                
-                logger.info(f"STEERING: Found fuzzy match ({similarity:.2f} similarity) for {pattern} pattern")
-                logger.info(f"STEERING: Pivot token: '{pivot_token}'")
-                
-                return True
-        
-        # TEMPORARY: Force a match for testing purposes sometimes
-        if not self.match_found and len(self.manager.steering_vectors) > 0 and random.random() < 0.05:
-            logger.info("STEERING: Forcing a random steering vector match for testing")
-            # Pick a random vector
-            random_vector = random.choice(self.manager.steering_vectors)
             self.match_found = True
-            self.current_vector = random_vector
-            pattern = random_vector.get("reasoning_pattern", "unknown")
-            logger.info(f"STEERING: Forced '{pattern}' pattern for testing")
+            self.current_vector = best_match['vector']
+            pattern = best_match['vector'].get("reasoning_pattern", "unknown")
+            pivot_token = best_match['vector'].get("pivot_token", "")
+            similarity = best_match.get('similarity', 0.0)
+            
+            logger.info(f"STEERING: Found fuzzy match ({similarity:.2f} similarity) for {pattern} pattern")
+            logger.info(f"STEERING: Pivot token: '{pivot_token}'")
+            
             return True
             
-        return False
+            return False
     
     def _try_text_match(self):
         """Try to match using text-based context (original approach)."""
