@@ -26,20 +26,21 @@ APPROACHES = [
     ("none", "Baseline without any optimization"),
     ("leap", "LEAP Approach"),
     ("rto", "Round Trip Optimization"),
-    ("cot_reflection", "C   hain of Thought with Reflection"),
+    ("cot_reflection", "Chain of Thought with Reflection"),
     ("self_consistency", "Self Consistency Check"),
     ("plansearch", "Planning with Search"),
     ("re2", "ReRead Approach"),
     ("z3", "Z3 Solver for Mathematical Problems"),
     ("coc", "Chain of Code"),
     ("executecode" , "Execute Code"),
+    ("spl", "System Prompt Learning")
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
     """Load the OptiLLM Bench dataset."""
     try:
         dataset = load_dataset("codelion/optillmbench")
-        return dataset["test"]  # We use the test split for evaluation
+        return dataset["train"]  # We use the test split for evaluation
     except Exception as e:
         logger.error(f"Error loading dataset: {e}")
         raise
@@ -53,6 +54,23 @@ def extract_gsm8k_answer(text: str) -> float:
         except ValueError:
             return None
     return None
+
+def remove_thinking_blocks(text: str) -> str:
+    """
+    Remove <think>...</think> blocks from the response.
+    If there's a </think> tag, only keep the content after it.
+    """
+    if not text:
+        return text
+        
+    # Check if there's a thinking block
+    if '</think>' in text:
+        # Get everything after the last </think> tag
+        parts = text.split('</think>')
+        return parts[-1].strip()
+    
+    # If no thinking blocks, return original text
+    return text
 
 def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
     """
@@ -68,6 +86,9 @@ def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
     """
     if not response or not ground_truth:
         return False
+    
+    # First, remove any thinking blocks
+    response = remove_thinking_blocks(response)
         
     if category == "gsm8k":
         # Extract numerical answers after ### and compare
@@ -169,9 +190,15 @@ def evaluate_model(
             # Get the response text
             response_text = response.choices[0].message.content
             
-            # Evaluate the response
+            # Also store the raw response for reference
+            raw_response = response_text
+            
+            # Process the response to remove thinking blocks
+            processed_response = remove_thinking_blocks(response_text)
+            
+            # Evaluate the processed response
             is_correct = evaluate_response(
-                response_text,
+                processed_response,
                 example['answer'],
                 example['category']
             )
@@ -192,13 +219,18 @@ def evaluate_model(
             category_metrics[example['category']]["total"] += 1
             category_metrics[example['category']]["time"] += time_taken
             
+            # Check if thinking blocks were removed
+            has_thinking = '</think>' in raw_response
+            
             # Record detailed result
             detailed_results.append({
                 "id": example['id'],
                 "category": example['category'],
                 "correct": is_correct,
                 "time_taken": time_taken,
-                "response": response_text,
+                "raw_response": raw_response,
+                "processed_response": processed_response if has_thinking else None,
+                "has_thinking": has_thinking,
                 "ground_truth": example['answer']
             })
             
@@ -241,7 +273,10 @@ def save_results(metrics: Dict[str, float], detailed_results: List[Dict[str, Any
         json.dump(detailed_results, f, indent=2)
     
     # Create a summary DataFrame for easier analysis
-    df = pd.DataFrame(detailed_results)
+    df = pd.DataFrame([
+        {k: v for k, v in result.items() if k != 'raw_response' and k != 'processed_response'}
+        for result in detailed_results
+    ])
     df.to_csv(f"{base_filename}_summary.csv", index=False)
     
     logger.info(f"Results saved to {base_filename}_*")
