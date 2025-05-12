@@ -37,6 +37,9 @@ STRATEGY_DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spl_
 STRATEGY_DB_PATH = os.path.join(STRATEGY_DB_DIR, 'strategies.json')
 STRATEGY_METRICS_PATH = os.path.join(STRATEGY_DB_DIR, 'metrics.json')
 
+# Default max tokens for reasoning LLMs
+DEFAULT_MAX_TOKENS = 4096
+
 # Ensure data directory exists
 os.makedirs(STRATEGY_DB_DIR, exist_ok=True)
 
@@ -447,7 +450,8 @@ def classify_problem(content: str, client, model: str) -> str:
                     f"You are a problem classifier. Your task is to analyze a given problem and categorize it into "
                     f"the most appropriate problem type. You must select EXACTLY ONE problem type from this list: {problem_types_str}.\n\n"
                     f"DO NOT make up new categories. Only use the exact problem types from the list above.\n\n"
-                    f"Respond with ONLY the problem type, exactly as it appears in the list. No explanations, no extra words."
+                    f"You can use <think>...</think> tags to work through your reasoning process before making a decision.\n\n"
+                    f"After your thinking, respond with ONLY the problem type, exactly as it appears in the list. No explanations, no extra words."
                 )
             },
             {
@@ -463,26 +467,33 @@ def classify_problem(content: str, client, model: str) -> str:
             model=model,
             messages=messages,
             temperature=0.1,  # Low temperature for more deterministic output
-            max_tokens=50     # We only need a short response
+            max_tokens=DEFAULT_MAX_TOKENS  # Increased token limit for reasoning LLMs
         )
         
+        # Extract final response and thinking content
+        raw_response = response.choices[0].message.content
+        final_response, thinking = extract_thinking(raw_response)
+        
         # Clean and normalize the response
-        raw_response = response.choices[0].message.content.strip().lower()
+        final_response = final_response.strip().lower()
+        
+        logger.debug(f"Problem classification - raw response: '{raw_response}'")
+        logger.debug(f"Problem classification - final response after removing thinking: '{final_response}'")
         
         # Find the exact match from our list of valid types
         for valid_type in VALID_PROBLEM_TYPES:
-            if valid_type.lower() == raw_response:
+            if valid_type.lower() == final_response:
                 logger.info(f"Classified problem as '{valid_type}' (exact match)")
                 return valid_type
         
         # If no exact match, look for partial matches
         for valid_type in VALID_PROBLEM_TYPES:
-            if valid_type.lower() in raw_response:
-                logger.info(f"Classified problem as '{valid_type}' (partial match from '{raw_response}')")
+            if valid_type.lower() in final_response:
+                logger.info(f"Classified problem as '{valid_type}' (partial match from '{final_response}')")
                 return valid_type
         
         # If still no match, return the general_problem fallback
-        logger.warning(f"Could not match '{raw_response}' to any valid problem type, using 'general_problem'")
+        logger.warning(f"Could not match '{final_response}' to any valid problem type, using 'general_problem'")
         return "general_problem"
     
     except Exception as e:
@@ -534,7 +545,7 @@ def generate_strategy(problem: str, problem_type: str, client, model: str) -> St
             model=model,
             messages=messages,
             temperature=0.7,  # Medium temperature for creative but focused output
-            max_tokens=2000   # Allow for detailed thinking and strategy
+            max_tokens=DEFAULT_MAX_TOKENS  # Increased token limit for reasoning LLMs
         )
         
         response_text = response.choices[0].message.content
@@ -543,6 +554,9 @@ def generate_strategy(problem: str, problem_type: str, client, model: str) -> St
         strategy_text, thinking = extract_thinking(response_text)
         if not strategy_text.strip():
             strategy_text = response_text  # Use full response if extraction failed
+        
+        logger.debug(f"Generated strategy - raw response: '{response_text}'")
+        logger.debug(f"Generated strategy - final text after removing thinking: '{strategy_text}'")
         
         # Create a new strategy object
         db = StrategyDatabase()  # Initialize the database
@@ -710,7 +724,8 @@ def evaluate_strategy_effectiveness(response: str, thinking: Optional[str], sele
                     "content": (
                         "You are evaluating the effectiveness of a problem-solving strategy. "
                         "Analyze the provided response and determine if it shows evidence that the strategy was "
-                        "successfully applied. The answer must be either YES or NO only."
+                        "successfully applied. You can use <think>...</think> tags to work through your reasoning process, "
+                        "but your final answer must be either YES or NO only."
                     )
                 },
                 {
@@ -728,17 +743,24 @@ def evaluate_strategy_effectiveness(response: str, thinking: Optional[str], sele
                 model=model,
                 messages=messages,
                 temperature=0.1,  # Low temperature for more deterministic output
-                max_tokens=10     # We only need YES or NO
+                max_tokens=DEFAULT_MAX_TOKENS  # Increased token limit for reasoning LLMs
             )
             
-            # Get the response
-            result_text = eval_response.choices[0].message.content.strip().upper()
+            # Get the response and extract final answer (remove thinking blocks)
+            result_text = eval_response.choices[0].message.content
+            final_result, eval_thinking = extract_thinking(result_text)
             
-            # Simple pattern matching for YES
-            is_effective = "YES" in result_text
+            # Clean up and normalize the result
+            final_result = final_result.strip().upper()
+            
+            logger.debug(f"Strategy evaluation - raw response: '{result_text}'")
+            logger.debug(f"Strategy evaluation - final result after removing thinking: '{final_result}'")
+            
+            # Check for YES in the final answer (not in thinking blocks)
+            is_effective = "YES" in final_result
             
             results[strategy.strategy_id] = is_effective
-            logger.info(f"Strategy {strategy.strategy_id} evaluation: {result_text} -> {is_effective}")
+            logger.info(f"Strategy {strategy.strategy_id} evaluation: {final_result} -> {is_effective}")
     
     except Exception as e:
         logger.error(f"Error evaluating strategy effectiveness: {str(e)}")
@@ -776,9 +798,8 @@ def refine_strategy(strategy: Strategy, problem: str, response: str, thinking: O
                     "Then provide an improved version of the strategy that would be more effective for "
                     "solving similar problems in the future. Focus on making the strategy more clear, "
                     "more general, and more effective.\n\n"
-                    "Your refined strategy should maintain the same structure and purpose as the original, "
-                    "but with improvements based on the new example. Provide ONLY the refined strategy text, "
-                    "no introduction or explanation."
+                    "You can use <think>...</think> tags to explore your refinement process in detail.\n\n"
+                    "After your thinking, provide ONLY the refined strategy text, no introduction or explanation."
                 )
             },
             {
@@ -797,16 +818,24 @@ def refine_strategy(strategy: Strategy, problem: str, response: str, thinking: O
             model=model,
             messages=messages,
             temperature=0.5,
-            max_tokens=1500
+            max_tokens=DEFAULT_MAX_TOKENS  # Increased token limit for reasoning LLMs
         )
         
-        refined_text = refine_response.choices[0].message.content.strip()
+        response_text = refine_response.choices[0].message.content
+        
+        # Extract refined strategy and thinking
+        refined_text, refinement_thinking = extract_thinking(response_text)
+        if not refined_text.strip():
+            refined_text = response_text  # Use full response if extraction failed
+        
+        logger.debug(f"Strategy refinement - raw response: '{response_text}'")
+        logger.debug(f"Strategy refinement - final text after removing thinking: '{refined_text}'")
         
         # Create a copy of the strategy with the refined text
         refined_strategy = Strategy(
             strategy_id=strategy.strategy_id,
             problem_type=strategy.problem_type,
-            strategy_text=refined_text,
+            strategy_text=refined_text.strip(),
             examples=strategy.examples + [problem],
             success_count=strategy.success_count,
             total_attempts=strategy.total_attempts,
@@ -818,9 +847,9 @@ def refine_strategy(strategy: Strategy, problem: str, response: str, thinking: O
             reasoning_examples=strategy.reasoning_examples.copy()
         )
         
-        # Add the thinking as a reasoning example if available
-        if thinking:
-            refined_strategy.add_reasoning_example(thinking)
+        # Add the refinement thinking if available
+        if refinement_thinking:
+            refined_strategy.add_reasoning_example(refinement_thinking)
         
         return refined_strategy
     
@@ -960,6 +989,12 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         if request_config:
             request_params = {k: v for k, v in request_config.items() if k != 'spl_inference_only'}
         
+        # Ensure max_tokens is set to at least 4096 for reasoning LLMs
+        if 'max_tokens' not in request_params:
+            request_params['max_tokens'] = DEFAULT_MAX_TOKENS
+        elif request_params['max_tokens'] < DEFAULT_MAX_TOKENS:
+            request_params['max_tokens'] = DEFAULT_MAX_TOKENS
+        
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -974,6 +1009,11 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         
         # Extract final response and thinking content
         final_response, thinking = extract_thinking(response_text)
+        
+        logger.debug(f"Main response - raw: '{response_text}'")
+        if thinking:
+            logger.debug(f"Main response - thinking extracted: '{thinking}'")
+            logger.debug(f"Main response - final answer after removing thinking: '{final_response}'")
         
         # Only perform learning operations if not in inference-only mode
         if not inference_only:
@@ -1033,6 +1073,7 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": initial_query}
-            ]
+            ],
+            max_tokens=DEFAULT_MAX_TOKENS  # Ensure fallback also uses sufficient tokens
         )
         return response.choices[0].message.content, response.usage.completion_tokens
