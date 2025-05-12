@@ -188,7 +188,23 @@ class StrategyDatabase:
                 with open(self.db_path, 'r') as f:
                     data = json.load(f)
                     self.strategies = [Strategy.from_dict(s) for s in data]
+                    
+                    # Update last_strategy_id based on loaded strategies
+                    for strategy in self.strategies:
+                        # Extract the numeric part from strategy_id (e.g., "strategy_42" -> 42)
+                        if strategy.strategy_id.startswith("strategy_"):
+                            try:
+                                strategy_num = int(strategy.strategy_id.split("_")[1])
+                                self.metrics["last_strategy_id"] = max(
+                                    self.metrics["last_strategy_id"], 
+                                    strategy_num
+                                )
+                            except ValueError:
+                                # Skip if the ID isn't in the expected format
+                                pass
+                            
                 logger.info(f"Loaded {len(self.strategies)} strategies from {self.db_path}")
+                logger.info(f"Last strategy ID is {self.metrics['last_strategy_id']}")
             except Exception as e:
                 logger.error(f"Error loading strategies: {str(e)}")
                 self.strategies = []
@@ -197,8 +213,18 @@ class StrategyDatabase:
         if os.path.exists(self.metrics_path):
             try:
                 with open(self.metrics_path, 'r') as f:
-                    self.metrics = json.load(f)
+                    metrics = json.load(f)
+                    
+                    # Update metrics but keep the last_strategy_id we calculated from the strategies
+                    last_id = self.metrics["last_strategy_id"]
+                    self.metrics.update(metrics)
+                    
+                    # Use the larger of the two values to be safe
+                    if "last_strategy_id" in metrics:
+                        self.metrics["last_strategy_id"] = max(last_id, metrics["last_strategy_id"])
+                    
                 logger.info(f"Loaded metrics from {self.metrics_path}")
+                logger.info(f"Last strategy ID is {self.metrics['last_strategy_id']}")
             except Exception as e:
                 logger.error(f"Error loading metrics: {str(e)}")
     
@@ -222,6 +248,16 @@ class StrategyDatabase:
     
     def add_strategy(self, strategy: Strategy) -> None:
         """Add a new strategy to the database."""
+        # Extract the ID number from the strategy_id
+        if strategy.strategy_id.startswith("strategy_"):
+            try:
+                strategy_num = int(strategy.strategy_id.split("_")[1])
+                # Update last_strategy_id if this is a higher number
+                self.metrics["last_strategy_id"] = max(self.metrics["last_strategy_id"], strategy_num)
+            except ValueError:
+                # If the format is unexpected, don't update the counter
+                pass
+                
         # First, check if this is a new problem type that we don't have any strategies for
         exists = any(s.problem_type == strategy.problem_type for s in self.strategies)
         
@@ -303,7 +339,9 @@ class StrategyDatabase:
     def get_next_strategy_id(self) -> str:
         """Generate a unique ID for a new strategy."""
         self.metrics["last_strategy_id"] += 1
-        return f"strategy_{self.metrics['last_strategy_id']}"
+        new_id = f"strategy_{self.metrics['last_strategy_id']}"
+        logger.info(f"Generated new strategy ID: {new_id}")
+        return new_id
     
     def increment_query_count(self) -> None:
         """Increment the total query count."""
@@ -500,7 +538,7 @@ def classify_problem(content: str, client, model: str) -> str:
         logger.error(f"Error classifying problem: {str(e)}")
         return "general_problem"  # Default fallback
 
-def generate_strategy(problem: str, problem_type: str, client, model: str) -> Strategy:
+def generate_strategy(problem: str, problem_type: str, client, model: str, db: StrategyDatabase) -> Strategy:
     """
     Generate a new problem-solving strategy using the LLM.
     
@@ -509,6 +547,7 @@ def generate_strategy(problem: str, problem_type: str, client, model: str) -> St
         problem_type: The type of problem
         client: LLM client for making API calls
         model: Model identifier
+        db: The strategy database to use for generating IDs
     
     Returns:
         Strategy: A new strategy for solving this type of problem
@@ -558,10 +597,9 @@ def generate_strategy(problem: str, problem_type: str, client, model: str) -> St
         logger.debug(f"Generated strategy - raw response: '{response_text}'")
         logger.debug(f"Generated strategy - final text after removing thinking: '{strategy_text}'")
         
-        # Create a new strategy object
-        db = StrategyDatabase()  # Initialize the database
+        # Create a new strategy object using the provided database for ID generation
         strategy = Strategy(
-            strategy_id=db.get_next_strategy_id(),
+            strategy_id=db.get_next_strategy_id(),  # Use the provided DB instance
             problem_type=problem_type,
             strategy_text=strategy_text.strip(),
             examples=[problem],
@@ -574,9 +612,11 @@ def generate_strategy(problem: str, problem_type: str, client, model: str) -> St
     
     except Exception as e:
         logger.error(f"Error generating strategy: {str(e)}")
-        # Create a minimal fallback strategy
+        # Create a minimal fallback strategy with a unique ID
+        fallback_id = f"fallback_{uuid.uuid4().hex[:8]}"
+        logger.info(f"Using fallback strategy with ID: {fallback_id}")
         return Strategy(
-            strategy_id=f"fallback_{uuid.uuid4().hex[:8]}",
+            strategy_id=fallback_id,
             problem_type=problem_type,
             strategy_text=(
                 f"When solving {problem_type} problems:\n"
@@ -922,10 +962,13 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         
     # Initialize the strategy database
     db = StrategyDatabase()
+    logger.info(f"Current strategy count: {len(db.strategies)}")
+    logger.info(f"Last strategy ID: {db.metrics.get('last_strategy_id', 0)}")
     
     # Only increment query count in learning mode
     if not inference_only:
         db.increment_query_count()
+        db._save()  # Save immediately to ensure counter is persisted
     
     # 1. Classify the problem type
     problem_type = classify_problem(initial_query, client, model)
@@ -948,11 +991,12 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
     # 4. Create a new strategy if needed
     if need_new_strategy and not inference_only:
         logger.info(f"Generating new strategy for {problem_type}")
-        new_strategy = generate_strategy(initial_query, problem_type, client, model)
+        # Pass the db instance to generate_strategy to ensure consistent ID generation
+        new_strategy = generate_strategy(initial_query, problem_type, client, model, db)
         db.add_strategy(new_strategy)
+        logger.info(f"Added new strategy with ID: {new_strategy.strategy_id}")
         # Make sure the new strategy is included in our list
-        if new_strategy not in existing_strategies:
-            existing_strategies.append(new_strategy)
+        existing_strategies.append(new_strategy)
     
     # 5. Select relevant strategies for this problem
     selected_strategies = select_relevant_strategies(initial_query, problem_type, db)
@@ -1058,9 +1102,11 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         else:
             logger.info("Skipping strategy evaluation and refinement in inference-only mode")
         
-        # Log execution time
+        # Log execution time and status after run
         execution_time = time.time() - start_time
         logger.info(f"SPL plugin execution completed in {execution_time:.2f} seconds")
+        logger.info(f"Final strategy count: {len(db.strategies)}")
+        logger.info(f"Final last strategy ID: {db.metrics.get('last_strategy_id', 0)}")
         
         # Return the original response to preserve the thinking tag format
         return response_text, completion_tokens
