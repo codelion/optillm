@@ -169,3 +169,4 @@ cython_debug/
 .vscode/
 
 scripts/results/
+*/data/
