@@ -881,7 +881,7 @@ def select_relevant_strategies(query: str, problem_type: str, db: StrategyDataba
     # First, get strategies specifically for this problem type
     type_specific = db.get_strategies_for_problem(problem_type)
     
-    # If we have more than we need, sort by success rate and recency
+    # If we have more type-specific strategies than needed, sort and select the best ones
     if len(type_specific) > max_strategies:
         # Score each strategy based on success rate and recency
         scored_strategies = []
@@ -901,22 +901,37 @@ def select_relevant_strategies(query: str, problem_type: str, db: StrategyDataba
         scored_strategies.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored_strategies[:max_strategies]]
     
-    # If we don't have enough type-specific strategies, also get similar strategies
+    # If we don't have enough type-specific strategies, get similar strategies from other types
     if len(type_specific) < max_strategies:
-        # Get similar strategies, excluding those already in type_specific
+        # Calculate how many more strategies we need
+        needed = max_strategies - len(type_specific)
+        
+        # Get similar strategies from other problem types
         type_specific_ids = {s.strategy_id for s in type_specific}
         similar_strategies = []
         
         for s, score in db.get_similar_strategies(query, n=max_strategies*2):  # Get more than needed to filter
+            # Only include strategies from other problem types and not already selected
             if s.strategy_id not in type_specific_ids and s.problem_type != problem_type:
                 similar_strategies.append(s)
-                if len(similar_strategies) >= (max_strategies - len(type_specific)):
+                if len(similar_strategies) >= needed:
                     break
         
-        # Return a combination of type-specific and similar strategies
-        combined = type_specific + similar_strategies
-        return combined[:max_strategies]
+        # Combine type-specific strategies with similar strategies
+        combined = type_specific + similar_strategies[:needed]  # Only add as many as needed
+        
+        # Log which strategies we're using
+        for i, strategy in enumerate(combined, 1):
+            problem_type_str = "(same type)" if strategy.problem_type == problem_type else f"(from {strategy.problem_type})"
+            logger.info(f"Selected strategy {i}: {strategy.strategy_id} {problem_type_str} (success rate: {strategy.success_rate:.2f})")
+            
+        return combined
     
+    # If we have exactly the right number, just return them
+    # Log which strategies we're using
+    for i, strategy in enumerate(type_specific, 1):
+        logger.info(f"Selected strategy {i}: {strategy.strategy_id} (same type) (success rate: {strategy.success_rate:.2f})")
+        
     return type_specific[:max_strategies]
 
 def evaluate_strategy_effectiveness(response: str, thinking: Optional[str], selected_strategies: List[Strategy], client, model: str) -> Dict[str, bool]:
