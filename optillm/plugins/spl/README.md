@@ -42,7 +42,7 @@ client.chat.completions.create(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
     ],
-    extra_body= {"spl_inference_only": False},
+    extra_body= {"spl_inference_only": True},
 )
 ```
 
