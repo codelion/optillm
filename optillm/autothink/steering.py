@@ -539,23 +539,60 @@ class SteeringHook:
         # Log token updates periodically
         if random.random() < 0.01:
             logger.debug(f"STEERING: Token history updated, now has {len(self.token_history)} tokens")
+            
+    def update_context(self, new_tokens: str):
+        """
+        Update the context buffer with new tokens.
+        
+        Args:
+            new_tokens: New tokens to add to the context.
+        """
+        # Both methods - text-based and token-based
+        if self.tokenizer is not None:
+            # Token-based approach (similar to guided mode)
+            # Tokenize the new text
+            token_ids = self.tokenizer.encode(new_tokens, add_special_tokens=False)
+            
+            if token_ids:  # Only proceed if we got tokens
+                # Add to token history
+                self.token_history.extend(token_ids)
+                
+                # Trim history if needed
+                if len(self.token_history) > self.max_history:
+                    self.token_history = self.token_history[-self.max_history:]
+                
+                # Log token updates periodically
+                if random.random() < 0.01:
+                    logger.debug(f"STEERING: Token history updated, now has {len(self.token_history)} tokens")
+        
+        # Text-based approach (always update)
+        # Update context buffer
+        self.context_buffer += new_tokens
+        
+        # Keep only the last 500 characters
+        if len(self.context_buffer) > 500:
+            self.context_buffer = self.context_buffer[-500:]
+            logger.debug(f"STEERING: Context buffer trimmed to {len(self.context_buffer)} chars")
     
     def try_match(self):
         """
         Try to match the current context with a steering vector.
         Only allows one pattern to be selected for the entire generation.
+        Tries both token-based and text-based matching approaches.
         """
         # If we already have an active pattern, don't try to match again
         if self.active_pattern:
             return False
         
-        # Use token-based matching or text-based matching as appropriate
+        # Try both token-based and text-based matching
         match_result = False
+        
+        # First try token-based matching if available
         if self.tokenizer is not None and hasattr(self.manager, 'tokenized_contexts') and self.manager.tokenized_contexts:
-            # Token-based matching (similar to guided mode)
             match_result = self._try_token_match()
-        else:
-            # Text-based matching as fallback
+        
+        # If token matching fails, try text-based matching
+        if not match_result:
             match_result = self._try_text_match()
             
         # Set generation started flag AFTER trying to match
@@ -677,11 +714,55 @@ class SteeringHook:
                 logger.info(f"STEERING: Pivot token: '{pivot_token}'")
                 
                 return True
+            
+        # If no match, try fuzzy matching with 70% similarity threshold
+        if len(self.token_history) >= 8 and not self.match_found:
+            logger.debug("STEERING: No exact match found, trying fuzzy matching")
+            for tokenized_context, vector in self.manager.tokenized_contexts.items():
+                token_list = list(tokenized_context)
+                token_len = len(token_list)
+                
+                if token_len >= 8:  # Only try fuzzy matching for contexts with enough tokens
+                    match_len = min(len(self.token_history), token_len)
+                    last_tokens = self.token_history[-match_len:]
+                    context_tokens = token_list[-match_len:]
+                    
+                    # Count matching tokens
+                    matches = sum(1 for a, b in zip(last_tokens, context_tokens) if a == b)
+                    similarity = matches / match_len
+                    
+                    if similarity >= 0.7:  # 70% similarity threshold
+                        if match_len > best_match['length']:
+                            best_match = {
+                                'length': match_len,
+                                'vector': vector,
+                                'is_partial': True,
+                                'match_len': match_len,
+                                'token_len': token_len,
+                                'similarity': similarity
+                            }
+                            
+            # Apply fuzzy match if found
+            if best_match['vector'] is not None:
+                self.match_found = True
+                self.current_vector = best_match['vector']
+                pattern = best_match['vector'].get("reasoning_pattern", "unknown")
+                pivot_token = best_match['vector'].get("pivot_token", "")
+                similarity = best_match.get('similarity', 0.0)
+                
+                logger.info(f"STEERING: Found fuzzy match ({similarity:.2f} similarity) for {pattern} pattern")
+                logger.info(f"STEERING: Pivot token: '{pivot_token}'")
+                
+                return True
         
         return False
     
     def _try_text_match(self):
         """Try to match using text-based context (original approach)."""
+        # Skip if context buffer is too short
+        if len(self.context_buffer) < 10:  # Require at least 10 chars for matching
+            return False
+            
         # Get the last 100 characters as the match key
         match_key = self.context_buffer[-100:] if len(self.context_buffer) >= 100 else self.context_buffer
         
@@ -697,22 +778,62 @@ class SteeringHook:
             self.match_found = True
             self.current_vector = vector
             pattern = vector.get("reasoning_pattern", "unknown")
-            logger.info(f"STEERING: Found text match for {pattern} reasoning pattern: '{vector.get('pivot_token', '')}'")
+            pivot_token = vector.get("pivot_token", "")
+            logger.info(f"STEERING: Found text match for {pattern} reasoning pattern")
+            logger.info(f"STEERING: Pivot token: '{pivot_token}'")
             return True
+            
+        # Attempt fuzzy text matching as a fallback
+        if len(match_key) >= 20:  # Only try for reasonably sized contexts
+            # Try each steering vector for approximate match
+            best_match = None
+            best_similarity = 0.0
+            
+            for vector in self.manager.steering_vectors:
+                vector_context = vector.get("pivot_context", "")
+                if not vector_context or len(vector_context) < 20:
+                    continue
+                    
+                # Get the end of the vector context (last 100 chars)
+                vector_key = vector_context[-100:] if len(vector_context) >= 100 else vector_context
+                
+                # Calculate simple character-level similarity
+                min_length = min(len(match_key), len(vector_key))
+                matching_chars = sum(1 for a, b in zip(match_key, vector_key) if a == b)
+                similarity = matching_chars / min_length if min_length > 0 else 0
+                
+                # Keep track of best match above threshold
+                if similarity >= 0.7 and similarity > best_similarity:  # 70% similarity threshold
+                    best_similarity = similarity
+                    best_match = vector
+            
+            # Use the best match if found
+            if best_match is not None:
+                self.match_found = True
+                self.current_vector = best_match
+                pattern = best_match.get("reasoning_pattern", "unknown")
+                pivot_token = best_match.get("pivot_token", "")
+                logger.info(f"STEERING: Found fuzzy text match ({best_similarity:.2f} similarity) for {pattern} pattern")
+                logger.info(f"STEERING: Pivot token: '{pivot_token}'")
+                return True
         
         return False
     
     def reset(self):
-        """Reset the hook state."""
+        """Reset the hook state for a new generation."""
         self.match_found = False
         self.current_vector = None
+        
+        # Clear both text and token histories
         self.context_buffer = ""
         self.token_history = []
-        self.last_pattern = None
         
-        # Reset pattern tracking
+        # Reset pattern and state tracking
+        self.last_pattern = None
         self.active_pattern = None
         self.generation_started = False
+        
+        logger.info("STEERING: Hook state reset for new generation")
 
 def install_steering_hooks(model, manager: SteeringVectorManager, tokenizer=None) -> List[Tuple]:
     """

@@ -245,11 +245,16 @@ class AutoThinkProcessor:
                 return_tensors="pt"
             ).to(self.model.device)
             
-            # Update token history in steering hooks
+            # Reset and update token history in steering hooks
             if self.steering_hooks:
                 token_ids = tokens[0].tolist()
+                prompt_text = self.tokenizer.decode(token_ids)
                 for hook, _ in self.steering_hooks:
+                    # Reset the hook state for a new generation
+                    hook.reset()
+                    # Update both token history and text context buffer
                     hook.update_token_history(token_ids)
+                    hook.update_context(prompt_text)
                     # Try to match with a steering vector
                     hook.try_match()
             
@@ -343,13 +348,19 @@ class AutoThinkProcessor:
                 # Update steering hooks with new token
                 if self.steering_hooks:
                     for hook, _ in self.steering_hooks:
-                        # Update token history with the new token
+                        # Update both token history and text context
                         hook.update_token_history([next_token])
+                        hook.update_context(next_str)
                         # Check for matches on EVERY token
                         hook.try_match()
                 
                 tokens = torch.tensor([[next_token]]).to(tokens.device)
             
+            # Reset and clean up steering hooks
+            if self.steering_hooks:
+                for hook, _ in self.steering_hooks:
+                    hook.reset()
+                    
             # Clean up steering hooks
             self._cleanup_steering()
             
