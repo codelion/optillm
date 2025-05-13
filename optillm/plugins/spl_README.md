@@ -42,32 +42,21 @@ client.chat.completions.create(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
     ],
-    spl_inference_only=True
+    extra_body= {"spl_inference_only": False},
 )
-```
-
-When using the OptiLLM API directly:
-
-```
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "spl-gpt-4o",
-    "messages": [
-      {"role": "system", "content": "You are a helpful assistant."},
-      {"role": "user", "content": "Solve this equation: 3x + 5 = 14"}
-    ],
-    "spl_inference_only": true
-  }'
 ```
 
 ## How It Works
 
 1. **Problem Classification**: The plugin analyzes each query to determine its problem type
 2. **Strategy Selection**: It selects relevant strategies from its database based on the problem type and content
-3. **System Prompt Augmentation**: Selected strategies are added to the system prompt
+3. **System Prompt Augmentation**: Selected strategies (up to MAX_STRATEGIES_FOR_INFERENCE) are added to the system prompt
 4. **Effectiveness Evaluation**: After generating a response, the system evaluates how well each strategy worked
 5. **Strategy Refinement**: Periodically, strategies are refined based on their usage and effectiveness
+
+The plugin maintains two separate limits:
+- **Storage Limit** (MAX_STRATEGIES_PER_TYPE): Controls how many strategies can be stored in the database per problem type
+- **Inference Limit** (MAX_STRATEGIES_FOR_INFERENCE): Controls how many strategies are used during inference for system prompt augmentation
 
 ## Data Storage
 

@@ -47,8 +47,9 @@ MAINTENANCE_INTERVAL = 40
 STRATEGY_CREATION_THRESHOLD = 0.7  # Higher threshold to avoid creating similar strategies
 STRATEGY_MERGING_THRESHOLD = 0.6   # Lower threshold to merge more similar strategies
 
-# Maximum strategies per problem type
-MAX_STRATEGIES_PER_TYPE = 10
+# Limits for strategy management
+MAX_STRATEGIES_PER_TYPE = 10  # Maximum strategies to store in DB per problem type
+MAX_STRATEGIES_FOR_INFERENCE = 3  # Maximum strategies to use during inference
 
 # Ensure data directory exists
 os.makedirs(STRATEGY_DB_DIR, exist_ok=True)
@@ -563,7 +564,8 @@ class StrategyDatabase:
     
     def limit_strategies_per_type(self, max_per_type: int = MAX_STRATEGIES_PER_TYPE) -> int:
         """
-        Limit the number of strategies per problem type to the specified maximum.
+        Limit the number of strategies per problem type to the specified maximum in the database.
+        This controls storage limit, not the number of strategies used during inference.
         Keeps the best performing strategies based on success rate and recency.
         
         Args:
@@ -614,7 +616,7 @@ class StrategyDatabase:
         if removed_count > 0:
             self.vectors = None  # Invalidate vector cache
             self._save()
-            logger.info(f"Removed {removed_count} excess strategies to maintain max {max_per_type} per type")
+            logger.info(f"Removed {removed_count} excess strategies to maintain max {max_per_type} per type in database (storage limit)")
         
         return removed_count
 
@@ -827,9 +829,9 @@ def should_create_new_strategy(problem_type: str, query: str, existing_strategie
     if not existing_strategies:
         return True, None
     
-    # If we already have enough strategies for this problem type, check if the query
-    # is similar to any existing strategy
-    if len(existing_strategies) >= MAX_STRATEGIES_PER_TYPE:
+    # If we already have enough strategies for this problem type (storage limit reached),
+    # check if the query is similar to any existing strategy
+    if len(existing_strategies) >= MAX_STRATEGIES_PER_TYPE:  # Using storage limit here, not inference limit
         # First, check similarity based on strategy text
         similar_strategy_result = db.find_similar_strategy(problem_type, query)
         if similar_strategy_result:
@@ -865,9 +867,10 @@ def should_create_new_strategy(problem_type: str, query: str, existing_strategie
     logger.info(f"No similar strategy found for {problem_type}, creating a new one")
     return True, None
 
-def select_relevant_strategies(query: str, problem_type: str, db: StrategyDatabase, max_strategies: int = MAX_STRATEGIES_PER_TYPE) -> List[Strategy]:
+def select_relevant_strategies(query: str, problem_type: str, db: StrategyDatabase, max_strategies: int = MAX_STRATEGIES_FOR_INFERENCE) -> List[Strategy]:
     """
-    Select the most relevant strategies for a given problem.
+    Select the most relevant strategies for a given problem to be used during inference.
+    This controls how many strategies are included in the system prompt augmentation.
     
     Args:
         query: The problem/query text
@@ -923,14 +926,14 @@ def select_relevant_strategies(query: str, problem_type: str, db: StrategyDataba
         # Log which strategies we're using
         for i, strategy in enumerate(combined, 1):
             problem_type_str = "(same type)" if strategy.problem_type == problem_type else f"(from {strategy.problem_type})"
-            logger.info(f"Selected strategy {i}: {strategy.strategy_id} {problem_type_str} (success rate: {strategy.success_rate:.2f})")
+            logger.info(f"Selected strategy {i}/{max_strategies} for inference: {strategy.strategy_id} {problem_type_str} (success rate: {strategy.success_rate:.2f})")
             
         return combined
     
     # If we have exactly the right number, just return them
     # Log which strategies we're using
     for i, strategy in enumerate(type_specific, 1):
-        logger.info(f"Selected strategy {i}: {strategy.strategy_id} (same type) (success rate: {strategy.success_rate:.2f})")
+        logger.info(f"Selected strategy {i}/{max_strategies} for inference: {strategy.strategy_id} (same type) (success rate: {strategy.success_rate:.2f})")
         
     return type_specific[:max_strategies]
 
@@ -1208,7 +1211,7 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         merged_count = db.merge_similar_strategies(similarity_threshold=STRATEGY_MERGING_THRESHOLD)
         logger.info(f"Merged {merged_count} similar strategies")
         
-        # 4.2 Limit strategies per problem type
+        # 4.2 Limit strategies per problem type (applies storage limit, not inference limit)
         limited_count = db.limit_strategies_per_type(max_per_type=MAX_STRATEGIES_PER_TYPE)
         
         # 4.3 Prune low-performing strategies
@@ -1218,12 +1221,12 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
     # 5. Re-select strategies (in case the database changed in step 4)
     existing_strategies = db.get_strategies_for_problem(problem_type)
     
-    # 6. Select relevant strategies for this problem
-    selected_strategies = select_relevant_strategies(initial_query, problem_type, db)
+    # 6. Select relevant strategies for this problem (using inference limit)
+    selected_strategies = select_relevant_strategies(initial_query, problem_type, db, MAX_STRATEGIES_FOR_INFERENCE)
     
     # Log the selected strategies
     for i, strategy in enumerate(selected_strategies, 1):
-        logger.info(f"Selected strategy {i}: {strategy.strategy_id} (success rate: {strategy.success_rate:.2f})")
+        logger.info(f"Selected strategy {i}/{MAX_STRATEGIES_FOR_INFERENCE} for inference: {strategy.strategy_id} (success rate: {strategy.success_rate:.2f})")
     
     # 7. If no strategies selected, use fallback
     if not selected_strategies:
@@ -1244,7 +1247,7 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
     
     # 8. Augment the system prompt with the selected strategies
     augmented_prompt = augment_system_prompt(system_prompt, selected_strategies)
-    logger.info(f"Augmented system prompt with {len(selected_strategies)} strategies")
+    logger.info(f"Augmented system prompt with {len(selected_strategies)} strategies (inference limit: {MAX_STRATEGIES_FOR_INFERENCE})")
     
     # 9. Forward the request to the LLM with the augmented prompt
     try:
