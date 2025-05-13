@@ -41,14 +41,14 @@ STRATEGY_METRICS_PATH = os.path.join(STRATEGY_DB_DIR, 'metrics.json')
 DEFAULT_MAX_TOKENS = 4096
 
 # How often to perform maintenance operations (merge, prune)
-MAINTENANCE_INTERVAL = 10  # Every 10 queries instead of 100
+MAINTENANCE_INTERVAL = 40
 
 # Similarity thresholds
 STRATEGY_CREATION_THRESHOLD = 0.7  # Higher threshold to avoid creating similar strategies
 STRATEGY_MERGING_THRESHOLD = 0.6   # Lower threshold to merge more similar strategies
 
 # Maximum strategies per problem type
-MAX_STRATEGIES_PER_TYPE = 2  # Reduced from implicit 3
+MAX_STRATEGIES_PER_TYPE = 10
 
 # Ensure data directory exists
 os.makedirs(STRATEGY_DB_DIR, exist_ok=True)
@@ -843,6 +843,15 @@ def should_create_new_strategy(problem_type: str, query: str, existing_strategie
             similar_strategy, similarity = similar_examples_result
             logger.info(f"Found strategy {similar_strategy.strategy_id} with similar examples, similarity {similarity:.2f}")
             return False, similar_strategy
+            
+        # If we're at or above max strategies and no similar strategy was found,
+        # use the strategy with the lowest success rate for this new example
+        if existing_strategies:
+            # Sort by success rate (ascending)
+            existing_strategies.sort(key=lambda s: s.success_rate)
+            worst_strategy = existing_strategies[0]
+            logger.info(f"At maximum strategies for {problem_type}, updating lowest performing strategy {worst_strategy.strategy_id}")
+            return False, worst_strategy
     
     # If we have fewer than the maximum allowed strategies for this type,
     # check strategy similarity before creating a new one

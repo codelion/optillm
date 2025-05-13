@@ -40,7 +40,7 @@ def load_optillm_bench() -> datasets.Dataset:
     """Load the OptiLLM Bench dataset."""
     try:
         dataset = load_dataset("codelion/optillmbench")
-        return dataset["test"]  # We use the test split for evaluation
+        return dataset["train"]  # We use the test split for evaluation
     except Exception as e:
         logger.error(f"Error loading dataset: {e}")
         raise
@@ -182,7 +182,7 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
-                extra_body= {"spl_inference_only": True},
+                extra_body= {"spl_inference_only": False},
             )
             
             # Calculate time taken
