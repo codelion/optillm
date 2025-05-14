@@ -72,7 +72,39 @@ def remove_thinking_blocks(text: str) -> str:
     # If no thinking blocks, return original text
     return text
 
-def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
+def extract_choice_index_from_question(question: str, answer: str) -> int:
+    """
+    Extract the index of the correct answer from a multiple-choice question.
+    
+    Args:
+        question: The question text containing choices
+        answer: The correct answer (just the text, no index)
+    
+    Returns:
+        int: The index of the correct answer, or -1 if not found
+    """
+    # Look for a pattern like "N. answer" in the question
+    answer_clean = answer.strip().lower()
+    
+    # Check for "Choices:" marker in the question
+    if "choices:" in question.lower():
+        # Split the question by lines after "Choices:"
+        parts = question.lower().split("choices:")[1].strip().split("\n")
+        
+        # Process each choice
+        for choice in parts:
+            choice = choice.strip()
+            if not choice:
+                continue
+                
+            # Try to extract the index and choice text
+            match = re.match(r'\s*([0-9]+)\s*\.\s*(.*)', choice)
+            if match and match.group(2).strip().lower() == answer_clean:
+                return int(match.group(1))
+    
+    return -1
+
+def evaluate_response(response: str, ground_truth: str, category: str, question: str = None) -> bool:
     """
     Evaluate if the response matches the ground truth based on category.
     
@@ -80,6 +112,7 @@ def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
         response: Model's response
         ground_truth: Correct answer
         category: Problem category (gsm8k, mmlu_math, boolq, aqua_rat)
+        question: Original question text, needed for MMLU evaluation
     
     Returns:
         bool: Whether the response is correct
@@ -100,8 +133,36 @@ def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
             
         # Compare with small tolerance for floating point
         return abs(response_num - ground_truth_num) < 1e-6
+    elif category == "mmlu_math":
+        # Special handling for MMLU-math multiple choice questions
+        response_clean = response.strip().lower()
+        ground_truth_clean = ground_truth.strip().lower()
+        
+        # Case 1: Exact match of answer
+        if response_clean == ground_truth_clean:
+            return True
+            
+        # Case 2: Check if response is just the index number
+        if question:
+            # Find the index of the correct answer in the question
+            correct_index = extract_choice_index_from_question(question, ground_truth)
+            if correct_index >= 0:
+                # Check if response is just the index
+                if response_clean == str(correct_index):
+                    return True
+                    
+                # Case 3: Check if response is "index. answer"
+                index_pattern = fr"{correct_index}\s*\.\s*{re.escape(ground_truth_clean)}"
+                if re.match(index_pattern, response_clean):
+                    return True
+                    
+                # Case 4: Check if response contains the answer with index somewhere
+                if f"{correct_index}." in response_clean and ground_truth_clean in response_clean:
+                    return True
+        
+        return False
     else:
-        # For mmlu_math, boolq, and aqua_rat, exact match is required
+        # For boolq and aqua_rat, exact match is required
         # Clean up both strings for comparison
         response_clean = response.strip().lower()
         ground_truth_clean = ground_truth.strip().lower()
@@ -201,7 +262,8 @@ def evaluate_model(
             is_correct = evaluate_response(
                 processed_response,
                 example['answer'],
-                example['category']
+                example['category'],
+                example['question']  # Pass the question for MMLU evaluation
             )
             
             # Update metrics
