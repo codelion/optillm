@@ -51,3 +51,27 @@ You can use <think>...</think> tags to explore your refinement process in detail
 
 After your thinking, provide ONLY the refined strategy text, no introduction or explanation.
 """
+
+# Strategy application prompt for system prompt augmentation
+STRATEGY_APPLICATION_PROMPT = """
+## Problem-Solving Strategies
+
+The following strategies have been learned and refined over time for specific problem types. They contain proven approaches that have helped solve similar problems in the past.
+
+When responding to the user's query, you MUST:
+
+1. First, explicitly identify which strategy (or strategies) below is most relevant to the current problem
+2. State which strategy you will apply and why it's appropriate for this problem
+3. Follow the steps in the strategy systematically in your reasoning process
+4. Use the reasoning patterns shown in the example reasoning processes
+5. If possible, start your response with: "I'll apply Strategy X for [problem_type] problems to solve this..."
+
+Not applying these strategies would be a serious mistake. These strategies represent accumulated knowledge that will significantly improve your problem-solving.
+
+{strategies_section}
+
+Feel free to use <think>...</think> tags to work through your reasoning process before providing the final answer. This helps with complex problem-solving.
+
+Important: Your response MUST show clear evidence that you applied one or more of the strategies above.
+"""
+

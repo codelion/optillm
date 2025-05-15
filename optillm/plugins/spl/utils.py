@@ -7,6 +7,8 @@ import uuid
 import logging
 from typing import Tuple, Optional, List, Dict, Any
 
+from optillm.plugins.spl.prompts import STRATEGY_APPLICATION_PROMPT
+
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ def extract_thinking(response: str) -> Tuple[str, Optional[str]]:
 def augment_system_prompt(system_prompt: str, strategies: List[Any]) -> str:
     """
     Augment the system prompt with selected strategies and reasoning examples.
+    Uses a directive prompt to explicitly instruct the LLM to apply the strategies.
     
     Args:
         system_prompt: The original system prompt
@@ -52,26 +55,23 @@ def augment_system_prompt(system_prompt: str, strategies: List[Any]) -> str:
     if not strategies:
         return system_prompt
     
-    # Create the strategy section
-    strategy_section = "\n\n## Problem-Solving Strategies\n\n"
+    # Build the individual strategy sections
+    strategies_section = ""
     
     for i, strategy in enumerate(strategies, 1):
-        strategy_section += f"### Strategy {i} for {strategy.problem_type} problems\n{strategy.strategy_text}\n\n"
+        strategies_section += f"### Strategy {i} for {strategy.problem_type} problems\n{strategy.strategy_text}\n\n"
         
         # Add a sample reasoning example if available
         if strategy.reasoning_examples:
             # Use the most recent reasoning example (last one)
             reasoning = strategy.reasoning_examples[-1]
             if reasoning:
-                strategy_section += f"#### Example reasoning process:\n<think>\n{reasoning}\n</think>\n\n"
+                strategies_section += f"#### Example reasoning process:\n<think>\n{reasoning}\n</think>\n\n"
     
-    # Add encouragement to use thinking tags
-    strategy_section += (
-        "Feel free to use <think>...</think> tags to work through your reasoning process "
-        "before providing the final answer. This helps with complex problem-solving.\n\n"
-    )
+    # Format the application prompt with the strategies section
+    strategy_prompt = STRATEGY_APPLICATION_PROMPT.format(strategies_section=strategies_section)
     
-    # Append the strategy section to the system prompt
-    augmented_prompt = system_prompt + strategy_section
+    # Append the formatted strategy section to the system prompt
+    augmented_prompt = system_prompt + "\n\n" + strategy_prompt
     
     return augmented_prompt
