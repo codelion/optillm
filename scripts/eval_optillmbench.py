@@ -89,16 +89,30 @@ def extract_choice_index_from_question(question: str, answer: str) -> int:
     # Check for "Choices:" marker in the question
     if "choices:" in question.lower():
         # Split the question by lines after "Choices:"
-        parts = question.lower().split("choices:")[1].strip().split("\n")
+        choices_section = question.lower().split("choices:")[1].strip()
         
-        # Process each choice
-        for choice in parts:
+        # Try different approaches to extract choices
+        # 1. Try splitting by newlines
+        choices = choices_section.split("\n")
+        
+        # If there's only one line, try splitting by numbers with periods
+        if len(choices) == 1:
+            # Look for patterns like "0. choice1 1. choice2"
+            # We'll use regex to extract all patterns that look like "N. text"
+            all_choices = re.findall(r'(\d+)\s*\.\s*([^\d\.]+?)(?=\s*\d+\s*\.|$)', choices_section)
+            
+            for idx, choice_text in all_choices:
+                if choice_text.strip().lower() == answer_clean:
+                    return int(idx)
+        
+        # Process each choice from the newline splitting approach
+        for choice in choices:
             choice = choice.strip()
             if not choice:
                 continue
                 
             # Try to extract the index and choice text
-            match = re.match(r'\s*([0-9]+)\s*\.\s*(.*)', choice)
+            match = re.match(r'\s*(\d+)\s*\.\s*(.*)', choice)
             if match and match.group(2).strip().lower() == answer_clean:
                 return int(match.group(1))
     
@@ -147,13 +161,15 @@ def evaluate_response(response: str, ground_truth: str, category: str, question:
             # Find the index of the correct answer in the question
             correct_index = extract_choice_index_from_question(question, ground_truth)
             if correct_index >= 0:
-                # Check if response is just the index
-                if response_clean == str(correct_index):
+                # Handle case where response is just "2" or similar, including with whitespace and newlines
+                # Extract all numbers from the response
+                all_numbers = re.findall(r'\d+', response_clean)
+                if len(all_numbers) == 1 and int(all_numbers[0]) == correct_index:
                     return True
                     
                 # Case 3: Check if response is "index. answer"
                 index_pattern = fr"{correct_index}\s*\.\s*{re.escape(ground_truth_clean)}"
-                if re.match(index_pattern, response_clean):
+                if re.search(index_pattern, response_clean):
                     return True
                     
                 # Case 4: Check if response contains the answer with index somewhere
