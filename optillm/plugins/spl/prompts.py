@@ -54,20 +54,16 @@ After your thinking, provide ONLY the refined strategy text, no introduction or 
 
 # Strategy application prompt for system prompt augmentation
 STRATEGY_APPLICATION_PROMPT = """
-## Problem-Solving Strategies
+Problem-Solving Strategies
 
-The following strategies have been developed for different problem types and may help you solve the user's query effectively.
+The following strategies can help solve the user's query effectively. Use them as guidance when formulating your response:
 
-These strategies represent approaches that have worked well for similar problems in the past. Consider using them as guidance when formulating your response:
-
-- Review the strategies below to find approaches relevant to the current problem
-- Apply the steps and techniques from these strategies in your solution process
-- Use the reasoning patterns in the example processes as inspiration
-
-These strategies can enhance your problem-solving capabilities for specific types of problems.
+- Find the strategies most relevant to the current problem
+- Apply the techniques from these strategies in your solution
+- Use the reasoning examples as a guide for your approach
 
 {strategies_section}
 
-Feel free to use <think>...</think> tags to work through your reasoning process before providing the final answer. This helps with complex problem-solving.
+You can use <think>...</think> tags to work through your reasoning process before providing the final answer.
 """
 

@@ -43,7 +43,7 @@ def extract_thinking(response: str) -> Tuple[str, Optional[str]]:
 def augment_system_prompt(system_prompt: str, strategies: List[Any]) -> str:
     """
     Augment the system prompt with selected strategies and reasoning examples.
-    Uses a directive prompt to explicitly instruct the LLM to apply the strategies.
+    Instructs the LLM to apply the strategies in its solution.
     
     Args:
         system_prompt: The original system prompt
@@ -59,14 +59,14 @@ def augment_system_prompt(system_prompt: str, strategies: List[Any]) -> str:
     strategies_section = ""
     
     for i, strategy in enumerate(strategies, 1):
-        strategies_section += f"### Strategy {i} for {strategy.problem_type} problems\n{strategy.strategy_text}\n\n"
+        strategies_section += f"Strategy {i} for {strategy.problem_type} problems:\n{strategy.strategy_text}\n\n"
         
         # Add a sample reasoning example if available
         if strategy.reasoning_examples:
             # Use the most recent reasoning example (last one)
             reasoning = strategy.reasoning_examples[-1]
             if reasoning:
-                strategies_section += f"#### Example reasoning process:\n<think>\n{reasoning}\n</think>\n\n"
+                strategies_section += f"Example reasoning process:\n<think>\n{reasoning}\n</think>\n\n"
     
     # Format the application prompt with the strategies section
     strategy_prompt = STRATEGY_APPLICATION_PROMPT.format(strategies_section=strategies_section)
