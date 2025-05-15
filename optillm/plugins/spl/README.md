@@ -31,9 +31,9 @@ SPL can be combined with other plugins using the `&` operator:
 spl&memory-gpt-4o
 ```
 
-### Inference-Only Mode
+### Learning Mode
 
-To use the learned strategies without modifying them (for testing or production use), add the `spl_inference_only` parameter to the request config:
+By default, the plugin runs in inference-only mode, which uses existing strategies without creating or modifying them. To enable learning mode, which allows the plugin to create and refine strategies based on usage, add the `spl_learning` parameter to the request config:
 
 ```python
 client.chat.completions.create(
@@ -42,7 +42,7 @@ client.chat.completions.create(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
     ],
-    extra_body= {"spl_inference_only": True},
+    extra_body= {"spl_learning": True},
 )
 ```
 
@@ -51,8 +51,10 @@ client.chat.completions.create(
 1. **Problem Classification**: The plugin analyzes each query to determine its problem type
 2. **Strategy Selection**: It selects relevant strategies from its database based on the problem type and content
 3. **System Prompt Augmentation**: Selected strategies (up to MAX_STRATEGIES_FOR_INFERENCE) are added to the system prompt
+
+When learning mode is enabled, the plugin also performs:
 4. **Effectiveness Evaluation**: After generating a response, the system evaluates how well each strategy worked
-5. **Strategy Refinement**: Periodically, strategies are refined based on their usage and effectiveness
+5. **Strategy Creation & Refinement**: The system creates new strategies for unseen problem types and periodically refines existing strategies based on usage
 
 The plugin maintains two separate limits:
 - **Storage Limit** (MAX_STRATEGIES_PER_TYPE): Controls how many strategies can be stored in the database per problem type

@@ -36,13 +36,16 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     """
     Main plugin function that implements system prompt learning.
     
+    By default, the plugin runs in inference-only mode, which uses existing strategies without modifying them.
+    Setting request_config['spl_learning'] = True enables learning mode to create and refine strategies.
+    
     Args:
         system_prompt: The system prompt
         initial_query: The user's query
         client: The LLM client
         model: The model identifier
         request_config: Optional request configuration
-                       Can include {'spl_inference_only': True} to run in inference-only mode
+                       Can include {'spl_learning': True} to enable learning mode
     
     Returns:
         Tuple[str, int]: The LLM response and token count
@@ -50,11 +53,11 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     start_time = time.time()
     logger.info(f"Starting SPL plugin execution for query: {initial_query[:100]}...")
     
-    # Check if we should run in inference-only mode
-    inference_only = False
-    if request_config and 'spl_inference_only' in request_config:
-        inference_only = request_config['spl_inference_only']
-        logger.info(f"Running in inference-only mode: {inference_only}")
+    # Check if we should enable learning mode
+    learning_mode = False
+    if request_config and 'spl_learning' in request_config:
+        learning_mode = request_config['spl_learning']
+        logger.info(f"Running in learning mode: {learning_mode}")
         
     # Initialize the strategy database
     db = StrategyDatabase()
@@ -62,7 +65,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     logger.info(f"Last strategy ID: {db.metrics.get('last_strategy_id', 0)}")
     
     # Only increment query count in learning mode
-    if not inference_only:
+    if learning_mode:
         db.increment_query_count()
         db._save()  # Save immediately to ensure counter is persisted
     
@@ -77,7 +80,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     # 3. Determine if we need to create a new strategy or update an existing one
     similar_strategy = None
     
-    if not inference_only:
+    if learning_mode:
         # In learning mode, check if we should create a new strategy or update an existing one
         should_create, similar_strategy = should_create_new_strategy(
             problem_type, 
@@ -99,7 +102,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
             db.add_example_to_strategy(similar_strategy.strategy_id, initial_query)
     
     # 4. Perform database maintenance (more frequently than before)
-    if not inference_only and db.metrics["total_queries"] % MAINTENANCE_INTERVAL == 0:
+    if learning_mode and db.metrics["total_queries"] % MAINTENANCE_INTERVAL == 0:
         # 4.1 Merge similar strategies
         merged_count = db.merge_similar_strategies(similarity_threshold=STRATEGY_MERGING_THRESHOLD)
         logger.info(f"Merged {merged_count} similar strategies")
@@ -123,7 +126,17 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     
     # 7. If no strategies selected, use fallback
     if not selected_strategies:
-        logger.info(f"No strategies selected, using fallback strategy")
+        logger.info(f"No strategies selected for problem type: {problem_type}")
+        if not learning_mode:
+            logger.info("Suggesting to enable learning mode")
+            fallback_message = (
+                "I don't have any problem-solving strategies yet for this type of problem. "
+                "To enable me to learn and improve strategies for similar problems in the future, "
+                "you can set `spl_learning=True` in the request configuration.\n\n"
+            )
+        else:
+            fallback_message = ""
+        
         fallback_strategy = Strategy(
             strategy_id="fallback_temporary",
             problem_type=problem_type,
@@ -144,10 +157,10 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     
     # 9. Forward the request to the LLM with the augmented prompt
     try:
-        # Create a copy of request_config without spl_inference_only
+        # Create a copy of request_config without spl_learning
         request_params = {}
         if request_config:
-            request_params = {k: v for k, v in request_config.items() if k != 'spl_inference_only'}
+            request_params = {k: v for k, v in request_config.items() if k != 'spl_learning'}
         
         # Ensure max_tokens is set to at least DEFAULT_MAX_TOKENS for reasoning LLMs
         if 'max_tokens' not in request_params:
@@ -155,11 +168,17 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
         elif request_params['max_tokens'] < DEFAULT_MAX_TOKENS:
             request_params['max_tokens'] = DEFAULT_MAX_TOKENS
         
+        # Adjust the query if we're suggesting learning mode
+        if not learning_mode and not existing_strategies:
+            initial_query_with_suggestion = fallback_message + initial_query
+        else:
+            initial_query_with_suggestion = initial_query
+            
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": augmented_prompt},
-                {"role": "user", "content": initial_query}
+                {"role": "user", "content": initial_query_with_suggestion}
             ],
             **request_params
         )
@@ -175,8 +194,8 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
             logger.debug(f"Main response - thinking extracted: '{thinking}'")
             logger.debug(f"Main response - final answer after removing thinking: '{final_response}'")
         
-        # Only perform learning operations if not in inference-only mode
-        if not inference_only:
+        # Only perform learning operations if in learning mode
+        if learning_mode:
             # 10. Evaluate the effectiveness of the strategies
             strategy_effectiveness = evaluate_strategy_effectiveness(
                 final_response,
@@ -208,7 +227,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
                     refined_strategy = refine_strategy(strategy, initial_query, final_response, thinking, client, model)
                     db.refine_strategy(strategy.strategy_id, refined_strategy.strategy_text)
         else:
-            logger.info("Skipping strategy evaluation and refinement in inference-only mode")
+            logger.info("Strategy evaluation and refinement skipped (not in learning mode)")
         
         # Log execution time and status after run
         execution_time = time.time() - start_time

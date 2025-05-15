@@ -29,7 +29,7 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         client: The LLM client
         model: The model identifier
         request_config: Optional request configuration
-                       Can include {'spl_inference_only': True} to run in inference-only mode
+                       Can include {'spl_learning': True} to enable learning mode
     
     Returns:
         Tuple[str, int]: The LLM response and token count
