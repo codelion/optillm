@@ -54,16 +54,8 @@ After your thinking, provide ONLY the refined strategy text, no introduction or 
 
 # Strategy application prompt for system prompt augmentation
 STRATEGY_APPLICATION_PROMPT = """
-Problem-Solving Strategies
-
 The following strategies can help solve the user's query effectively. Use them as guidance when formulating your response:
 
-- Find the strategies most relevant to the current problem
-- Apply the techniques from these strategies in your solution
-- Use the reasoning examples as a guide for your approach
-
 {strategies_section}
-
-You can use <think>...</think> tags to work through your reasoning process before providing the final answer.
 """
 
