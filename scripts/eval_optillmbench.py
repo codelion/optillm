@@ -86,37 +86,82 @@ def extract_choice_index_from_question(question: str, answer: str) -> int:
     # Look for a pattern like "N. answer" in the question
     answer_clean = answer.strip().lower()
     
+    # Debug logging for critical examples
+    logger.debug(f"Looking for answer: '{answer_clean}' in question")
+    
     # Check for "Choices:" marker in the question
     if "choices:" in question.lower():
         # Split the question by lines after "Choices:"
         choices_section = question.lower().split("choices:")[1].strip()
         
-        # Try different approaches to extract choices
-        # 1. Try splitting by newlines
-        choices = choices_section.split("\n")
+        # Log the choices section
+        logger.debug(f"Choices section: '{choices_section}'")
         
-        # If there's only one line, try splitting by numbers with periods
-        if len(choices) == 1:
-            # Look for patterns like "0. choice1 1. choice2"
-            # We'll use regex to extract all patterns that look like "N. text"
-            all_choices = re.findall(r'(\d+)\s*\.\s*([^\d\.]+?)(?=\s*\d+\s*\.|$)', choices_section)
+        # Try different approaches to extract choices
+        
+        # 1. If it's all on one line, use a more comprehensive regex
+        if '\n' not in choices_section:
+            # This pattern matches "N. text" where N is a digit and text is any text up to the next number or end
+            all_choices = re.findall(r'(\d+)\s*\.\s*([^0-9.]+?)(?=\s*\d+\s*\.|$)', choices_section)
+            
+            logger.debug(f"Single line choices found: {all_choices}")
             
             for idx, choice_text in all_choices:
-                if choice_text.strip().lower() == answer_clean:
+                choice_text_clean = choice_text.strip()
+                if choice_text_clean.lower() == answer_clean:
+                    logger.debug(f"Found match at index {idx}: '{choice_text_clean}'")
                     return int(idx)
         
-        # Process each choice from the newline splitting approach
-        for choice in choices:
+        # 2. Try splitting by newlines
+        choices = choices_section.split("\n")
+        
+        for i, choice in enumerate(choices):
             choice = choice.strip()
             if not choice:
                 continue
                 
+            logger.debug(f"Checking choice {i}: '{choice}'")
+            
             # Try to extract the index and choice text
             match = re.match(r'\s*(\d+)\s*\.\s*(.*)', choice)
-            if match and match.group(2).strip().lower() == answer_clean:
-                return int(match.group(1))
+            if match:
+                idx = int(match.group(1))
+                choice_text = match.group(2).strip()
+                
+                logger.debug(f"Parsed choice: index={idx}, text='{choice_text}'")
+                
+                if choice_text.lower() == answer_clean:
+                    logger.debug(f"Found exact match at index {idx}")
+                    return idx
+        
+        # 3. Fallback: just look for any occurrence of the number followed by the answer
+        pattern = r'(\d+)\s*\.\s*' + re.escape(answer_clean)
+        match = re.search(pattern, choices_section)
+        if match:
+            logger.debug(f"Fallback match found at index {match.group(1)}")
+            return int(match.group(1))
     
+    logger.debug("No match found for answer in choices")
     return -1
+
+def is_numeric_only_response(response: str) -> Tuple[bool, int]:
+    """
+    Check if the response is just a numeric value, possibly with whitespace and newlines.
+    
+    Args:
+        response: The response text to check
+        
+    Returns:
+        Tuple of (is_numeric, value)
+    """
+    # Strip all whitespace, including newlines
+    clean_response = re.sub(r'\s', '', response)
+    
+    # Check if it's just a number
+    if clean_response.isdigit():
+        return True, int(clean_response)
+    
+    return False, -1
 
 def evaluate_response(response: str, ground_truth: str, category: str, question: str = None) -> bool:
     """
@@ -152,28 +197,30 @@ def evaluate_response(response: str, ground_truth: str, category: str, question:
         response_clean = response.strip().lower()
         ground_truth_clean = ground_truth.strip().lower()
         
-        # Case 1: Exact match of answer
+        # Case 1: Exact match of answer text
         if response_clean == ground_truth_clean:
+            logger.debug("Exact text match")
             return True
             
-        # Case 2: Check if response is just the index number
+        # For other cases, we need to find what index corresponds to the ground truth
         if question:
-            # Find the index of the correct answer in the question
             correct_index = extract_choice_index_from_question(question, ground_truth)
+            
             if correct_index >= 0:
-                # Handle case where response is just "2" or similar, including with whitespace and newlines
-                # Extract all numbers from the response
-                all_numbers = re.findall(r'\d+', response_clean)
-                if len(all_numbers) == 1 and int(all_numbers[0]) == correct_index:
+                # Case 2: Check if response is just the digit (most common LLM response for indices)
+                is_numeric, value = is_numeric_only_response(response)
+                if is_numeric and value == correct_index:
+                    logger.debug(f"Numeric match: response '{response}' -> {value} matches index {correct_index}")
                     return True
-                    
+                
                 # Case 3: Check if response is "index. answer"
-                index_pattern = fr"{correct_index}\s*\.\s*{re.escape(ground_truth_clean)}"
-                if re.search(index_pattern, response_clean):
+                if re.search(fr"{correct_index}\s*\.\s*{re.escape(ground_truth_clean)}", response_clean):
+                    logger.debug("Pattern match for 'index. answer'")
                     return True
-                    
-                # Case 4: Check if response contains the answer with index somewhere
-                if f"{correct_index}." in response_clean and ground_truth_clean in response_clean:
+                
+                # Case 4: Check if response contains both the index and the answer text
+                if str(correct_index) in response_clean and ground_truth_clean in response_clean:
+                    logger.debug("Contains both index and answer")
                     return True
         
         return False
@@ -259,7 +306,7 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
-                extra_body= {"spl_inference_only": True},
+                extra_body= {"spl_learning": False},
             )
             
             # Calculate time taken
@@ -422,7 +469,12 @@ def main():
                         help="Directory to save results")
     parser.add_argument("--approaches", nargs="+", 
                         help="Specific approaches to evaluate (default: all)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    
+    # Set debug logging if specified
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
