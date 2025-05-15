@@ -15,7 +15,7 @@ AutoThink combines several advanced techniques to optimize the thinking process 
 
 ### 1. Query Classification
 
-AutoThink uses the `adaptive-classifier/llm-router` model to classify incoming queries:
+AutoThink uses the `adaptive-classifier/llm-router` [model](https://huggingface.co/adaptive-classifier/llm-router) to classify incoming queries:
 
 - **HIGH**: Complex queries requiring deep reasoning, multi-step calculations, or thorough exploration
 - **LOW**: Simpler queries requiring less extensive reasoning
@@ -29,7 +29,7 @@ Based on the classification, AutoThink allocates different token budgets for the
 
 ### 3. Steering Vectors
 
-AutoThink uses pre-extracted steering vectors from datasets like `codelion/Qwen3-0.6B-pts-steering-vectors`. These vectors represent different reasoning patterns:
+AutoThink uses pre-extracted steering vectors from [datasets](https://huggingface.co/datasets?other=pts) like `codelion/Qwen3-0.6B-pts-steering-vectors`. These vectors represent different reasoning patterns:
 
 - **Depth and thoroughness**: Encourages detailed, step-by-step reasoning
 - **Numerical accuracy**: Promotes precise calculations and verification
@@ -93,3 +93,18 @@ response = autothink_decode(
 - **Enhanced Reasoning**: Steering vectors guide the model toward better reasoning patterns
 - **Efficiency**: Better performance without increasing model size
 - **Customizability**: Can be tailored for different domains using domain-specific steering vector datasets
+
+
+## Citation
+
+If you use this approach in your research, please cite:
+
+```bibtex
+@article{autothink,
+  title={AutoThink: efficient inference for reasoning LLMs},
+  author={Sharma, Asankhaya},
+  journal={SSRN Artificial Intelligence eJournal},
+  year={2025},
+  url = {https://dx.doi.org/10.2139/ssrn.5253327}
+}
+```
