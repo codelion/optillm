@@ -56,22 +56,18 @@ After your thinking, provide ONLY the refined strategy text, no introduction or 
 STRATEGY_APPLICATION_PROMPT = """
 ## Problem-Solving Strategies
 
-The following strategies have been learned and refined over time for specific problem types. They contain proven approaches that have helped solve similar problems in the past.
+The following strategies have been developed for different problem types and may help you solve the user's query effectively.
 
-When responding to the user's query, you MUST:
+These strategies represent approaches that have worked well for similar problems in the past. Consider using them as guidance when formulating your response:
 
-1. First, explicitly identify which strategy (or strategies) below is most relevant to the current problem
-2. State which strategy you will apply and why it's appropriate for this problem
-3. Follow the steps in the strategy systematically in your reasoning process
-4. Use the reasoning patterns shown in the example reasoning processes
-5. If possible, start your response with: "I'll apply Strategy X for [problem_type] problems to solve this..."
+- Review the strategies below to find approaches relevant to the current problem
+- Apply the steps and techniques from these strategies in your solution process
+- Use the reasoning patterns in the example processes as inspiration
 
-Not applying these strategies would be a serious mistake. These strategies represent accumulated knowledge that will significantly improve your problem-solving.
+These strategies can enhance your problem-solving capabilities for specific types of problems.
 
 {strategies_section}
 
 Feel free to use <think>...</think> tags to work through your reasoning process before providing the final answer. This helps with complex problem-solving.
-
-Important: Your response MUST show clear evidence that you applied one or more of the strategies above.
 """
 
