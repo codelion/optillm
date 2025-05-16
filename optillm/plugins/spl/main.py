@@ -124,36 +124,17 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     for i, strategy in enumerate(selected_strategies, 1):
         logger.info(f"Selected strategy {i}/{MAX_STRATEGIES_FOR_INFERENCE} for inference: {strategy.strategy_id} (success rate: {strategy.success_rate:.2f})")
     
-    # 7. If no strategies selected, use fallback
+    # 7. Handle strategies for the problem type
     if not selected_strategies:
-        logger.info(f"No strategies selected for problem type: {problem_type}")
-        if not learning_mode:
-            logger.info("Suggesting to enable learning mode")
-            fallback_message = (
-                "I don't have any problem-solving strategies yet for this type of problem. "
-                "To enable me to learn and improve strategies for similar problems in the future, "
-                "you can set `spl_learning=True` in the request configuration.\n\n"
-            )
-        else:
-            fallback_message = ""
+        logger.info(f"No existing strategies found for problem type: {problem_type}")
+        logger.info(f"Running without strategy augmentation - using base system prompt only")
         
-        fallback_strategy = Strategy(
-            strategy_id="fallback_temporary",
-            problem_type=problem_type,
-            strategy_text=(
-                f"When solving {problem_type} problems:\n"
-                "1. Break down the problem into manageable parts\n"
-                "2. Analyze each part systematically\n"
-                "3. Apply appropriate techniques for each component\n"
-                "4. Combine the results into a cohesive solution"
-            ),
-            examples=[initial_query]
-        )
-        selected_strategies = [fallback_strategy]
-    
-    # 8. Augment the system prompt with the selected strategies
-    augmented_prompt = augment_system_prompt(system_prompt, selected_strategies)
-    logger.info(f"Augmented system prompt with {len(selected_strategies)} strategies (inference limit: {MAX_STRATEGIES_FOR_INFERENCE})")
+        # Just use the original system prompt with no augmentation
+        augmented_prompt = system_prompt
+    else:
+        # 8. Augment the system prompt with the selected strategies
+        augmented_prompt = augment_system_prompt(system_prompt, selected_strategies)
+        logger.info(f"Augmented system prompt with {len(selected_strategies)} strategies (inference limit: {MAX_STRATEGIES_FOR_INFERENCE})")
     
     # 9. Forward the request to the LLM with the augmented prompt
     try:
@@ -168,11 +149,12 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
         elif request_params['max_tokens'] < DEFAULT_MAX_TOKENS:
             request_params['max_tokens'] = DEFAULT_MAX_TOKENS
         
-        # Adjust the query if we're suggesting learning mode
+        # Log a suggestion if no strategies found in inference mode
         if not learning_mode and not existing_strategies:
-            initial_query_with_suggestion = fallback_message + initial_query
-        else:
-            initial_query_with_suggestion = initial_query
+            logger.info("Suggesting to enable learning mode: To create and learn strategies for this problem type, enable learning mode by setting 'spl_learning=True' in the request config.")
+        
+        # Use unmodified query - no need to add fallback message to the actual query
+        initial_query_with_suggestion = initial_query
             
         response = client.chat.completions.create(
             model=model,
@@ -194,8 +176,8 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
             logger.debug(f"Main response - thinking extracted: '{thinking}'")
             logger.debug(f"Main response - final answer after removing thinking: '{final_response}'")
         
-        # Only perform learning operations if in learning mode
-        if learning_mode:
+        # Only perform learning operations if in learning mode and we have strategies
+        if learning_mode and selected_strategies:
             # 10. Evaluate the effectiveness of the strategies
             strategy_effectiveness = evaluate_strategy_effectiveness(
                 final_response,
@@ -226,6 +208,8 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
                     logger.info(f"Refining strategy {strategy.strategy_id} after {strategy.total_attempts} attempts")
                     refined_strategy = refine_strategy(strategy, initial_query, final_response, thinking, client, model)
                     db.refine_strategy(strategy.strategy_id, refined_strategy.strategy_text)
+        elif learning_mode:
+            logger.info("No strategies to evaluate")
         else:
             logger.info("Strategy evaluation and refinement skipped (not in learning mode)")
         
@@ -241,12 +225,17 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     except Exception as e:
         logger.error(f"Error in SPL plugin: {str(e)}")
         # Fall back to regular completion on error
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": initial_query}
-            ],
-            max_tokens=DEFAULT_MAX_TOKENS  # Ensure fallback also uses sufficient tokens
-        )
-        return response.choices[0].message.content, response.usage.completion_tokens
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": initial_query}
+                ],
+                max_tokens=DEFAULT_MAX_TOKENS  # Ensure fallback also uses sufficient tokens
+            )
+            return response.choices[0].message.content, response.usage.completion_tokens
+        except Exception as inner_e:
+            logger.error(f"Error in fallback completion: {str(inner_e)}")
+            # Return a simple error message if even the fallback fails
+            return f"Error processing request: {str(e)}", 0
