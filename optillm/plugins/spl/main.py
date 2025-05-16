@@ -119,7 +119,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     existing_strategies = db.get_strategies_for_problem(problem_type)
     
     # 6. Select relevant strategies for this problem (using inference limit)
-    selected_strategies = select_relevant_strategies(initial_query, problem_type, db, MAX_STRATEGIES_FOR_INFERENCE)
+    selected_strategies = select_relevant_strategies(initial_query, problem_type, db, learning_mode, MAX_STRATEGIES_FOR_INFERENCE)
     
     # Log the selected strategies
     for i, strategy in enumerate(selected_strategies, 1):
