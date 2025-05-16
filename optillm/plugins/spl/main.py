@@ -151,7 +151,7 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
         
         # Log a suggestion if no strategies found in inference mode
         if not learning_mode and not existing_strategies:
-            logger.info("Suggesting to enable learning mode: To create and learn strategies for this problem type, enable learning mode by setting 'spl_learning=True' in the request config.")
+            logger.info(f"No strategies exist for problem type '{problem_type}'. To learn strategies for this specific problem type, enable learning mode by setting 'spl_learning=True' in the request config.")
         
         # Use unmodified query - no need to add fallback message to the actual query
         initial_query_with_suggestion = initial_query
