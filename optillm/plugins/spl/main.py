@@ -26,7 +26,8 @@ from optillm.plugins.spl.config import (
     MAINTENANCE_INTERVAL,
     STRATEGY_MERGING_THRESHOLD,
     MAX_STRATEGIES_PER_TYPE,
-    MAX_STRATEGIES_FOR_INFERENCE
+    MAX_STRATEGIES_FOR_INFERENCE,
+    MIN_SUCCESS_RATE_FOR_INFERENCE
 )
 
 # Setup logging
@@ -124,15 +125,22 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
     for i, strategy in enumerate(selected_strategies, 1):
         logger.info(f"Selected strategy {i}/{MAX_STRATEGIES_FOR_INFERENCE} for inference: {strategy.strategy_id} (success rate: {strategy.success_rate:.2f})")
     
-    # 7. Handle strategies for the problem type
+    # 7. Handle situation when no strategies are selected
     if not selected_strategies:
-        logger.info(f"No existing strategies found for problem type: {problem_type}")
-        logger.info(f"Running without strategy augmentation - using base system prompt only")
+        if not existing_strategies:
+            # No strategies exist for this problem type
+            logger.info(f"No strategies exist for problem type '{problem_type}'. Enable learning mode with 'spl_learning=True' to create strategies.")
+        else:
+            # Strategies exist but don't meet the minimum success rate
+            logger.info(f"Strategies exist for problem type '{problem_type}' but none meet the minimum success rate threshold of {MIN_SUCCESS_RATE_FOR_INFERENCE:.2f}.")
+            logger.info(f"Enable learning mode with 'spl_learning=True' to improve strategies.")
         
-        # Just use the original system prompt with no augmentation
+        # Use the original system prompt without augmentation
+        logger.info("Running without strategy augmentation - using base system prompt only.")
         augmented_prompt = system_prompt
     else:
-        # 8. Augment the system prompt with the selected strategies
+        # Normal case - strategies were selected
+        # Augment the system prompt with the selected strategies
         augmented_prompt = augment_system_prompt(system_prompt, selected_strategies)
         logger.info(f"Augmented system prompt with {len(selected_strategies)} strategies (inference limit: {MAX_STRATEGIES_FOR_INFERENCE})")
     
@@ -148,19 +156,12 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
             request_params['max_tokens'] = DEFAULT_MAX_TOKENS
         elif request_params['max_tokens'] < DEFAULT_MAX_TOKENS:
             request_params['max_tokens'] = DEFAULT_MAX_TOKENS
-        
-        # Log a suggestion if no strategies found in inference mode
-        if not learning_mode and not existing_strategies:
-            logger.info(f"No strategies exist for problem type '{problem_type}'. To learn strategies for this specific problem type, enable learning mode by setting 'spl_learning=True' in the request config.")
-        
-        # Use unmodified query - no need to add fallback message to the actual query
-        initial_query_with_suggestion = initial_query
             
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": augmented_prompt},
-                {"role": "user", "content": initial_query_with_suggestion}
+                {"role": "user", "content": initial_query}
             ],
             **request_params
         )
@@ -177,39 +178,40 @@ def run_spl(system_prompt: str, initial_query: str, client, model: str, request_
             logger.debug(f"Main response - final answer after removing thinking: '{final_response}'")
         
         # Only perform learning operations if in learning mode and we have strategies
-        if learning_mode and selected_strategies:
-            # 10. Evaluate the effectiveness of the strategies
-            strategy_effectiveness = evaluate_strategy_effectiveness(
-                final_response,
-                thinking,
-                selected_strategies,
-                client,
-                model
-            )
-            
-            # 11. Update strategy metrics based on effectiveness
-            for strategy_id, effective in strategy_effectiveness.items():
-                # Skip temporary fallback strategies
-                if strategy_id != "fallback_temporary":
-                    db.update_strategy_performance(strategy_id, effective)
-                    logger.info(f"Strategy {strategy_id} effectiveness: {effective}")
-                    
-                    # If the strategy was effective and thinking was used, add the thinking as a reasoning example
-                    if effective and thinking and strategy_id != "fallback_temporary":
-                        db.add_reasoning_example(strategy_id, thinking)
-                        logger.info(f"Added reasoning example to strategy {strategy_id}")
-            
-            # 12. Periodically refine strategies (after every 10 uses)
-            for strategy in selected_strategies:
-                # Skip temporary fallback strategies
-                if (strategy.strategy_id != "fallback_temporary" and 
-                    strategy.total_attempts % 10 == 0 and 
-                    strategy.total_attempts > 0):
-                    logger.info(f"Refining strategy {strategy.strategy_id} after {strategy.total_attempts} attempts")
-                    refined_strategy = refine_strategy(strategy, initial_query, final_response, thinking, client, model)
-                    db.refine_strategy(strategy.strategy_id, refined_strategy.strategy_text)
-        elif learning_mode:
-            logger.info("No strategies to evaluate")
+        if learning_mode:
+            if selected_strategies:
+                # 10. Evaluate the effectiveness of the strategies
+                strategy_effectiveness = evaluate_strategy_effectiveness(
+                    final_response,
+                    thinking,
+                    selected_strategies,
+                    client,
+                    model
+                )
+                
+                # 11. Update strategy metrics based on effectiveness
+                for strategy_id, effective in strategy_effectiveness.items():
+                    # Skip temporary fallback strategies
+                    if strategy_id != "fallback_temporary":
+                        db.update_strategy_performance(strategy_id, effective)
+                        logger.info(f"Strategy {strategy_id} effectiveness: {effective}")
+                        
+                        # If the strategy was effective and thinking was used, add the thinking as a reasoning example
+                        if effective and thinking and strategy_id != "fallback_temporary":
+                            db.add_reasoning_example(strategy_id, thinking)
+                            logger.info(f"Added reasoning example to strategy {strategy_id}")
+                
+                # 12. Periodically refine strategies (after every 10 uses)
+                for strategy in selected_strategies:
+                    # Skip temporary fallback strategies
+                    if (strategy.strategy_id != "fallback_temporary" and 
+                        strategy.total_attempts % 10 == 0 and 
+                        strategy.total_attempts > 0):
+                        logger.info(f"Refining strategy {strategy.strategy_id} after {strategy.total_attempts} attempts")
+                        refined_strategy = refine_strategy(strategy, initial_query, final_response, thinking, client, model)
+                        db.refine_strategy(strategy.strategy_id, refined_strategy.strategy_text)
+            else:
+                logger.info("No strategies to evaluate or refine - consider adding strategies for this problem type")
         else:
             logger.info("Strategy evaluation and refinement skipped (not in learning mode)")
         

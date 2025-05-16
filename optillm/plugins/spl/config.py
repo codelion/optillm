@@ -20,9 +20,10 @@ DEFAULT_MAX_TOKENS = 4096
 # How often to perform maintenance operations (merge, prune)
 MAINTENANCE_INTERVAL = 40
 
-# Similarity thresholds
+# Strategy selection thresholds
 STRATEGY_CREATION_THRESHOLD = 0.7  # Higher threshold to avoid creating similar strategies
 STRATEGY_MERGING_THRESHOLD = 0.6   # Lower threshold to merge more similar strategies
+MIN_SUCCESS_RATE_FOR_INFERENCE = 0.4  # Minimum success rate for a strategy to be used during inference
 
 # Limits for strategy management
 MAX_STRATEGIES_PER_TYPE = 10  # Maximum strategies to store in DB per problem type
