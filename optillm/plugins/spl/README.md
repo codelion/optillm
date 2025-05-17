@@ -1,6 +1,6 @@
 # System Prompt Learning (SPL) Plugin for OptiLLM
 
-This plugin implements Andrej Karpathy's proposed "third paradigm" for LLM learning, enabling LLMs to learn and improve their problem-solving strategies over time.
+This plugin implements Andrej Karpathy's [proposed](https://x.com/karpathy/status/1921368644069765486) "third paradigm" for LLM learning, enabling LLMs to learn and improve their problem-solving strategies over time.
 
 ## Concept
 
