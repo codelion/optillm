@@ -27,4 +27,5 @@ spacy<3.8.0
 cerebras_cloud_sdk
 outlines[transformers]
 sentencepiece
+adaptive-classifier
 mcp

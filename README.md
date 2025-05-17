@@ -343,7 +343,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 | Approach                             | Slug               | Description                                                                                    |
 | ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Cerebras Planning and Optimization | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
+| Cerebras Planning and Optimization   | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
 | CoT with Reflection                  | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch                           | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | ReRead                               | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
@@ -359,6 +359,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | CoT Decoding                         |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 | Entropy Decoding                     |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
 | Thinkdeeper                          |  N/A for proxy     | Implements the `reasoning_effort` param from OpenAI for reasoning models like DeepSeek R1      |
+| AutoThink                            |  N/A for proxy     | Combines query complexity classification with steering vectors to enhance reasoning            |
 
 ## Implemented plugins
 
@@ -467,6 +468,16 @@ Authorization: Bearer your_secret_api_key
 
 ## SOTA results on benchmarks with optillm
 
+### AutoThink on GPQA-Diamond & MMLU-Pro (May 2025)
+
+| **Model**     | **GPQA-Diamond**            |                          | **MMLU-Pro**               |                          |
+|----------------|-----------------------------|--------------------------|----------------------------|--------------------------|
+|                | Accuracy (%)                | Avg. Tokens              | Accuracy (%)               | Avg. Tokens              |
+| DeepSeek-R1-Distill-Qwen-1.5B    | 21.72                       | 7868.26                  | 25.58                      | 2842.75                  |
+| with Fixed Budget | 28.47                     | 3570.00                  | 26.18                      | 1815.67                  |
+| **with AutoThink**  | **31.06**                   | **3520.52**              | **26.38**                  | **1792.50**              |
+
+
 ### LongCePO on LongBench v2 (Apr 2025)
 
 | Model¹                             | Context window | Short samples (up to 32K words) | Medium samples (32–128K words) |
@@ -551,6 +562,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
 ## References
+- [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)
 - [CePO: Empowering Llama with Reasoning using Test-Time Compute](https://cerebras.ai/blog/cepo) - [Implementation](optillm/cepo)
 - [LongCePO: Empowering LLMs to efficiently leverage infinite context](https://cerebras.ai/blog/longcepo) - [Implementation](optillm/plugins/longcepo)
 - [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](optillm/plugins/coc_plugin.py)
