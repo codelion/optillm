@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <!-- Background and Border -->
+  <rect width="800" height="500" fill="#ffffff" stroke="#cccccc" stroke-width="2"/>
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle">Performance Improvements with System Prompt Learning</text>
+  <text x="400" y="70" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="#666">Model: gemini-2.0-flash-lite</text>
+  
+  <!-- Legend -->
+  <rect x="560" y="100" width="20" height="20" fill="#6C8EBF"/>
+  <text x="590" y="115" font-family="Arial, sans-serif" font-size="14">Baseline</text>
+  
+  <rect x="560" y="130" width="20" height="20" fill="#82CA9D"/>
+  <text x="590" y="145" font-family="Arial, sans-serif" font-size="14">With SPL</text>
+  
+  <!-- Axes -->
+  <line x1="100" y1="400" x2="700" y2="400" stroke="#000" stroke-width="2"/>
+  <line x1="100" y1="400" x2="100" y2="100" stroke="#000" stroke-width="2"/>
+  
+  <!-- Y-axis label -->
+  <text x="40" y="250" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" transform="rotate(-90, 40, 250)">Accuracy (%)</text>
+  
+  <!-- Y-axis ticks and labels -->
+  <line x1="95" y1="100" x2="100" y2="100" stroke="#000" stroke-width="2"/>
+  <text x="85" y="105" font-family="Arial, sans-serif" font-size="12" text-anchor="end">100</text>
+  
+  <line x1="95" y1="160" x2="100" y2="160" stroke="#000" stroke-width="2"/>
+  <text x="85" y="165" font-family="Arial, sans-serif" font-size="12" text-anchor="end">80</text>
+  
+  <line x1="95" y1="220" x2="100" y2="220" stroke="#000" stroke-width="2"/>
+  <text x="85" y="225" font-family="Arial, sans-serif" font-size="12" text-anchor="end">60</text>
+  
+  <line x1="95" y1="280" x2="100" y2="280" stroke="#000" stroke-width="2"/>
+  <text x="85" y="285" font-family="Arial, sans-serif" font-size="12" text-anchor="end">40</text>
+  
+  <line x1="95" y1="340" x2="100" y2="340" stroke="#000" stroke-width="2"/>
+  <text x="85" y="345" font-family="Arial, sans-serif" font-size="12" text-anchor="end">20</text>
+  
+  <line x1="95" y1="400" x2="100" y2="400" stroke="#000" stroke-width="2"/>
+  <text x="85" y="405" font-family="Arial, sans-serif" font-size="12" text-anchor="end">0</text>
+  
+  <!-- Grid lines -->
+  <line x1="100" y1="160" x2="700" y2="160" stroke="#ccc" stroke-width="1" stroke-dasharray="5,5"/>
+  <line x1="100" y1="220" x2="700" y2="220" stroke="#ccc" stroke-width="1" stroke-dasharray="5,5"/>
+  <line x1="100" y1="280" x2="700" y2="280" stroke="#ccc" stroke-width="1" stroke-dasharray="5,5"/>
+  <line x1="100" y1="340" x2="700" y2="340" stroke="#ccc" stroke-width="1" stroke-dasharray="5,5"/>
+  
+  <!-- Data bars - OptILLMBench -->
+  <g transform="translate(175, 0)">
+    <!-- Baseline -->
+    <rect x="-30" y="156" width="60" height="244" fill="#6C8EBF"/>
+    <!-- SPL -->
+    <rect x="40" y="140" width="60" height="260" fill="#82CA9D"/>
+    <!-- Label -->
+    <text x="5" y="420" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">OptILLMBench</text>
+    <!-- Values -->
+    <text x="-30" y="151" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">61%</text>
+    <text x="40" y="135" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">65%</text>
+    <!-- Improvement -->
+    <text x="5" y="440" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#9932CC">+4%</text>
+  </g>
+  
+  <!-- Data bars - MATH-500 -->
+  <g transform="translate(325, 0)">
+    <!-- Baseline -->
+    <rect x="-30" y="60" width="60" height="340" fill="#6C8EBF"/>
+    <!-- SPL -->
+    <rect x="40" y="58" width="60" height="342" fill="#82CA9D"/>
+    <!-- Label -->
+    <text x="5" y="420" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">MATH-500</text>
+    <!-- Values -->
+    <text x="-30" y="55" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">85%</text>
+    <text x="40" y="53" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">85.6%</text>
+    <!-- Improvement -->
+    <text x="5" y="440" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#9932CC">+0.6%</text>
+  </g>
+  
+  <!-- Data bars - Arena Auto Hard -->
+  <g transform="translate(475, 0)">
+    <!-- Baseline -->
+    <rect x="-30" y="284" width="60" height="116" fill="#6C8EBF"/>
+    <!-- SPL -->
+    <rect x="40" y="250" width="60" height="150" fill="#82CA9D"/>
+    <!-- Label -->
+    <text x="5" y="420" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Arena Auto Hard</text>
+    <!-- Values -->
+    <text x="-30" y="279" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">29%</text>
+    <text x="40" y="245" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">37.6%</text>
+    <!-- Improvement -->
+    <text x="5" y="440" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#9932CC">+8.6%</text>
+  </g>
+  
+  <!-- Data bars - AIME24 -->
+  <g transform="translate(625, 0)">
+    <!-- Baseline -->
+    <rect x="-30" y="307" width="60" height="93" fill="#6C8EBF"/>
+    <!-- SPL -->
+    <rect x="40" y="280" width="60" height="120" fill="#82CA9D"/>
+    <!-- Label -->
+    <text x="5" y="420" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">AIME24</text>
+    <!-- Values -->
+    <text x="-30" y="302" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">23.3%</text>
+    <text x="40" y="275" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#000">30.0%</text>
+    <!-- Improvement -->
+    <text x="5" y="440" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#9932CC">+6.7%</text>
+  </g>
+  
+  <!-- Citation -->
+  <text x="400" y="475" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666">Data source: OptILLM SPL plugin experiments, 2025</text>
+</svg>

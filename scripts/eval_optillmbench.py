@@ -26,13 +26,14 @@ APPROACHES = [
     ("none", "Baseline without any optimization"),
     ("leap", "LEAP Approach"),
     ("rto", "Round Trip Optimization"),
-    ("cot_reflection", "C   hain of Thought with Reflection"),
+    ("cot_reflection", "Chain of Thought with Reflection"),
     ("self_consistency", "Self Consistency Check"),
     ("plansearch", "Planning with Search"),
     ("re2", "ReRead Approach"),
     ("z3", "Z3 Solver for Mathematical Problems"),
     ("coc", "Chain of Code"),
     ("executecode" , "Execute Code"),
+    ("spl", "System Prompt Learning")
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -54,7 +55,115 @@ def extract_gsm8k_answer(text: str) -> float:
             return None
     return None
 
-def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
+def remove_thinking_blocks(text: str) -> str:
+    """
+    Remove <think>...</think> blocks from the response.
+    If there's a </think> tag, only keep the content after it.
+    """
+    if not text:
+        return text
+        
+    # Check if there's a thinking block
+    if '</think>' in text:
+        # Get everything after the last </think> tag
+        parts = text.split('</think>')
+        return parts[-1].strip()
+    
+    # If no thinking blocks, return original text
+    return text
+
+def extract_choice_index_from_question(question: str, answer: str) -> int:
+    """
+    Extract the index of the correct answer from a multiple-choice question.
+    
+    Args:
+        question: The question text containing choices
+        answer: The correct answer (just the text, no index)
+    
+    Returns:
+        int: The index of the correct answer, or -1 if not found
+    """
+    # Look for a pattern like "N. answer" in the question
+    answer_clean = answer.strip().lower()
+    
+    # Debug logging for critical examples
+    logger.debug(f"Looking for answer: '{answer_clean}' in question")
+    
+    # Check for "Choices:" marker in the question
+    if "choices:" in question.lower():
+        # Split the question by lines after "Choices:"
+        choices_section = question.lower().split("choices:")[1].strip()
+        
+        # Log the choices section
+        logger.debug(f"Choices section: '{choices_section}'")
+        
+        # Try different approaches to extract choices
+        
+        # 1. If it's all on one line, use a more comprehensive regex
+        if '\n' not in choices_section:
+            # This pattern matches "N. text" where N is a digit and text is any text up to the next number or end
+            all_choices = re.findall(r'(\d+)\s*\.\s*([^0-9.]+?)(?=\s*\d+\s*\.|$)', choices_section)
+            
+            logger.debug(f"Single line choices found: {all_choices}")
+            
+            for idx, choice_text in all_choices:
+                choice_text_clean = choice_text.strip()
+                if choice_text_clean.lower() == answer_clean:
+                    logger.debug(f"Found match at index {idx}: '{choice_text_clean}'")
+                    return int(idx)
+        
+        # 2. Try splitting by newlines
+        choices = choices_section.split("\n")
+        
+        for i, choice in enumerate(choices):
+            choice = choice.strip()
+            if not choice:
+                continue
+                
+            logger.debug(f"Checking choice {i}: '{choice}'")
+            
+            # Try to extract the index and choice text
+            match = re.match(r'\s*(\d+)\s*\.\s*(.*)', choice)
+            if match:
+                idx = int(match.group(1))
+                choice_text = match.group(2).strip()
+                
+                logger.debug(f"Parsed choice: index={idx}, text='{choice_text}'")
+                
+                if choice_text.lower() == answer_clean:
+                    logger.debug(f"Found exact match at index {idx}")
+                    return idx
+        
+        # 3. Fallback: just look for any occurrence of the number followed by the answer
+        pattern = r'(\d+)\s*\.\s*' + re.escape(answer_clean)
+        match = re.search(pattern, choices_section)
+        if match:
+            logger.debug(f"Fallback match found at index {match.group(1)}")
+            return int(match.group(1))
+    
+    logger.debug("No match found for answer in choices")
+    return -1
+
+def is_numeric_only_response(response: str) -> Tuple[bool, int]:
+    """
+    Check if the response is just a numeric value, possibly with whitespace and newlines.
+    
+    Args:
+        response: The response text to check
+        
+    Returns:
+        Tuple of (is_numeric, value)
+    """
+    # Strip all whitespace, including newlines
+    clean_response = re.sub(r'\s', '', response)
+    
+    # Check if it's just a number
+    if clean_response.isdigit():
+        return True, int(clean_response)
+    
+    return False, -1
+
+def evaluate_response(response: str, ground_truth: str, category: str, question: str = None) -> bool:
     """
     Evaluate if the response matches the ground truth based on category.
     
@@ -62,12 +171,16 @@ def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
         response: Model's response
         ground_truth: Correct answer
         category: Problem category (gsm8k, mmlu_math, boolq, aqua_rat)
+        question: Original question text, needed for MMLU evaluation
     
     Returns:
         bool: Whether the response is correct
     """
     if not response or not ground_truth:
         return False
+    
+    # First, remove any thinking blocks
+    response = remove_thinking_blocks(response)
         
     if category == "gsm8k":
         # Extract numerical answers after ### and compare
@@ -79,8 +192,40 @@ def evaluate_response(response: str, ground_truth: str, category: str) -> bool:
             
         # Compare with small tolerance for floating point
         return abs(response_num - ground_truth_num) < 1e-6
+    elif category == "mmlu_math":
+        # Special handling for MMLU-math multiple choice questions
+        response_clean = response.strip().lower()
+        ground_truth_clean = ground_truth.strip().lower()
+        
+        # Case 1: Exact match of answer text
+        if response_clean == ground_truth_clean:
+            logger.debug("Exact text match")
+            return True
+            
+        # For other cases, we need to find what index corresponds to the ground truth
+        if question:
+            correct_index = extract_choice_index_from_question(question, ground_truth)
+            
+            if correct_index >= 0:
+                # Case 2: Check if response is just the digit (most common LLM response for indices)
+                is_numeric, value = is_numeric_only_response(response)
+                if is_numeric and value == correct_index:
+                    logger.debug(f"Numeric match: response '{response}' -> {value} matches index {correct_index}")
+                    return True
+                
+                # Case 3: Check if response is "index. answer"
+                if re.search(fr"{correct_index}\s*\.\s*{re.escape(ground_truth_clean)}", response_clean):
+                    logger.debug("Pattern match for 'index. answer'")
+                    return True
+                
+                # Case 4: Check if response contains both the index and the answer text
+                if str(correct_index) in response_clean and ground_truth_clean in response_clean:
+                    logger.debug("Contains both index and answer")
+                    return True
+        
+        return False
     else:
-        # For mmlu_math, boolq, and aqua_rat, exact match is required
+        # For boolq and aqua_rat, exact match is required
         # Clean up both strings for comparison
         response_clean = response.strip().lower()
         ground_truth_clean = ground_truth.strip().lower()
@@ -161,6 +306,7 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
+                extra_body= {"spl_learning": False},
             )
             
             # Calculate time taken
@@ -169,11 +315,18 @@ def evaluate_model(
             # Get the response text
             response_text = response.choices[0].message.content
             
-            # Evaluate the response
+            # Also store the raw response for reference
+            raw_response = response_text
+            
+            # Process the response to remove thinking blocks
+            processed_response = remove_thinking_blocks(response_text)
+            
+            # Evaluate the processed response
             is_correct = evaluate_response(
-                response_text,
+                processed_response,
                 example['answer'],
-                example['category']
+                example['category'],
+                example['question']  # Pass the question for MMLU evaluation
             )
             
             # Update metrics
@@ -192,13 +345,18 @@ def evaluate_model(
             category_metrics[example['category']]["total"] += 1
             category_metrics[example['category']]["time"] += time_taken
             
+            # Check if thinking blocks were removed
+            has_thinking = '</think>' in raw_response
+            
             # Record detailed result
             detailed_results.append({
                 "id": example['id'],
                 "category": example['category'],
                 "correct": is_correct,
                 "time_taken": time_taken,
-                "response": response_text,
+                "raw_response": raw_response,
+                "processed_response": processed_response if has_thinking else None,
+                "has_thinking": has_thinking,
                 "ground_truth": example['answer']
             })
             
@@ -241,7 +399,10 @@ def save_results(metrics: Dict[str, float], detailed_results: List[Dict[str, Any
         json.dump(detailed_results, f, indent=2)
     
     # Create a summary DataFrame for easier analysis
-    df = pd.DataFrame(detailed_results)
+    df = pd.DataFrame([
+        {k: v for k, v in result.items() if k != 'raw_response' and k != 'processed_response'}
+        for result in detailed_results
+    ])
     df.to_csv(f"{base_filename}_summary.csv", index=False)
     
     logger.info(f"Results saved to {base_filename}_*")
@@ -308,7 +469,12 @@ def main():
                         help="Directory to save results")
     parser.add_argument("--approaches", nargs="+", 
                         help="Specific approaches to evaluate (default: all)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    
+    # Set debug logging if specified
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)

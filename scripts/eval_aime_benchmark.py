@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-client = OpenAI(api_key="optillm", base_url="http://localhost:8888/v1")
+client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 

@@ -1,0 +1,10 @@
+{
+  "total_queries": 500,
+  "strategy_applications": 1297,
+  "strategies_created": 129,
+  "strategies_refined": 97,
+  "successful_resolutions": 346,
+  "last_strategy_id": 129,
+  "reasoning_examples_collected": 0,
+  "strategies_merged": 28
+}

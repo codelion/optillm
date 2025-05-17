@@ -594,12 +594,18 @@ def proxy():
     # Extract response_format if present
     response_format = data.get("response_format", None)
 
-    # Create request config with all parameters
-    request_config = {
+    # Explicit keys that we are already handling
+    explicit_keys = {'stream', 'messages', 'model', 'n', 'response_format'}
+
+    # Copy the rest into request_config
+    request_config = {k: v for k, v in data.items() if k not in explicit_keys}
+
+    # Add the explicitly handled ones
+    request_config.update({
         "stream": stream,
         "n": n,
-        "response_format": response_format  # Add response_format to config
-    }
+        "response_format": response_format,  # Add response_format to config
+    })
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
