@@ -83,6 +83,7 @@ client.chat.completions.create(
 3. **System Prompt Augmentation**: Selected strategies (up to MAX_STRATEGIES_FOR_INFERENCE) are added to the system prompt
 
 When learning mode is enabled, the plugin also performs:
+
 4. **Effectiveness Evaluation**: After generating a response, the system evaluates how well each strategy worked
 5. **Strategy Creation & Refinement**: The system creates new strategies for unseen problem types and periodically refines existing strategies based on usage
 
