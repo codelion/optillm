@@ -39,6 +39,10 @@ The results demonstrate consistent improvements across all benchmarks:
 
 These results are particularly notable for the challenging Arena Auto Hard and AIME24 benchmarks, where traditional approaches often struggle. The improvements suggest that SPL is especially effective for complex problem-solving tasks that benefit from strategic approaches.
 
+![Performance Improvements with System Prompt Learning](performance-comparison.svg)
+
+*Figure 1: Performance comparison between baseline gemini-2.0-flash-lite and the same model with SPL across multiple mathematical benchmarks.*
+
 ## Usage
 
 ### Basic Usage
@@ -85,6 +89,10 @@ When learning mode is enabled, the plugin also performs:
 The plugin maintains two separate limits:
 - **Storage Limit** (MAX_STRATEGIES_PER_TYPE): Controls how many strategies can be stored in the database per problem type
 - **Inference Limit** (MAX_STRATEGIES_FOR_INFERENCE): Controls how many strategies are used during inference for system prompt augmentation
+
+![SPL Learning Workflow](learning-workflow.svg)
+
+*Figure 2: The SPL learning and inference workflow showing how strategies are learned, refined, and applied.*
 
 ## Learning Metrics
 

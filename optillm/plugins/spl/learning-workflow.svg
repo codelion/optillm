@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#ffffff" stroke="#cccccc" stroke-width="2"/>
+  
+  <!-- Title -->
+  <text x="400" y="30" font-family="Arial, sans-serif" font-size="22" font-weight="bold" text-anchor="middle">System Prompt Learning Workflow</text>
+  
+  <!-- Legend -->
+  <rect x="600" y="60" width="15" height="15" rx="2" fill="#e6f2ff" stroke="#3377cc" stroke-width="2"/>
+  <text x="625" y="72" font-family="Arial, sans-serif" font-size="12">Input/Output</text>
+  
+  <rect x="600" y="85" width="15" height="15" rx="2" fill="#ffe6e6" stroke="#cc3333" stroke-width="2"/>
+  <text x="625" y="97" font-family="Arial, sans-serif" font-size="12">Learning Process</text>
+  
+  <rect x="600" y="110" width="15" height="15" rx="2" fill="#e6ffe6" stroke="#33cc33" stroke-width="2"/>
+  <text x="625" y="122" font-family="Arial, sans-serif" font-size="12">Inference Process</text>
+  
+  <rect x="600" y="135" width="15" height="15" rx="2" fill="#fff2e6" stroke="#cc7733" stroke-width="2"/>
+  <text x="625" y="147" font-family="Arial, sans-serif" font-size="12">Storage</text>
+  
+  <!-- Input: User Query -->
+  <rect x="325" y="60" width="150" height="40" rx="5" fill="#e6f2ff" stroke="#3377cc" stroke-width="2"/>
+  <text x="400" y="85" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">User Query</text>
+  
+  <!-- Process 1: Problem Classification -->
+  <rect x="325" y="120" width="150" height="40" rx="5" fill="#e6ffe6" stroke="#33cc33" stroke-width="2"/>
+  <text x="400" y="145" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Problem Classification</text>
+  
+  <!-- Arrow -->
+  <line x1="400" y1="100" x2="400" y2="120" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Strategy Database -->
+  <rect x="150" y="220" width="150" height="60" rx="5" fill="#fff2e6" stroke="#cc7733" stroke-width="2"/>
+  <text x="225" y="245" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Strategy Database</text>
+  <text x="225" y="265" font-family="Arial, sans-serif" font-size="12" text-anchor="middle">Problem Types &amp; Strategies</text>
+  
+  <!-- Process 2: Strategy Selection -->
+  <rect x="325" y="230" width="150" height="40" rx="5" fill="#e6ffe6" stroke="#33cc33" stroke-width="2"/>
+  <text x="400" y="255" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Strategy Selection</text>
+  
+  <!-- Arrows -->
+  <line x1="400" y1="160" x2="400" y2="230" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="300" y1="250" x2="325" y2="250" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Process 3: System Prompt Augmentation -->
+  <rect x="325" y="290" width="150" height="40" rx="5" fill="#e6ffe6" stroke="#33cc33" stroke-width="2"/>
+  <text x="400" y="315" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">System Prompt Augmentation</text>
+  
+  <!-- Arrow -->
+  <line x1="400" y1="270" x2="400" y2="290" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Process 4: LLM Generation -->
+  <rect x="325" y="350" width="150" height="40" rx="5" fill="#e6ffe6" stroke="#33cc33" stroke-width="2"/>
+  <text x="400" y="375" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">LLM Generation</text>
+  
+  <!-- Arrow -->
+  <line x1="400" y1="330" x2="400" y2="350" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Output: LLM Response -->
+  <rect x="325" y="410" width="150" height="40" rx="5" fill="#e6f2ff" stroke="#3377cc" stroke-width="2"/>
+  <text x="400" y="435" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">LLM Response</text>
+  
+  <!-- Arrow -->
+  <line x1="400" y1="390" x2="400" y2="410" stroke="#000000" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Learning Mode Processes -->
+  <!-- Process 5: Strategy Effectiveness Evaluation -->
+  <rect x="525" y="230" width="150" height="40" rx="5" fill="#ffe6e6" stroke="#cc3333" stroke-width="2"/>
+  <text x="600" y="255" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Effectiveness Evaluation</text>
+  
+  <!-- Arrow From LLM Response -->
+  <polyline points="475,430 550,430 550,270" fill="none" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  <text x="500" y="450" font-family="Arial, sans-serif" font-size="12" fill="#cc3333">Learning Mode</text>
+  
+  <!-- Process 6: Strategy Refinement -->
+  <rect x="525" y="290" width="150" height="40" rx="5" fill="#ffe6e6" stroke="#cc3333" stroke-width="2"/>
+  <text x="600" y="315" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Strategy Refinement</text>
+  
+  <!-- Arrow -->
+  <line x1="600" y1="270" x2="600" y2="290" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  
+  <!-- Process 7: Strategy Creation (New Problems) -->
+  <rect x="525" y="170" width="150" height="40" rx="5" fill="#ffe6e6" stroke="#cc3333" stroke-width="2"/>
+  <text x="600" y="195" font-family="Arial, sans-serif" font-size="14" text-anchor="middle">Strategy Creation</text>
+  
+  <!-- Arrow from Problem Classification -->
+  <polyline points="475,140 550,140 550,170" fill="none" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  
+  <!-- Arrow Back to Strategy Database -->
+  <line x1="525" y1="250" x2="225" y2="250" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  <polyline points="525,315 225,315 225,280" fill="none" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  <polyline points="525,190 225,190 225,220" fill="none" stroke="#cc3333" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrowhead)"/>
+  
+  <!-- Definitions for Markers -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#000000"/>
+    </marker>
+  </defs>
+</svg>
