@@ -1,17 +1,43 @@
 # System Prompt Learning (SPL) Plugin for OptiLLM
 
-This plugin implements Andrej Karpathy's [proposed](https://x.com/karpathy/status/1921368644069765486) "third paradigm" for LLM learning, enabling LLMs to learn and improve their problem-solving strategies over time.
+This plugin implements Andrej Karpathy's [proposed](https://x.com/karpathy/status/1921368644069765486) "third paradigm" for LLM learning, enabling large language models to learn and improve their problem-solving strategies over time through experience and reflection.
 
-## Concept
+## Introduction: The Evolution of LLM Learning
 
-While traditional LLM learning involves either:
-- **Pretraining**: Learning factual knowledge from data
-- **Finetuning**: Learning behavioral patterns through supervision or reinforcement
+Large Language Models (LLMs) have traditionally learned in two primary ways:
+1. **Pretraining**: Learning facts, patterns, and language from massive text corpora
+2. **Finetuning**: Learning behaviors through supervised or reinforcement learning
 
 System Prompt Learning introduces a third paradigm:
-- **Strategy Learning**: The model learns explicit problem-solving strategies and remembers them in a growing database
-- These strategies can be selectively applied to new problems based on their type and similarity
-- The system tracks which strategies work well and refines them over time
+3. **Strategy Learning**: The model learns explicit problem-solving strategies through experience, maintains them in a growing knowledge base, and applies them selectively based on problem types
+
+This approach addresses a fundamental limitation of current LLMs—their inability to learn cumulatively from experience. While LLMs can solve individual problems impressively, they typically approach each new problem from scratch rather than building on past successes.
+
+## The SPL Paradigm
+
+System Prompt Learning represents a significant shift in how LLMs approach problem-solving:
+
+- **Experience-Driven Learning**: Rather than relying solely on pretraining or supervised finetuning, SPL enables models to learn from their own problem-solving experiences
+- **Strategy Formalization**: The system explicitly generates, evaluates, and refines problem-solving strategies
+- **Performance Tracking**: SPL tracks which strategies work well for different problem types, creating a dynamic feedback loop
+- **Selective Application**: When faced with a new problem, the system selects the most relevant strategies based on similarity and past performance
+
+This approach mirrors how human experts develop expertise—by accumulating strategies through experience and applying them selectively to new situations.
+
+## Experimental Results
+
+We conducted extensive experiments using the SPL plugin with gemini-2.0-flash-lite on various benchmarks. The learning phase used the OptILLMBench training split (400 instances), while evaluation was performed on the test split (100 instances) and additional popular mathematical benchmarks.
+
+The results demonstrate consistent improvements across all benchmarks:
+
+| Benchmark | Baseline | With SPL | Improvement |
+|-----------|----------|----------|-------------|
+| OptILLMBench | 61% | 65% | +4% |
+| MATH-500 | 85% | 85.6% | +0.6% |
+| Arena Auto Hard | 29% | 37.6% | +8.6% |
+| AIME24 | 23.33% | 30% | +6.67% |
+
+These results are particularly notable for the challenging Arena Auto Hard and AIME24 benchmarks, where traditional approaches often struggle. The improvements suggest that SPL is especially effective for complex problem-solving tasks that benefit from strategic approaches.
 
 ## Usage
 
@@ -60,6 +86,18 @@ The plugin maintains two separate limits:
 - **Storage Limit** (MAX_STRATEGIES_PER_TYPE): Controls how many strategies can be stored in the database per problem type
 - **Inference Limit** (MAX_STRATEGIES_FOR_INFERENCE): Controls how many strategies are used during inference for system prompt augmentation
 
+## Learning Metrics
+
+After training on the OptILLMBench dataset, the system developed a rich knowledge base of strategies:
+
+- **Total queries processed**: 500
+- **Strategies created**: 129
+- **Strategies refined**: 97
+- **Successful resolutions**: 346
+- **Strategies merged**: 28
+
+These metrics indicate a healthy learning process with a balance between creation, refinement, and merging of similar strategies.
+
 ## Data Storage
 
 Strategies are stored in JSON format in the `spl_data` directory:
@@ -79,23 +117,39 @@ You can:
 
 ## Example Strategy
 
-A strategy in the database looks like this:
+Below is an example of a strategy learned by the system for word problems:
 
 ```json
 {
-  "strategy_id": "strategy_1",
-  "problem_type": "arithmetic_calculation",
-  "strategy_text": "When solving arithmetic calculations:\n1. Identify the operations needed (addition, subtraction, multiplication, division)\n2. Follow the order of operations (PEMDAS)\n3. Simplify expressions step by step, showing your work\n4. Double-check your calculations with inverse operations",
-  "examples": ["Solve 3x + 5 = 14"],
-  "success_count": 8,
-  "total_attempts": 10,
-  "created_at": "2025-05-12T10:15:30.123456",
-  "last_used": "2025-05-12T14:25:10.654321",
-  "last_updated": "2025-05-12T12:30:45.987654",
-  "confidence": 0.8,
-  "tags": ["math", "equations"]
+  "strategy_id": "strategy_3",
+  "problem_type": "word_problem",
+  "strategy_text": "**Refined Strategy for Solving Word Problems:**\n\n1.  **Understand:**\n    *   Read the problem carefully (multiple times).\n    *   Identify the question (what are you trying to find?).\n    *   List all given information (facts, numbers, units).\n    *   Clarify ambiguous terms/units.\n\n2.  **Organize Information & Identify Unknowns:**\n    *   Choose an organization method: (e.g., table, diagram, list, drawing).\n    *   Clearly identify the unknowns (what you need to solve for).\n\n3.  **Plan and Translate:**\n    *   Define *all* variables with units (e.g.,  `p = number of pennies`, `c = number of compartments`).\n    *   Identify relationships between knowns and unknowns.\n    *   Convert units if necessary.\n    *   Write equations or expressions, including units, that relate the knowns and unknowns.\n    *   Ensure units are consistent throughout the equations.\n    *   Outline the solution steps.\n\n4.  **Solve:**\n    *   Show work step-by-step.\n    *   Track units throughout calculations.\n    *   Calculate accurately.\n    *   Solve for the unknowns.\n\n5.  **Evaluate and Verify:**\n    *   Check if the answer is reasonable.\n    *   Verify the answer.\n\n6.  **Summarize:**\n    *   State the answer with units.",
+  "success_count": 85,
+  "total_attempts": 192,
+  "confidence": 0.425
 }
 ```
+
+This strategy was developed through multiple refinement cycles and has a success rate of 44.3% (85/192). The system continuously updates these metrics as the strategy is applied to new problems.
+
+## Motivations and Broader Impact
+
+### The System Prompt Gap
+
+Most LLM providers like Anthropic (Claude) and OpenAI (GPT) employ elaborate system prompts that encode sophisticated problem-solving strategies. However, the majority of users interact with these models using very basic or empty system prompts, missing out on the benefits of strategic guidance.
+
+SPL bridges this gap by automatically learning and applying effective strategies, democratizing access to the benefits of well-crafted system prompts without requiring expertise in prompt engineering.
+
+### Learning from Experience
+
+Current LLMs are often described as "one-shot learners"—they can solve individual problems but don't accumulate knowledge from these experiences. SPL represents a step toward models that improve through use, similar to how humans develop expertise through practice and reflection.
+
+### Human-Readable Learning
+
+Unlike black-box learning approaches, SPL produces human-readable strategies that can be inspected, understood, and even manually edited. This transparency allows for:
+- Understanding how the model approaches different problems
+- Identifying potential biases or flaws in reasoning
+- Transferring strategies between models or domains
 
 ## Benefits
 
@@ -103,3 +157,15 @@ A strategy in the database looks like this:
 2. **Explicit Knowledge**: Strategies are human-readable and provide insight into the LLM's reasoning
 3. **Efficiency**: Reuses successful approaches rather than solving each problem from scratch
 4. **Adaptability**: Different strategies for different problem types
+5. **Transparency**: Learning process and outcomes can be inspected and understood
+
+## Conclusion and Future Work
+
+System Prompt Learning represents a promising new direction for enabling LLMs to learn from experience in a transparent and interpretable way. Our experiments demonstrate significant performance improvements across multiple benchmarks, particularly for complex problem-solving tasks.
+
+Future work will focus on:
+1. Expanding the range of problem types the system can recognize
+2. Improving the strategy refinement process
+3. Enabling cross-domain strategy transfer
+4. Developing mechanisms for human feedback on strategies
+5. Exploring hybrid approaches that combine SPL with other learning paradigms
