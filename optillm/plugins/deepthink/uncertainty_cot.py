@@ -78,17 +78,21 @@ class UncertaintyRoutedCoT:
         # Evaluate confidence through consistency
         confidence_score = self._evaluate_confidence(sample_data)
         
+        # Log confidence evaluation details
+        logger.debug(f"Confidence evaluation completed: {confidence_score:.3f}")
+        logger.debug(f"Sample answers: {[sample['answer'][:50] + '...' if len(sample['answer']) > 50 else sample['answer'] for sample in sample_data if sample['answer']]}")
+        
         # Route decision based on confidence
         if confidence_score >= confidence_threshold:
             # High confidence: use majority vote
             final_response = self._majority_vote_response(sample_data)
             routing_decision = "majority_vote"
-            logger.info(f"High confidence ({confidence_score:.3f}) - using majority vote")
+            logger.info(f"High confidence ({confidence_score:.3f} >= {confidence_threshold}) - using majority vote")
         else:
             # Low confidence: use greedy sample
             final_response = greedy_sample
             routing_decision = "greedy"
-            logger.info(f"Low confidence ({confidence_score:.3f}) - using greedy sample")
+            logger.info(f"Low confidence ({confidence_score:.3f} < {confidence_threshold}) - using greedy sample")
         
         return {
             "final_response": final_response,
@@ -206,9 +210,18 @@ class UncertaintyRoutedCoT:
         # Combine metrics (weighted average)
         confidence = (0.6 * answer_consistency + 0.4 * reasoning_consistency)
         
-        logger.debug(f"Answer consistency: {answer_consistency:.3f}")
-        logger.debug(f"Reasoning consistency: {reasoning_consistency:.3f}")
+        logger.debug(f"Answer consistency: {answer_consistency:.3f} (weight: 0.6)")
+        logger.debug(f"Reasoning consistency: {reasoning_consistency:.3f} (weight: 0.4)")
         logger.debug(f"Combined confidence: {confidence:.3f}")
+        
+        # Log additional details for debugging low confidence
+        if confidence < 0.5:
+            logger.debug(f"Low confidence detected. Sample count: {len(sample_data)}")
+            logger.debug(f"Answers found: {len(answers)}, Thinking texts: {len(thinking_texts)}")
+            if answers:
+                logger.debug(f"Sample answers: {answers}")
+            if len(answers) >= 2:
+                logger.debug(f"Most common answer appears {max(Counter(answers).values())} times out of {len(answers)}")
         
         return confidence
     
@@ -232,6 +245,9 @@ class UncertaintyRoutedCoT:
         
         # Calculate agreement ratio
         agreement_ratio = most_common_count / total_answers
+        
+        logger.debug(f"Answer distribution: {dict(answer_counts)}")
+        logger.debug(f"Agreement ratio: {agreement_ratio:.3f} ({most_common_count}/{total_answers})")
         
         # Also consider semantic similarity for non-identical answers
         max_similarity = 0.0
@@ -263,6 +279,9 @@ class UncertaintyRoutedCoT:
         
         # Return average similarity
         avg_similarity = sum(similarities) / len(similarities)
+        
+        logger.debug(f"Reasoning similarity pairs: {[f'{s:.3f}' for s in similarities]}")
+        logger.debug(f"Average reasoning similarity: {avg_similarity:.3f}")
         
         return min(avg_similarity, 1.0)
     

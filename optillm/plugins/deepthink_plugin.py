@@ -110,8 +110,11 @@ def run(
         
     except Exception as e:
         logger.error(f"Error in Deep Think plugin: {str(e)}")
+        logger.debug(f"Exception traceback:", exc_info=True)
+        
         # Fallback to simple generation
         try:
+            logger.info("Attempting fallback to simple generation")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -123,10 +126,12 @@ def run(
                 top_p=config["top_p"]
             )
             
+            logger.info("Fallback generation successful")
             return response.choices[0].message.content.strip(), response.usage.completion_tokens
             
         except Exception as fallback_error:
             logger.error(f"Fallback generation also failed: {str(fallback_error)}")
+            logger.debug(f"Fallback exception traceback:", exc_info=True)
             return f"Error in Deep Think plugin: {str(e)}", 0
 
 def _parse_config(request_config: Dict[str, Any]) -> Dict[str, Any]:

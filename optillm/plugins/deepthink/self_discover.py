@@ -83,10 +83,11 @@ Instructions:
 2. Select 3-7 reasoning modules that are most relevant for this task
 3. Consider both the complexity of the task and the complementary nature of different modules
 4. Avoid selecting too many similar modules
+5. IMPORTANT: Respond ONLY with a valid JSON array of numbers
 
-Respond with a JSON list containing the numbers of the selected modules. For example: [1, 5, 9, 15, 23]
+Example response format: [1, 5, 9, 15, 23]
 
-Selected modules:"""
+Selected modules (JSON array only):"""
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -209,7 +210,10 @@ Instructions:
 5. Ensure the structure flows logically from problem understanding to final answer
 6. The structure should be comprehensive enough to handle the complexity of the task
 
-Create the reasoning structure in valid JSON format:"""
+7. IMPORTANT: Return ONLY valid JSON with double quotes around all property names and string values
+8. Do not include any text before or after the JSON structure
+
+Valid JSON reasoning structure:"""
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -222,33 +226,131 @@ Create the reasoning structure in valid JSON format:"""
         
         response_text = response.choices[0].message.content.strip()
         
-        # Extract JSON from response
+        # Extract and parse JSON from response with improved error handling
+        return self._parse_json_structure(response_text)
+    
+    def _parse_json_structure(self, response_text: str) -> Dict[str, Any]:
+        """Parse JSON structure with robust error handling and cleanup."""
+        
+        # Define fallback structure
+        fallback_structure = {
+            "problem_understanding": "Analyze and understand the problem requirements",
+            "solution_approach": "Determine the best approach based on problem characteristics", 
+            "step_by_step_reasoning": "Work through the problem systematically",
+            "verification": "Verify the solution is correct and complete",
+            "final_answer": "State the final answer clearly"
+        }
+        
+        # Try multiple JSON extraction and parsing strategies
+        strategies = [
+            self._extract_json_strategy_1,
+            self._extract_json_strategy_2,
+            self._extract_json_strategy_3,
+            self._clean_and_parse_strategy
+        ]
+        
+        for i, strategy in enumerate(strategies, 1):
+            try:
+                structure = strategy(response_text)
+                if structure and isinstance(structure, dict) and len(structure) > 0:
+                    logger.debug(f"Successfully parsed JSON using strategy {i}")
+                    return structure
+            except Exception as e:
+                logger.debug(f"Strategy {i} failed: {e}")
+                continue
+        
+        logger.warning(f"All JSON parsing strategies failed. Using fallback structure.")
+        logger.debug(f"Raw response that failed to parse: {response_text[:500]}...")
+        return fallback_structure
+    
+    def _extract_json_strategy_1(self, text: str) -> Dict[str, Any]:
+        """Strategy 1: Find first complete JSON object with balanced braces."""
+        start_idx = text.find('{')
+        if start_idx == -1:
+            raise ValueError("No opening brace found")
+        
+        brace_count = 0
+        end_idx = start_idx
+        
+        for i in range(start_idx, len(text)):
+            if text[i] == '{':
+                brace_count += 1
+            elif text[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i + 1
+                    break
+        
+        if brace_count != 0:
+            raise ValueError("Unbalanced braces")
+        
+        json_str = text[start_idx:end_idx]
+        return json.loads(json_str)
+    
+    def _extract_json_strategy_2(self, text: str) -> Dict[str, Any]:
+        """Strategy 2: Use regex with non-greedy matching."""
+        # Look for JSON object with non-greedy matching
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text)
+        if not json_match:
+            raise ValueError("No JSON object found with regex")
+        
+        json_str = json_match.group(0)
+        return json.loads(json_str)
+    
+    def _extract_json_strategy_3(self, text: str) -> Dict[str, Any]:
+        """Strategy 3: Extract between ```json``` code blocks."""
+        patterns = [
+            r'```json\s*([^`]+)```',
+            r'```\s*([^`]+)```',
+            r'`([^`]+)`'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.DOTALL)
+            if match:
+                json_str = match.group(1).strip()
+                try:
+                    return json.loads(json_str)
+                except:
+                    continue
+        
+        raise ValueError("No valid JSON found in code blocks")
+    
+    def _clean_and_parse_strategy(self, text: str) -> Dict[str, Any]:
+        """Strategy 4: Clean common formatting issues and parse."""
+        # Find JSON-like content
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not json_match:
+            raise ValueError("No JSON-like content found")
+        
+        json_str = json_match.group(0)
+        
+        # Common cleanup operations
+        cleanups = [
+            # Fix single quotes to double quotes (but be careful about apostrophes)
+            (r"(?<!\\)'([^']*)'(?=\s*[,}])", r'"\1"'),
+            # Fix unquoted property names
+            (r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":'),
+            # Fix trailing commas
+            (r',\s*([}\]])', r'\1'),
+            # Fix extra commas
+            (r',,+', r','),
+        ]
+        
+        for pattern, replacement in cleanups:
+            json_str = re.sub(pattern, replacement, json_str)
+        
+        # Try parsing the cleaned JSON
         try:
-            # Look for JSON object in the response
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                structure = json.loads(json_match.group(0))
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # One more attempt: try to fix the specific error location
+            if "line 1 column 2" in str(e):
+                # Common issue: extra characters at start
+                json_str = re.sub(r'^[^{]*', '', json_str)
+                return json.loads(json_str)
             else:
-                # Fallback structure
-                structure = {
-                    "problem_understanding": "Analyze and understand the problem requirements",
-                    "solution_approach": "Determine the best approach based on problem characteristics",
-                    "step_by_step_reasoning": "Work through the problem systematically",
-                    "verification": "Verify the solution is correct and complete",
-                    "final_answer": "State the final answer clearly"
-                }
-            
-            return structure
-            
-        except Exception as e:
-            logger.warning(f"Error parsing reasoning structure: {e}")
-            # Return fallback structure
-            return {
-                "analysis": "Analyze the problem systematically",
-                "approach": "Select appropriate solution method",
-                "reasoning": "Apply step-by-step logical reasoning",
-                "conclusion": "Draw final conclusion with supporting evidence"
-            }
+                raise e
     
     def solve_with_structure(self, problem: str, reasoning_structure: Dict[str, Any]) -> str:
         """
