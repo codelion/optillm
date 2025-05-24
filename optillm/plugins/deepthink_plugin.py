@@ -7,8 +7,8 @@ for enhanced reasoning in large language models.
 
 import logging
 from typing import Tuple, Dict, Any
-from .self_discover import SelfDiscover
-from .uncertainty_cot import UncertaintyRoutedCoT
+from optillm.plugins.deepthink.self_discover import SelfDiscover
+from optillm.plugins.deepthink.uncertainty_cot import UncertaintyRoutedCoT
 
 # Plugin identifier for optillm
 SLUG = "deepthink"
