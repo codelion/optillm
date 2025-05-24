@@ -98,7 +98,26 @@ The plugin will:
 
 ## Performance
 
-The Deep Think approach has shown significant improvements on complex reasoning tasks:
+The Deep Think approach has shown significant improvements on complex reasoning tasks, with particularly strong results on mathematical competition problems.
+
+### AIME 2025 Results
+
+| Model | Approach | Accuracy | Improvement |
+|-------|----------|----------|-------------|
+| qwen-3-32b | Baseline | 43.33% | - |
+| qwen-3-32b | Deep Think | **63.33%** | **+20.00pp** |
+
+*Experimental settings: max_completion_tokens=16382, temperature=0.7, top_p=0.95*
+
+**Key Findings:**
+- **46% relative improvement** over baseline on mathematical reasoning
+- **Cerebras inference** was crucial for enabling high inference-time compute without latency penalty
+- The combination of SELF-DISCOVER structure discovery and uncertainty-routed sampling proved particularly effective for competition mathematics
+- Enhanced accuracy on multi-step problems requiring systematic reasoning
+
+### Other Improvements
+
+The Deep Think approach has also demonstrated:
 - Enhanced accuracy on multi-step problems
 - Better handling of ambiguous or open-ended questions
 - Improved consistency across different problem types
