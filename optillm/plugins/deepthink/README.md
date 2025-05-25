@@ -133,4 +133,4 @@ The Deep Think approach has also demonstrated:
 ## References
 
 - Zhou, P. et al. "SELF-DISCOVER: Large Language Models Self-Compose Reasoning Structures" (2024)
-- Uncertainty-routed chain-of-thought approaches in advanced reasoning systems
+- Uncertainty-routed chain-of-thought approaches in advanced reasoning systems is from the paper "Gemini: A Family of Highly Capable Multimodal Models" (2023), https://arxiv.org/abs/2312.11805
