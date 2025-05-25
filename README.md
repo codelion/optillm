@@ -366,6 +366,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
 | System Prompt Learning  | `spl`              | Implements what [Andrej Karpathy called the third paradigm](https://x.com/karpathy/status/1921368644069765486) for LLM learning, this enables the model to acquire program solving knowledge and strategies |
+| Deep Think              | `deepthink`        | Implements a Gemini-like Deep Think approach using inference time scaling for reasoning LLMs |
 | Long-Context Cerebras Planning and Optimization              | `longcepo`              | Combines planning and divide-and-conquer processing of long documents to enable infinite context  |
 | MCP Client              | `mcp`              | Implements the model context protocol (MCP) client, enabling you to use any LLM with any MCP Server  |
 | Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
@@ -564,6 +565,8 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## References
 - [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)
+- [Self-Discover: Large Language Models Self-Compose Reasoning Structures
+](https://arxiv.org/abs/2402.03620) - [Implementation](optillm/plugings/deepthink)
 - [CePO: Empowering Llama with Reasoning using Test-Time Compute](https://cerebras.ai/blog/cepo) - [Implementation](optillm/cepo)
 - [LongCePO: Empowering LLMs to efficiently leverage infinite context](https://cerebras.ai/blog/longcepo) - [Implementation](optillm/plugins/longcepo)
 - [Chain of Code: Reasoning with a Language Model-Augmented Code Emulator](https://arxiv.org/abs/2312.04474) - [Inspired the implementation of coc plugin](optillm/plugins/coc_plugin.py)
