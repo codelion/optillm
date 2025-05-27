@@ -343,7 +343,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 | Approach                             | Slug               | Description                                                                                    |
 | ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
-| Cerebras Planning and Optimization   | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
+| [Cerebras Planning and Optimization](optillm/cepo)   | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
 | CoT with Reflection                  | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output\> sections |
 | PlanSearch                           | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
 | ReRead                               | `re2`              | Implements rereading to improve reasoning by processing queries twice                          |
@@ -359,15 +359,15 @@ Check this log file for connection issues, tool execution errors, and other diag
 | CoT Decoding                         |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 | Entropy Decoding                     |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
 | Thinkdeeper                          |  N/A for proxy     | Implements the `reasoning_effort` param from OpenAI for reasoning models like DeepSeek R1      |
-| AutoThink                            |  N/A for proxy     | Combines query complexity classification with steering vectors to enhance reasoning            |
+| [AutoThink](optillm/autothink)       |  N/A for proxy     | Combines query complexity classification with steering vectors to enhance reasoning            |
 
 ## Implemented plugins
 
 | Plugin                  | Slug               | Description                                                                                    |
 | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
-| System Prompt Learning  | `spl`              | Implements what [Andrej Karpathy called the third paradigm](https://x.com/karpathy/status/1921368644069765486) for LLM learning, this enables the model to acquire program solving knowledge and strategies |
-| Deep Think              | `deepthink`        | Implements a Gemini-like Deep Think approach using inference time scaling for reasoning LLMs |
-| Long-Context Cerebras Planning and Optimization              | `longcepo`              | Combines planning and divide-and-conquer processing of long documents to enable infinite context  |
+| [System Prompt Learning](optillm/plugins/spl)  | `spl`              | Implements what [Andrej Karpathy called the third paradigm](https://x.com/karpathy/status/1921368644069765486) for LLM learning, this enables the model to acquire program solving knowledge and strategies |
+| [Deep Think](optillm/plugins/deepthink)              | `deepthink`        | Implements a Gemini-like Deep Think approach using inference time scaling for reasoning LLMs |
+| [Long-Context Cerebras Planning and Optimization](optillm/plugins/longcepo)              | `longcepo`              | Combines planning and divide-and-conquer processing of long documents to enable infinite context  |
 | MCP Client              | `mcp`              | Implements the model context protocol (MCP) client, enabling you to use any LLM with any MCP Server  |
 | Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
 | Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
