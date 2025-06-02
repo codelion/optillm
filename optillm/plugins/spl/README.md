@@ -124,9 +124,13 @@ You can:
 2. Edit the strategies.json file to manually add or modify strategies
 3. Reset the learning by deleting these files (they will be recreated)
 
-## Example Strategy
+## Examples of Learned Strategies
 
-Below is an example of a strategy learned by the system for word problems:
+The system learns diverse problem-solving approaches for different types of problems. Below are examples of strategies discovered by optillm during training:
+
+### Strategy 1: Comprehensive Word Problem Strategy
+
+A detailed, refined strategy for complex word problems (Success rate: 44.3%):
 
 ```json
 {
@@ -134,12 +138,59 @@ Below is an example of a strategy learned by the system for word problems:
   "problem_type": "word_problem",
   "strategy_text": "**Refined Strategy for Solving Word Problems:**\n\n1.  **Understand:**\n    *   Read the problem carefully (multiple times).\n    *   Identify the question (what are you trying to find?).\n    *   List all given information (facts, numbers, units).\n    *   Clarify ambiguous terms/units.\n\n2.  **Organize Information & Identify Unknowns:**\n    *   Choose an organization method: (e.g., table, diagram, list, drawing).\n    *   Clearly identify the unknowns (what you need to solve for).\n\n3.  **Plan and Translate:**\n    *   Define *all* variables with units (e.g.,  `p = number of pennies`, `c = number of compartments`).\n    *   Identify relationships between knowns and unknowns.\n    *   Convert units if necessary.\n    *   Write equations or expressions, including units, that relate the knowns and unknowns.\n    *   Ensure units are consistent throughout the equations.\n    *   Outline the solution steps.\n\n4.  **Solve:**\n    *   Show work step-by-step.\n    *   Track units throughout calculations.\n    *   Calculate accurately.\n    *   Solve for the unknowns.\n\n5.  **Evaluate and Verify:**\n    *   Check if the answer is reasonable.\n    *   Verify the answer.\n\n6.  **Summarize:**\n    *   State the answer with units.",
   "success_count": 85,
-  "total_attempts": 192,
-  "confidence": 0.425
+  "total_attempts": 192
 }
 ```
 
-This strategy was developed through multiple refinement cycles and has a success rate of 44.3% (85/192). The system continuously updates these metrics as the strategy is applied to new problems.
+### Strategy 2: Streamlined Problem-Solving Approach
+
+A more concise strategy focusing on planning and execution (Success rate: 43.5%):
+
+```json
+{
+  "strategy_id": "strategy_4",
+  "problem_type": "word_problem",
+  "strategy_text": "1.  **Understand and Plan:**\n    *   Identify the question.\n    *   Determine the problem type (e.g., addition, subtraction, multiplication, division, multi-step).\n    *   Extract key information (given values, units, and unknowns).\n    *   Define variables with their units (e.g., x = cost in dollars).\n    *   Outline the solution steps *before* performing calculations, ensuring the order of operations is clear.\n    *   Translate the problem into an equation or set of equations.\n\n2.  **Execute and Solve:**\n    *   Perform each calculation step-by-step, clearly labeling each step and showing your work, including units.\n    *   Solve the equation(s).\n\n3.  **Answer and Format:**\n    *   State the final answer with the correct units.\n    *   Format the answer as requested (e.g., \"### [answer]\").",
+  "success_count": 84,
+  "total_attempts": 193
+}
+```
+
+### Strategy 3: Probability and Percentage Problems
+
+A specialized strategy for probability and percentage calculations (Success rate: 51.9%):
+
+```json
+{
+  "strategy_id": "strategy_5",
+  "problem_type": "word_problem",
+  "strategy_text": "1.  **Understand:**\n    *   Identify the question and the desired units of the answer (often a probability or a percentage).\n    *   Determine the problem type (e.g., rate, ratio, percentage, fraction, simple arithmetic, probability). Look for keywords like \"probability,\" \"chance,\" or \"randomly.\"\n    *   Identify the *unknown* quantity you need to find (e.g., the probability of an event).\n    *   Extract all relevant numerical values and units.\n    *   Consider any relevant real-world context or background information.\n\n2.  **Plan:**\n    *   Break down the problem into smaller, logical steps.\n    *   Translate the word problem into mathematical expressions and equations.\n    *   Identify the mathematical operations needed.\n    *   Consider using diagrams or visualizations to represent the problem (e.g., tree diagrams for probability).\n    *   **For probability problems:**\n        *   Determine if the events are independent or dependent.\n        *   Calculate the probability of each individual event.\n        *   Use the appropriate rules for combining probabilities (e.g., multiplication for \"and,\" addition for \"or\").\n\n3.  **Execute:**\n    *   Perform calculations systematically, showing each step clearly.\n    *   Clearly label each step with a description of what is being calculated.\n    *   Include units with each value and in the final answer.\n    *   **For probability problems:** Clearly show all probability calculations.\n\n4.  **Answer and Verify:**\n    *   State the final answer with the correct units (if applicable).\n    *   Check if the answer is reasonable within the context of the problem.\n    *   **For probability problems:** Verify that the probability is between 0 and 1.",
+  "success_count": 126,
+  "total_attempts": 243
+}
+```
+
+### Strategy 4: Simple Calculation Strategy
+
+A basic strategy for straightforward calculation problems:
+
+```json
+{
+  "strategy_id": "strategy_6",
+  "problem_type": "word_problem",
+  "strategy_text": "Here's the problem-solving strategy:\n\n1.  **Identify the Knowns:**\n    *   Distance: 240 meters (length of the train, since it crosses a post)\n    *   Time: 16 seconds\n2.  **Identify the Unknown:** Speed of the train.\n3.  **Choose the Correct Formula:** Speed = Distance / Time\n4.  **Substitute Values:** Speed = 240 meters / 16 seconds\n5.  **Calculate the Answer:** Speed = 15 m/s\n6.  **Provide the Answer:** (Assuming answer choices are given, choose the letter corresponding to 15 m/s)"
+}
+```
+
+### Key Observations
+
+1. **Strategy Evolution**: The system develops increasingly sophisticated approaches as it encounters more problems
+2. **Specialization**: Different strategies emerge for different problem subtypes (probability vs. basic calculations)
+3. **Performance Tracking**: Success rates vary significantly, with specialized strategies often performing better on their target problem types
+4. **Adaptive Refinement**: Strategies are continuously refined based on performance and new examples
+5. **Human-Readable Knowledge**: All strategies remain interpretable and can be manually inspected or edited
+
+These examples demonstrate how SPL enables models to build explicit, improvable knowledge bases rather than relying solely on implicit learning through parameter updates.
 
 ## Motivations and Broader Impact
 
