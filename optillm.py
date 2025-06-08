@@ -729,7 +729,7 @@ def proxy_models():
             client = default_client
 
         # Fetch models using the OpenAI client and return the raw response
-        models_response = client.models.list()
+        models_response = client.models.list().json()
 
         logger.debug('Models retrieved successfully')
         return models_response, 200
