@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Tuple, List
 
-from optillm.plugins.longcepo.utils import (
+from .utils import (
     CBLog,
     LongCepoConfig,
     get_prompt_response,
@@ -9,7 +9,7 @@ from optillm.plugins.longcepo.utils import (
     logger,
     loop_until_match,
 )
-from optillm.plugins.longcepo.chunking import (
+from .chunking import (
     chunk_context,
     get_prompt_length,
 )

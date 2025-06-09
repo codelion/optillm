@@ -6,22 +6,22 @@ import time
 import logging
 from typing import Tuple, Dict, List, Optional, Any
 
-from optillm.plugins.spl.strategy import Strategy, StrategyDatabase
-from optillm.plugins.spl.generation import (
+from .strategy import Strategy, StrategyDatabase
+from .generation import (
     classify_problem,
     generate_strategy,
     should_create_new_strategy
 )
-from optillm.plugins.spl.evaluation import (
+from .evaluation import (
     select_relevant_strategies,
     evaluate_strategy_effectiveness,
     refine_strategy
 )
-from optillm.plugins.spl.utils import (
+from .utils import (
     extract_thinking,
     augment_system_prompt
 )
-from optillm.plugins.spl.config import (
+from .config import (
     DEFAULT_MAX_TOKENS,
     MAINTENANCE_INTERVAL,
     STRATEGY_MERGING_THRESHOLD,

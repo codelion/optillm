@@ -3,7 +3,7 @@
 import re
 from typing import List
 
-from optillm.plugins.longcepo.utils import logger
+from .utils import logger
 
 
 def get_prompt_length(prompt: str, tokenizer, no_special_tokens=False, **kwargs) -> int:

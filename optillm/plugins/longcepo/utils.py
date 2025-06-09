@@ -3,7 +3,7 @@ from typing import Callable, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
-from optillm.plugins.longcepo.config import LongCepoConfig
+from .config import LongCepoConfig
 
 logger = logging.getLogger(__name__)
 
