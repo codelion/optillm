@@ -5,10 +5,11 @@ Combines SELF-DISCOVER framework with uncertainty-routed chain-of-thought
 for enhanced reasoning in large language models.
 """
 
+import os
+import sys
+import importlib.util
 import logging
 from typing import Tuple, Dict, Any
-from optillm.plugins.deepthink.self_discover import SelfDiscover
-from optillm.plugins.deepthink.uncertainty_cot import UncertaintyRoutedCoT
 
 # Plugin identifier for optillm
 SLUG = "deepthink"
@@ -40,18 +41,38 @@ def run(
     """
     logger.info("Starting Deep Think reasoning process")
     
-    # Extract configuration parameters
-    config = _parse_config(request_config or {})
+    # Get the directory where this plugin is located
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    deepthink_dir = os.path.join(plugin_dir, 'deepthink')
+    
+    # Add the deepthink directory to the Python path temporarily
+    if deepthink_dir not in sys.path:
+        sys.path.insert(0, deepthink_dir)
     
     try:
+        # Load the modules dynamically
+        self_discover_file = os.path.join(deepthink_dir, 'self_discover.py')
+        uncertainty_cot_file = os.path.join(deepthink_dir, 'uncertainty_cot.py')
+        
+        spec1 = importlib.util.spec_from_file_location("self_discover", self_discover_file)
+        self_discover_module = importlib.util.module_from_spec(spec1)
+        spec1.loader.exec_module(self_discover_module)
+        
+        spec2 = importlib.util.spec_from_file_location("uncertainty_cot", uncertainty_cot_file)
+        uncertainty_cot_module = importlib.util.module_from_spec(spec2)
+        spec2.loader.exec_module(uncertainty_cot_module)
+        
+        # Extract configuration parameters
+        config = _parse_config(request_config or {})
+        
         # Initialize components
-        self_discover = SelfDiscover(
+        self_discover = self_discover_module.SelfDiscover(
             client=client,
             model=model,
             max_tokens=config["max_tokens"]
         )
         
-        uncertainty_cot = UncertaintyRoutedCoT(
+        uncertainty_cot = uncertainty_cot_module.UncertaintyRoutedCoT(
             client=client,
             model=model,
             max_tokens=config["max_tokens"]
@@ -108,31 +129,10 @@ def run(
         
         return final_response, total_tokens
         
-    except Exception as e:
-        logger.error(f"Error in Deep Think plugin: {str(e)}")
-        logger.debug(f"Exception traceback:", exc_info=True)
-        
-        # Fallback to simple generation
-        try:
-            logger.info("Attempting fallback to simple generation")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": initial_query}
-                ],
-                max_tokens=config["max_tokens"],
-                temperature=config["temperature"],
-                top_p=config["top_p"]
-            )
-            
-            logger.info("Fallback generation successful")
-            return response.choices[0].message.content.strip(), response.usage.completion_tokens
-            
-        except Exception as fallback_error:
-            logger.error(f"Fallback generation also failed: {str(fallback_error)}")
-            logger.debug(f"Fallback exception traceback:", exc_info=True)
-            return f"Error in Deep Think plugin: {str(e)}", 0
+    finally:
+        # Remove from path after use
+        if deepthink_dir in sys.path:
+            sys.path.remove(deepthink_dir)
 
 def _parse_config(request_config: Dict[str, Any]) -> Dict[str, Any]:
     """Parse and validate configuration parameters."""

@@ -2,8 +2,9 @@ import re
 from typing import Tuple
 from functools import partial
 
-from optillm.plugins.longcepo.mapreduce import mapreduce
-from optillm.plugins.longcepo.utils import (
+# Use relative imports that work within the dynamically loaded module
+from .mapreduce import mapreduce
+from .utils import (
     get_prompt_response,
     logger,
     longcepo_init,
