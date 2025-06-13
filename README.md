@@ -564,6 +564,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
 ## References
+- [Eliciting Fine-Tuned Transformer Capabilities via Inference-Time Techniques](https://arxiv.org/abs/2506.08060)
 - [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)
 - [Self-Discover: Large Language Models Self-Compose Reasoning Structures
 ](https://arxiv.org/abs/2402.03620) - [Implementation](optillm/plugings/deepthink)
