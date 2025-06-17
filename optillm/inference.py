@@ -770,8 +770,28 @@ class InferencePipeline:
             
             self.tokenizer = self.setup_tokenizer(self.tokenizer)
             
+            # Handle token embedding resize with MPS device compatibility
             if self.base_model.get_input_embeddings().num_embeddings != len(self.tokenizer):
-                self.base_model.resize_token_embeddings(len(self.tokenizer))
+                try:
+                    self.base_model.resize_token_embeddings(len(self.tokenizer))
+                except NotImplementedError as e:
+                    if "MPS" in str(e) and "linalg_cholesky_ex" in str(e):
+                        logger.warning("MPS device doesn't support token embedding resize operation. "
+                                     "Temporarily moving to CPU for resize operation.")
+                        # Get current device
+                        original_device = next(self.base_model.parameters()).device
+                        
+                        # Move model to CPU for resize operation
+                        self.base_model = self.base_model.cpu()
+                        self.base_model.resize_token_embeddings(len(self.tokenizer))
+                        
+                        # Move model back to original device
+                        if original_device.type != 'cpu':
+                            self.base_model = self.base_model.to(original_device)
+                            logger.info(f"Model moved back to {original_device}")
+                    else:
+                        # Re-raise if it's a different NotImplementedError
+                        raise
             
             self.current_model = self.base_model
             
