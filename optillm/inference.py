@@ -317,22 +317,19 @@ class MLXInferencePipeline:
             try:
                 logger.debug(f"Generating with MLX: max_tokens={max_tokens}, temp={temperature}")
                 
-                # Use MLX generate function
-                response = mlx_generate(
-                    model=self.model,
-                    tokenizer=self.tokenizer,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    repetition_penalty=repetition_penalty,
-                    verbose=False
+                # Use robust MLX generation with multiple fallback approaches
+                response = self._robust_mlx_generate(
+                    prompt, max_tokens, temperature, top_p, repetition_penalty
                 )
                 
                 responses.append(response)
                 
-                # Count tokens (approximate)
-                token_count = len(self.tokenizer.encode(response))
+                # Count tokens (approximate) - check if response is string
+                if isinstance(response, str):
+                    token_count = len(self.tokenizer.encode(response))
+                else:
+                    # Sometimes MLX returns just the new tokens, get the actual text
+                    token_count = len(response) if hasattr(response, '__len__') else 0
                 token_counts.append(token_count)
                 
                 # MLX doesn't provide logprobs by default
@@ -340,6 +337,7 @@ class MLXInferencePipeline:
                 
             except Exception as e:
                 logger.error(f"Error during MLX generation: {str(e)}")
+                logger.error(f"MLX generation parameters: max_tokens={max_tokens}, temp={temperature}, top_p={top_p}")
                 responses.append("")
                 token_counts.append(0)
                 logprobs_results.append(None)
@@ -348,6 +346,87 @@ class MLXInferencePipeline:
         logger.info(f"MLX generation completed in {generation_time:.2f}s")
         
         return responses, token_counts, logprobs_results
+    
+    def _robust_mlx_generate(self, prompt: str, max_tokens: int, temperature: float, top_p: float, repetition_penalty: float) -> str:
+        """Robust MLX generation with multiple parameter combinations"""
+        
+        # Try different parameter combinations based on MLX-LM version
+        parameter_combinations = [
+            # Version 1: Current style with positional args and temp
+            {
+                "style": "positional_temp",
+                "args": (self.model, self.tokenizer, prompt),
+                "kwargs": {
+                    "max_tokens": max_tokens,
+                    "temp": temperature,
+                    "top_p": top_p,
+                    "repetition_penalty": repetition_penalty,
+                    "verbose": False
+                }
+            },
+            # Version 2: All keyword arguments with temp
+            {
+                "style": "keyword_temp", 
+                "args": (),
+                "kwargs": {
+                    "model": self.model,
+                    "tokenizer": self.tokenizer,
+                    "prompt": prompt,
+                    "max_tokens": max_tokens,
+                    "temp": temperature,
+                    "top_p": top_p,
+                    "repetition_penalty": repetition_penalty,
+                    "verbose": False
+                }
+            },
+            # Version 3: Using temperature instead of temp
+            {
+                "style": "positional_temperature",
+                "args": (self.model, self.tokenizer, prompt),
+                "kwargs": {
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "repetition_penalty": repetition_penalty,
+                    "verbose": False
+                }
+            },
+            # Version 4: Minimal parameters only
+            {
+                "style": "minimal",
+                "args": (self.model, self.tokenizer, prompt),
+                "kwargs": {
+                    "max_tokens": max_tokens,
+                    "temp": temperature,
+                    "verbose": False
+                }
+            },
+            # Version 5: Just essential parameters
+            {
+                "style": "essential",
+                "args": (self.model, self.tokenizer, prompt),
+                "kwargs": {
+                    "max_tokens": max_tokens
+                }
+            }
+        ]
+        
+        last_error = None
+        
+        for combo in parameter_combinations:
+            try:
+                logger.debug(f"Trying MLX generation with style: {combo['style']}")
+                response = mlx_generate(*combo["args"], **combo["kwargs"])
+                logger.debug(f"Successfully generated with style: {combo['style']}")
+                return response
+                
+            except Exception as e:
+                last_error = e
+                logger.debug(f"Failed with style {combo['style']}: {str(e)}")
+                continue
+        
+        # If all combinations failed, raise the last error
+        raise RuntimeError(f"All MLX generation methods failed. Last error: {str(last_error)}")
     
     def format_chat_prompt(self, system_prompt: str, user_prompt: str) -> str:
         """Format the prompt according to model's chat template"""
