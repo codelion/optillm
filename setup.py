@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="optillm",
-    version="0.1.15",
+    version="0.1.16",
     packages=find_packages(include=['optillm', 'optillm.*']),  # This ensures all subpackages are included
     py_modules=['optillm'],
     package_data={
@@ -46,6 +46,8 @@ setup(
         "sentencepiece",
         "mcp",
         "adaptive-classifier",
+        # MLX support for Apple Silicon optimization
+        'mlx-lm>=0.24.0; platform_machine=="arm64" and sys_platform=="darwin"',
     ],
     entry_points={
         'console_scripts': [
