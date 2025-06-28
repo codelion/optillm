@@ -1,3 +1,21 @@
+"""
+Chain of Code (CoC) plugin for OptILLM.
+
+This plugin implements a chain-of-code approach that combines Chain-of-Thought (CoT) 
+reasoning with code execution and LLM-based code simulation.
+
+SAFETY NOTE: This plugin has been refactored to use Jupyter notebook kernel execution
+instead of direct exec() calls. This provides process isolation and prevents potentially
+dangerous code from crashing or affecting the main OptILLM process.
+
+Key safety improvements:
+- Code runs in isolated notebook kernels (separate processes)
+- 30-second timeout prevents infinite loops
+- Main process is protected from crashes, system exits, and memory issues
+- Matplotlib/visualization code is safely removed to prevent display issues
+- Comprehensive error handling and recovery
+"""
+
 import re
 import logging
 from typing import Tuple, Dict, Any, List
@@ -6,6 +24,10 @@ import traceback
 import math
 import importlib
 import json
+import nbformat
+from nbconvert.preprocessors import ExecutePreprocessor
+import os
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +36,6 @@ SLUG = "coc"
 
 # Maximum attempts to fix code
 MAX_FIX_ATTEMPTS = 3
-
-# List of allowed modules for execution
-ALLOWED_MODULES = {
-    'math': math,
-    'numpy': 'numpy',  # String indicates module should be imported in execution context
-}
 
 # Initial code generation prompt
 CHAIN_OF_CODE_PROMPT = '''
@@ -89,62 +105,129 @@ def extract_code_blocks(text: str) -> List[str]:
     return blocks
 
 def sanitize_code(code: str) -> str:
-    """Prepare code for execution by adding necessary imports and safety checks."""
-    # Add standard imports
-    imports = "\n".join(f"import {mod}" for mod in ALLOWED_MODULES)
-    
+    """Prepare code for safe execution by removing problematic visualization code."""
     # Remove or modify problematic visualization code
     lines = code.split('\n')
     safe_lines = []
     for line in lines:
-        # Skip matplotlib-related imports and plotting commands
+        # Skip matplotlib-related imports and plotting commands that could cause issues
         if any(x in line.lower() for x in ['matplotlib', 'plt.', '.plot(', '.show(', 'figure', 'subplot']):
-            continue
-        # Keep the line if it's not visualization-related
-        safe_lines.append(line)
+            # Replace with a comment to maintain code structure
+            safe_lines.append(f"# {line}  # Removed for safety")
+        else:
+            # Keep the line if it's not visualization-related
+            safe_lines.append(line)
     
-    safe_code = '\n'.join(safe_lines)
-    safe_code = safe_code.replace('\n', '\n    ')
-    
-    # Add safety wrapper
-    wrapper = f"""
-{imports}
-
-def safe_execute():
-    import numpy as np  # Always allow numpy
-    {safe_code}
-    return answer if 'answer' in locals() else None
-
-result = safe_execute()
-answer = result
-"""
-    return wrapper
+    return '\n'.join(safe_lines)
 
 def execute_code(code: str) -> Tuple[Any, str]:
-    """Attempt to execute the code and return result or error."""
-    logger.info("Attempting to execute code")
+    """Attempt to execute the code using Jupyter notebook kernel and return result or error."""
+    logger.info("Attempting to execute code in notebook kernel")
     logger.info(f"Code:\n{code}")
     
     try:
-        # Create a clean environment
-        execution_env = {}
+        # Sanitize the code first
+        sanitized_code = sanitize_code(code)
         
-        # Execute the code as-is
-        exec(code, execution_env)
+        # Create a notebook with the code
+        notebook = nbformat.v4.new_notebook()
         
-        # Look for answer variable
-        if 'answer' in execution_env:
-            answer = execution_env['answer']
-            logger.info(f"Execution successful. Answer: {answer}")
-            return answer, None
-        else:
-            error = "Code executed but did not produce an answer variable"
-            logger.warning(error)
-            return None, error
+        # Add code that captures the answer variable
+        enhanced_code = f"""
+{sanitized_code}
+
+# Capture the answer variable for output
+if 'answer' in locals():
+    print(f"ANSWER_RESULT: {{answer}}")
+else:
+    print("ANSWER_RESULT: No answer variable found")
+"""
+        
+        notebook['cells'] = [nbformat.v4.new_code_cell(enhanced_code)]
+        
+        # Convert notebook to JSON string and then to bytes
+        notebook_json = nbformat.writes(notebook)
+        notebook_bytes = notebook_json.encode('utf-8')
+
+        # Create temporary notebook file
+        with tempfile.NamedTemporaryFile(mode='wb', suffix='.ipynb', delete=False) as tmp:
+            tmp.write(notebook_bytes)
+            tmp.flush()
+            tmp_name = tmp.name
+
+        try:
+            # Read and execute the notebook
+            with open(tmp_name, 'r', encoding='utf-8') as f:
+                nb = nbformat.read(f, as_version=4)
+            
+            # Execute with timeout and isolation
+            ep = ExecutePreprocessor(timeout=30, kernel_name='python3')
+            ep.preprocess(nb, {'metadata': {'path': './'}})
+
+            # Extract the output
+            output = ""
+            error_output = ""
+            
+            for cell in nb.cells:
+                if cell.cell_type == 'code' and cell.outputs:
+                    for output_item in cell.outputs:
+                        if output_item.output_type == 'stream':
+                            if output_item.name == 'stdout':
+                                output += output_item.text
+                            elif output_item.name == 'stderr':
+                                error_output += output_item.text
+                        elif output_item.output_type == 'execute_result':
+                            output += str(output_item.data.get('text/plain', ''))
+                        elif output_item.output_type == 'error':
+                            error_output += f"{output_item.ename}: {output_item.evalue}"
+            
+            # Check for errors first
+            if error_output:
+                logger.error(f"Execution failed: {error_output}")
+                return None, error_output
+            
+            # Parse the answer from output
+            output = output.strip()
+            
+            # Look for our special ANSWER_RESULT marker
+            if "ANSWER_RESULT:" in output:
+                answer_line = [line for line in output.split('\n') if 'ANSWER_RESULT:' in line][-1]
+                answer_str = answer_line.split('ANSWER_RESULT:', 1)[1].strip()
+                
+                if answer_str == "No answer variable found":
+                    error = "Code executed but did not produce an answer variable"
+                    logger.warning(error)
+                    return None, error
+                
+                try:
+                    # Try to evaluate the answer to convert it to proper type
+                    answer = ast.literal_eval(answer_str)
+                except (ValueError, SyntaxError):
+                    # If literal_eval fails, keep as string
+                    answer = answer_str
+                
+                logger.info(f"Execution successful. Answer: {answer}")
+                return answer, None
+            else:
+                # Fallback: try to extract answer from any output
+                if output:
+                    logger.info(f"Execution completed with output: {output}")
+                    return output, None
+                else:
+                    error = "Code executed but produced no output"
+                    logger.warning(error)
+                    return None, error
+                    
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(tmp_name)
+            except:
+                pass
             
     except Exception as e:
-        error = str(e)
-        logger.error(f"Execution failed: {error}")
+        error = f"Notebook execution failed: {str(e)}"
+        logger.error(error)
         return None, error
 
 def generate_fixed_code(original_code: str, error: str, client, model: str) -> Tuple[str, int]:
