@@ -2,7 +2,7 @@ from importlib import util
 import os
 
 # Version information
-__version__ = "0.1.17"
+__version__ = "0.1.18"
 
 # Get the path to the root optillm.py
 spec = util.spec_from_file_location(
