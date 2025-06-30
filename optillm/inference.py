@@ -189,7 +189,8 @@ def should_use_mlx(model_id: str) -> bool:
     # Models that should use MLX
     mlx_patterns = [
         "mlx-community/",
-        "mlx-"
+        "mlx-",
+        "-mlx-"
     ]
     
     # Known problematic models that should prefer MLX on Apple Silicon
