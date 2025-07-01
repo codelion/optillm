@@ -22,21 +22,27 @@ class LiteLLMWrapper:
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         self.api_key = api_key
         self.base_url = base_url
-        self.chat = self.Chat()
+        self.chat = self.Chat(self.api_key, self.base_url)
         # litellm.set_verbose=True
 
     class Chat:
+        def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+            self.api_key = api_key
+            self.base_url = base_url
+            self.completions = self.Completions(self.api_key, self.base_url)
+
         class Completions:
-            @staticmethod
-            def create(model: str, messages: List[Dict[str, str]], **kwargs):
+            def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+                self.api_key = api_key
+                self.base_url = base_url
+                
+            def create(self, model: str, messages: List[Dict[str, str]], **kwargs):
                 if model.startswith("gemini"):
-                    response = completion(model=model, messages=messages, **kwargs, safety_settings=SAFETY_SETTINGS)
+                    response = completion(model=model, messages=messages, api_key=self.api_key, base_url=self.base_url, **kwargs, safety_settings=SAFETY_SETTINGS)
                 else:
-                    response = completion(model=model, messages=messages, **kwargs)
+                    response = completion(model=model, messages=messages, api_key=self.api_key, base_url=self.base_url, **kwargs)
                 # Convert LiteLLM response to match OpenAI response structure
                 return response
-
-        completions = Completions()
 
     class Models:
         @staticmethod
