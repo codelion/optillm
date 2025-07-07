@@ -331,7 +331,7 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
                           c=server_config['rstar_c'])
             return rstar.solve(initial_query)
         elif approach == "cot_reflection":
-            return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'])
+            return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'], request_config=request_config)
         elif approach == 'plansearch':
             return plansearch(system_prompt, initial_query, client, model, n=server_config['n'])
         elif approach == 'leap':
