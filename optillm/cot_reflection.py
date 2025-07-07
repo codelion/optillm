@@ -3,8 +3,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def cot_reflection(system_prompt, initial_query, client, model: str, return_full_response: bool=False):
+def cot_reflection(system_prompt, initial_query, client, model: str, return_full_response: bool=False, request_config: dict = None):
     cot_completion_tokens = 0
+    
+    # Extract temperature and max_tokens from request_config with defaults
+    temperature = 0.6  # Default to 0.6 as requested
+    max_tokens = 4096  # Default to 4096 as requested
+    
+    if request_config:
+        temperature = request_config.get('temperature', temperature)
+        max_tokens = request_config.get('max_tokens', max_tokens)
     cot_prompt = f"""
         {system_prompt}
 
@@ -32,15 +40,15 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
         </output>
         """
 
-    # Make the API call
+    # Make the API call using user-provided or default parameters
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": cot_prompt},
             {"role": "user", "content": initial_query}
         ],
-        temperature=0.7,
-        max_tokens=4096
+        temperature=temperature,
+        max_tokens=max_tokens
     )
 
     # Extract the full response
