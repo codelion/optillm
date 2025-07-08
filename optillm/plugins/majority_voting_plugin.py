@@ -45,7 +45,14 @@ def extract_answer(text: str) -> Optional[str]:
     # Remove any trailing whitespace
     text = text.strip()
     
-    # Pattern 1: Look for "Answer:" or "Final Answer:" patterns
+    # Pattern 1: Look for LaTeX boxed format first (handle both \boxed and \\boxed)
+    boxed_match = re.search(r'\\{1,2}boxed\{([^}]+)\}', text)
+    if boxed_match:
+        answer = boxed_match.group(1).strip()
+        logger.debug(f"Extracted boxed answer: {answer}")
+        return answer
+    
+    # Pattern 2: Look for "Answer:" or "Final Answer:" patterns
     answer_patterns = [
         r'(?:final\s+)?answer\s*[:=]\s*(.+?)(?:\n|$)',
         r'(?:the\s+)?(?:final\s+)?answer\s+is\s*[:=]?\s*(.+?)(?:\n|$)',
@@ -62,13 +69,6 @@ def extract_answer(text: str) -> Optional[str]:
                 logger.debug(f"Extracted answer using pattern: {answer}")
                 return answer
     
-    # Pattern 2: Look for LaTeX boxed format
-    boxed_match = re.search(r'\\boxed\{([^}]+)\}', text)
-    if boxed_match:
-        answer = boxed_match.group(1).strip()
-        logger.debug(f"Extracted boxed answer: {answer}")
-        return answer
-    
     # Pattern 3: Look for standalone numbers (useful for math problems)
     # Check the last few lines for a number
     lines = text.split('\n')
@@ -80,19 +80,28 @@ def extract_answer(text: str) -> Optional[str]:
             logger.debug(f"Extracted number answer: {line}")
             return line
     
-    # Pattern 4: If the last line is short (< 50 chars), it might be the answer
+    # Pattern 4: For multiple choice, look for single letter answers
+    # Check this before the generic last line check
+    mc_patterns = [
+        r'(?:the\s+)?(?:correct\s+)?(?:answer|option)\s+is\s+([A-E])(?:\b|$)',
+        r'(?:choose|select|pick)\s+(?:option\s+)?([A-E])(?:\b|$)',
+        r'\b([A-E])\s*\)\s*[A-Za-z]+.*is\s+(?:the\s+)?(?:correct|right)',
+        r'^([A-E])$',  # Just a letter on its own line
+    ]
+    
+    for pattern in mc_patterns:
+        mc_match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if mc_match:
+            answer = mc_match.group(1).upper()
+            logger.debug(f"Extracted multiple choice answer: {answer}")
+            return answer
+    
+    # Pattern 5: If the last line is short (< 50 chars), it might be the answer
     if lines:
         last_line = lines[-1].strip()
         if last_line and len(last_line) < 50 and not last_line.endswith(':'):
             logger.debug(f"Using last line as answer: {last_line}")
             return last_line
-    
-    # Pattern 5: For multiple choice, look for single letter answers
-    mc_match = re.search(r'\b([A-E])\b(?:\s*\))?$', text)
-    if mc_match:
-        answer = mc_match.group(1)
-        logger.debug(f"Extracted multiple choice answer: {answer}")
-        return answer
     
     logger.warning("Could not extract a clear answer from the response")
     return None
@@ -240,21 +249,18 @@ def run(
         # Get the full response corresponding to the most common answer
         winning_response = answer_to_response.get(most_common_answer, candidates[0])
         
-        # Add voting summary to the response
-        voting_summary = f"\n\n**Majority Voting Result**:\n"
-        voting_summary += f"- Generated {k} candidates\n"
-        voting_summary += f"- Most common answer: {most_common_answer}\n"
-        voting_summary += f"- Votes: {count}/{len(answers)} ({confidence:.1%} confidence)\n"
+        # Log voting summary to console instead of adding to response
+        logger.info("Majority Voting Summary:")
+        logger.info(f"  - Generated {k} candidates")
+        logger.info(f"  - Most common answer: {most_common_answer}")
+        logger.info(f"  - Votes: {count}/{len(answers)} ({confidence:.1%} confidence)")
         
         if len(answer_counts) > 1:
-            voting_summary += f"- Other answers: "
             other_answers = [f"{ans} ({cnt} votes)" for ans, cnt in answer_counts.items() if ans != most_common_answer]
-            voting_summary += ", ".join(other_answers)
+            logger.info(f"  - Other answers: {', '.join(other_answers)}")
         
-        # Return the full response from the winning answer with voting summary
-        final_response = winning_response + voting_summary
-        
-        return final_response, total_tokens
+        # Return only the full response from the winning answer
+        return winning_response, total_tokens
         
     except Exception as e:
         logger.error(f"Error in majority voting: {str(e)}")

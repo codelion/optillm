@@ -21,19 +21,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define the approaches to test
-# Each approach is (name, description)
+# Each approach is (name, description, extra_body_params)
 APPROACHES = [
-    ("none", "Baseline without any optimization"),
-    ("leap", "LEAP Approach"),
-    ("rto", "Round Trip Optimization"),
-    ("cot_reflection", "Chain of Thought with Reflection"),
-    ("self_consistency", "Self Consistency Check"),
-    ("plansearch", "Planning with Search"),
-    ("re2", "ReRead Approach"),
-    ("z3", "Z3 Solver for Mathematical Problems"),
-    ("coc", "Chain of Code"),
-    ("executecode" , "Execute Code"),
-    ("spl", "System Prompt Learning")
+    ("none", "Baseline without any optimization", {}),
+    ("leap", "LEAP Approach", {}),
+    ("rto", "Round Trip Optimization", {}),
+    ("cot_reflection", "Chain of Thought with Reflection", {}),
+    ("self_consistency", "Self Consistency Check", {}),
+    ("plansearch", "Planning with Search", {}),
+    ("re2", "ReRead Approach", {}),
+    ("z3", "Z3 Solver for Mathematical Problems", {}),
+    ("coc", "Chain of Code", {}),
+    ("executecode" , "Execute Code", {}),
+    ("spl", "System Prompt Learning", {})
+]
+
+# Define test-time compute approaches for sequential and parallel scaling
+TEST_TIME_COMPUTE_APPROACHES = [
+    # Baseline
+    ("none", "Baseline without any optimization", {}),
+    
+    # Sequential test-time compute using thinkdeeper with different thinking budgets
+    ("thinkdeeper_8k", "ThinkDeeper with 8K thinking tokens", {
+        "decoding": "thinkdeeper",
+        "max_thinking_tokens": 8000
+    }),
+    ("thinkdeeper_16k", "ThinkDeeper with 16K thinking tokens", {
+        "decoding": "thinkdeeper", 
+        "max_thinking_tokens": 16000
+    }),
+    ("thinkdeeper_32k", "ThinkDeeper with 32K thinking tokens", {
+        "decoding": "thinkdeeper",
+        "max_thinking_tokens": 32000
+    }),
+    
+    # Parallel test-time compute using majority voting with different k values
+    ("majority_voting_6", "Majority Voting with k=6", {"k": 6}),
+    ("majority_voting_36", "Majority Voting with k=36", {"k": 36}),
+    ("majority_voting_60", "Majority Voting with k=60", {"k": 60}),
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -265,6 +290,7 @@ def evaluate_model(
     model: str,
     dataset: datasets.Dataset,
     approach: str,
+    approach_extra_body: Dict[str, Any] = None,
     max_samples: int = None
 ) -> Tuple[Dict[str, float], List[Dict[str, Any]]]:
     """
@@ -286,8 +312,18 @@ def evaluate_model(
     # Prepare the dataset
     examples = dataset if max_samples is None else dataset.select(range(max_samples))
     
-    # Create model name with approach
-    full_model_name = f"{approach}-{model}" if approach != "none" else model
+    # Create model name with approach - handle special cases
+    if approach == "none":
+        full_model_name = model
+    elif approach.startswith("thinkdeeper_"):
+        # For thinkdeeper, use base model name (decoding is passed in extra_body)
+        full_model_name = model
+    elif approach.startswith("majority_voting_"):
+        # For majority voting, use majority_voting prefix
+        full_model_name = f"majority_voting-{model}"
+    else:
+        # Standard approach prefix
+        full_model_name = f"{approach}-{model}"
     
     for example in tqdm(examples, desc=f"Evaluating {approach}"):
         try:
@@ -296,6 +332,11 @@ def evaluate_model(
             
             # Record start time
             start_time = time.time()
+            
+            # Prepare extra_body parameters
+            extra_body = {"spl_learning": False}
+            if approach_extra_body:
+                extra_body.update(approach_extra_body)
             
             # Make API call
             response = client.chat.completions.create(
@@ -306,7 +347,7 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
-                extra_body= {"spl_learning": False},
+                extra_body=extra_body,
             )
             
             # Calculate time taken
@@ -469,6 +510,8 @@ def main():
                         help="Directory to save results")
     parser.add_argument("--approaches", nargs="+", 
                         help="Specific approaches to evaluate (default: all)")
+    parser.add_argument("--test-time-compute", action="store_true",
+                        help="Evaluate test-time compute approaches (sequential and parallel scaling)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     
