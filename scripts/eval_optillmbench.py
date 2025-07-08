@@ -41,24 +41,30 @@ TEST_TIME_COMPUTE_APPROACHES = [
     # Baseline
     ("none", "Baseline without any optimization", {}),
     
-    # Sequential test-time compute using thinkdeeper with different thinking budgets
-    ("thinkdeeper_8k", "ThinkDeeper with 8K thinking tokens", {
+    # Sequential test-time compute using thinkdeeper with different minimum thinking budgets
+    ("thinkdeeper_4k", "ThinkDeeper with 4K min thinking tokens", {
         "decoding": "thinkdeeper",
-        "max_thinking_tokens": 8000
+        "min_thinking_tokens": 4000,
+        "max_thinking_tokens": 20000,  # Allow up to 20K for completion
+        "max_tokens": 24000  # Total budget: 20K thinking + 4K response
     }),
-    ("thinkdeeper_16k", "ThinkDeeper with 16K thinking tokens", {
+    ("thinkdeeper_8k", "ThinkDeeper with 8K min thinking tokens", {
         "decoding": "thinkdeeper", 
-        "max_thinking_tokens": 16000
+        "min_thinking_tokens": 8000,
+        "max_thinking_tokens": 32000,  # Allow up to 32K for completion
+        "max_tokens": 36000  # Total budget: 32K thinking + 4K response
     }),
-    ("thinkdeeper_32k", "ThinkDeeper with 32K thinking tokens", {
+    ("thinkdeeper_16k", "ThinkDeeper with 16K min thinking tokens", {
         "decoding": "thinkdeeper",
-        "max_thinking_tokens": 32000
+        "min_thinking_tokens": 16000,
+        "max_thinking_tokens": 48000,  # Allow up to 48K for completion
+        "max_tokens": 52000  # Total budget: 48K thinking + 4K response
     }),
     
     # Parallel test-time compute using majority voting with different k values
     ("majority_voting_6", "Majority Voting with k=6", {"k": 6}),
-    ("majority_voting_36", "Majority Voting with k=36", {"k": 36}),
-    ("majority_voting_60", "Majority Voting with k=60", {"k": 60}),
+    ("majority_voting_12", "Majority Voting with k=12", {"k": 12}),
+    ("majority_voting_18", "Majority Voting with k=18", {"k": 18}),
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -448,13 +454,19 @@ def save_results(metrics: Dict[str, float], detailed_results: List[Dict[str, Any
     
     logger.info(f"Results saved to {base_filename}_*")
 
-def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str):
+def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, is_test_time_compute: bool = False):
     """Generate a comprehensive report comparing all approaches."""
     report = []
     
     # Header
-    report.append("# OptiLLM Bench Evaluation Report")
+    report_title = "OptiLLM Bench Test-Time Compute Evaluation Report" if is_test_time_compute else "OptiLLM Bench Evaluation Report"
+    report.append(f"# {report_title}")
     report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    
+    if is_test_time_compute:
+        report.append("This report evaluates test-time compute scaling approaches:")
+        report.append("- **Sequential scaling**: ThinkDeeper with varying thinking token budgets")
+        report.append("- **Parallel scaling**: Majority voting with varying k values\n")
     
     # Overall Results Table
     report.append("## Overall Results")
@@ -537,44 +549,54 @@ def main():
     dataset = load_optillm_bench()
     
     # Determine which approaches to evaluate
-    approaches_to_test = (
-        [a[0] for a in APPROACHES if a[0] in args.approaches]
-        if args.approaches
-        else [a[0] for a in APPROACHES]
-    )
+    if args.test_time_compute:
+        # Use test-time compute approaches
+        approaches_config = TEST_TIME_COMPUTE_APPROACHES
+        if args.approaches:
+            # Filter test-time compute approaches if specific ones are requested
+            approaches_config = [a for a in TEST_TIME_COMPUTE_APPROACHES if a[0] in args.approaches]
+    else:
+        # Use standard approaches
+        if args.approaches:
+            approaches_config = [a for a in APPROACHES if a[0] in args.approaches]
+        else:
+            approaches_config = APPROACHES
     
     # Store all metrics for final report
     all_metrics = {}
     
     # Evaluate each approach
-    for approach in approaches_to_test:
-        logger.info(f"Evaluating approach: {approach}")
+    for approach_name, description, extra_body_params in approaches_config:
+        logger.info(f"Evaluating approach: {approach_name} - {description}")
+        if extra_body_params:
+            logger.info(f"Extra parameters: {extra_body_params}")
         
         try:
             metrics, detailed_results = evaluate_model(
                 client,
                 args.model,
                 dataset,
-                approach,
+                approach_name,
+                extra_body_params,
                 args.max_samples
             )
             
-            all_metrics[approach] = metrics
+            all_metrics[approach_name] = metrics
             
             # Save results for this approach
-            save_results(metrics, detailed_results, args.model, approach, 
+            save_results(metrics, detailed_results, args.model, approach_name, 
                         args.output_dir)
             
-            logger.info(f"Completed evaluation for {approach}")
+            logger.info(f"Completed evaluation for {approach_name}")
             logger.info(f"Accuracy: {metrics['accuracy']*100:.2f}%")
             logger.info(f"Average time per sample: {metrics['average_time']:.2f}s")
             
         except Exception as e:
-            logger.error(f"Error evaluating approach {approach}: {e}")
+            logger.error(f"Error evaluating approach {approach_name}: {e}")
             continue
     
     # Generate final report
-    generate_report(all_metrics, args.output_dir)
+    generate_report(all_metrics, args.output_dir, args.test_time_compute)
 
 if __name__ == "__main__":
     main()
