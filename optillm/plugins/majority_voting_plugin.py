@@ -213,65 +213,81 @@ def run(
         candidates = [choice.message.content for choice in response.choices]
         total_tokens = response.usage.completion_tokens
         
-        logger.info(f"Generated {len(candidates)} candidates. Tokens used: {total_tokens}")
-        
-        # Extract answers from each candidate
-        answers = []
-        answer_to_response = {}  # Map normalized answers to full responses
-        
-        for i, candidate in enumerate(candidates):
-            answer = extract_answer(candidate)
-            if answer:
-                normalized = normalize_answer(answer)
-                answers.append(normalized)
-                # Keep the first full response for each unique answer
-                if normalized not in answer_to_response:
-                    answer_to_response[normalized] = candidate
-                logger.debug(f"Candidate {i+1} answer: {answer} (normalized: {normalized})")
-            else:
-                logger.warning(f"Could not extract answer from candidate {i+1}")
-        
-        if not answers:
-            logger.warning("No answers could be extracted from any candidate")
-            # Return the first candidate as fallback
-            return candidates[0] if candidates else "Error: No candidates generated", total_tokens
-        
-        # Count answer frequencies
-        answer_counts = Counter(answers)
-        logger.info(f"Answer distribution: {dict(answer_counts)}")
-        
-        # Get the most common answer
-        most_common_answer, count = answer_counts.most_common(1)[0]
-        confidence = count / len(answers)
-        
-        logger.info(f"Most common answer: '{most_common_answer}' with {count}/{len(answers)} votes ({confidence:.1%} confidence)")
-        
-        # Get the full response corresponding to the most common answer
-        winning_response = answer_to_response.get(most_common_answer, candidates[0])
-        
-        # Log voting summary to console instead of adding to response
-        logger.info("Majority Voting Summary:")
-        logger.info(f"  - Generated {k} candidates")
-        logger.info(f"  - Most common answer: {most_common_answer}")
-        logger.info(f"  - Votes: {count}/{len(answers)} ({confidence:.1%} confidence)")
-        
-        if len(answer_counts) > 1:
-            other_answers = [f"{ans} ({cnt} votes)" for ans, cnt in answer_counts.items() if ans != most_common_answer]
-            logger.info(f"  - Other answers: {', '.join(other_answers)}")
-        
-        # Return only the full response from the winning answer
-        return winning_response, total_tokens
+        logger.info(f"Generated {len(candidates)} candidates using n parameter. Tokens used: {total_tokens}")
         
     except Exception as e:
-        logger.error(f"Error in majority voting: {str(e)}")
-        # Fall back to single response
-        logger.info("Falling back to single response generation")
+        logger.warning(f"n parameter not supported by provider: {str(e)}")
+        logger.info(f"Falling back to generating {k} candidates one by one")
         
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        # Fallback: Generate candidates one by one in a loop
+        candidates = []
+        total_tokens = 0
         
-        return response.choices[0].message.content, response.usage.completion_tokens
+        for i in range(k):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                candidates.append(response.choices[0].message.content)
+                total_tokens += response.usage.completion_tokens
+                logger.debug(f"Generated candidate {i+1}/{k}")
+                
+            except Exception as fallback_error:
+                logger.error(f"Error generating candidate {i+1}: {str(fallback_error)}")
+                continue
+        
+        if not candidates:
+            logger.error("Failed to generate any candidates")
+            return "Error: Could not generate any candidates", 0
+        
+        logger.info(f"Generated {len(candidates)} candidates using fallback method. Total tokens used: {total_tokens}")
+    
+    # Extract answers from each candidate
+    answers = []
+    answer_to_response = {}  # Map normalized answers to full responses
+    
+    for i, candidate in enumerate(candidates):
+        answer = extract_answer(candidate)
+        if answer:
+            normalized = normalize_answer(answer)
+            answers.append(normalized)
+            # Keep the first full response for each unique answer
+            if normalized not in answer_to_response:
+                answer_to_response[normalized] = candidate
+            logger.debug(f"Candidate {i+1} answer: {answer} (normalized: {normalized})")
+        else:
+            logger.warning(f"Could not extract answer from candidate {i+1}")
+    
+    if not answers:
+        logger.warning("No answers could be extracted from any candidate")
+        # Return the first candidate as fallback
+        return candidates[0] if candidates else "Error: No candidates generated", total_tokens
+    
+    # Count answer frequencies
+    answer_counts = Counter(answers)
+    logger.info(f"Answer distribution: {dict(answer_counts)}")
+    
+    # Get the most common answer
+    most_common_answer, count = answer_counts.most_common(1)[0]
+    confidence = count / len(answers)
+    
+    logger.info(f"Most common answer: '{most_common_answer}' with {count}/{len(answers)} votes ({confidence:.1%} confidence)")
+    
+    # Get the full response corresponding to the most common answer
+    winning_response = answer_to_response.get(most_common_answer, candidates[0])
+    
+    # Log voting summary to console instead of adding to response
+    logger.info("Majority Voting Summary:")
+    logger.info(f"  - Generated {len(candidates)} candidates")
+    logger.info(f"  - Most common answer: {most_common_answer}")
+    logger.info(f"  - Votes: {count}/{len(answers)} ({confidence:.1%} confidence)")
+    
+    if len(answer_counts) > 1:
+        other_answers = [f"{ans} ({cnt} votes)" for ans, cnt in answer_counts.items() if ans != most_common_answer]
+        logger.info(f"  - Other answers: {', '.join(other_answers)}")
+    
+    # Return only the full response from the winning answer
+    return winning_response, total_tokens

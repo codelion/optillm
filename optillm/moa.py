@@ -8,19 +8,61 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
     completions = []
 
     logger.debug(f"Generating initial completions for query: {initial_query}")
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": initial_query}
-        ],
-        max_tokens=4096,
-        n=3,
-        temperature=1
-    )
-    completions = [choice.message.content for choice in response.choices]
-    moa_completion_tokens += response.usage.completion_tokens
-    logger.info(f"Generated {len(completions)} initial completions. Tokens used: {response.usage.completion_tokens}")
+    
+    try:
+        # Try to generate 3 completions in a single API call using n parameter
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": initial_query}
+            ],
+            max_tokens=4096,
+            n=3,
+            temperature=1
+        )
+        completions = [choice.message.content for choice in response.choices]
+        moa_completion_tokens += response.usage.completion_tokens
+        logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
+        
+    except Exception as e:
+        logger.warning(f"n parameter not supported by provider: {str(e)}")
+        logger.info("Falling back to generating 3 completions one by one")
+        
+        # Fallback: Generate 3 completions one by one in a loop
+        completions = []
+        for i in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": initial_query}
+                    ],
+                    max_tokens=4096,
+                    temperature=1
+                )
+                completions.append(response.choices[0].message.content)
+                moa_completion_tokens += response.usage.completion_tokens
+                logger.debug(f"Generated completion {i+1}/3")
+                
+            except Exception as fallback_error:
+                logger.error(f"Error generating completion {i+1}: {str(fallback_error)}")
+                continue
+        
+        if not completions:
+            logger.error("Failed to generate any completions")
+            return "Error: Could not generate any completions", 0
+        
+        logger.info(f"Generated {len(completions)} completions using fallback method. Total tokens used: {moa_completion_tokens}")
+    
+    # Handle case where fewer than 3 completions were generated
+    if len(completions) < 3:
+        original_count = len(completions)
+        # Pad with the first completion to ensure we have 3
+        while len(completions) < 3:
+            completions.append(completions[0])
+        logger.warning(f"Only generated {original_count} unique completions, padded to 3 for critique")
     
     logger.debug("Preparing critique prompt")
     critique_prompt = f"""
