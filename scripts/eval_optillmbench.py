@@ -21,19 +21,50 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define the approaches to test
-# Each approach is (name, description)
+# Each approach is (name, description, extra_body_params)
 APPROACHES = [
-    ("none", "Baseline without any optimization"),
-    ("leap", "LEAP Approach"),
-    ("rto", "Round Trip Optimization"),
-    ("cot_reflection", "Chain of Thought with Reflection"),
-    ("self_consistency", "Self Consistency Check"),
-    ("plansearch", "Planning with Search"),
-    ("re2", "ReRead Approach"),
-    ("z3", "Z3 Solver for Mathematical Problems"),
-    ("coc", "Chain of Code"),
-    ("executecode" , "Execute Code"),
-    ("spl", "System Prompt Learning")
+    ("none", "Baseline without any optimization", {}),
+    ("leap", "LEAP Approach", {}),
+    ("rto", "Round Trip Optimization", {}),
+    ("cot_reflection", "Chain of Thought with Reflection", {}),
+    ("self_consistency", "Self Consistency Check", {}),
+    ("plansearch", "Planning with Search", {}),
+    ("re2", "ReRead Approach", {}),
+    ("z3", "Z3 Solver for Mathematical Problems", {}),
+    ("coc", "Chain of Code", {}),
+    ("executecode" , "Execute Code", {}),
+    ("spl", "System Prompt Learning", {})
+]
+
+# Define test-time compute approaches for sequential and parallel scaling
+TEST_TIME_COMPUTE_APPROACHES = [
+    # Baseline
+    ("none", "Baseline without any optimization", {}),
+    
+    # Sequential test-time compute using thinkdeeper with controlled thinking budgets
+    ("thinkdeeper_2k", "ThinkDeeper with 2K thinking tokens", {
+        "decoding": "thinkdeeper",
+        "min_thinking_tokens": 2048,
+        "max_thinking_tokens": 2560,  # min + 512 for flexibility
+        "max_tokens": 3072  # Total budget: max_thinking_tokens + 512
+    }),
+    ("thinkdeeper_4k", "ThinkDeeper with 4K thinking tokens", {
+        "decoding": "thinkdeeper", 
+        "min_thinking_tokens": 4096,
+        "max_thinking_tokens": 4608,  # min + 512 for flexibility
+        "max_tokens": 5120  # Total budget: max_thinking_tokens + 512
+    }),
+    ("thinkdeeper_8k", "ThinkDeeper with 8K thinking tokens", {
+        "decoding": "thinkdeeper",
+        "min_thinking_tokens": 8192,
+        "max_thinking_tokens": 8704,  # min + 512 for flexibility
+        "max_tokens": 9216  # Total budget: max_thinking_tokens + 512
+    }),
+    
+    # Parallel test-time compute using majority voting with different k values
+    ("majority_voting_3", "Majority Voting with k=3", {"k": 3}),
+    ("majority_voting_6", "Majority Voting with k=6", {"k": 6}),
+    ("majority_voting_9", "Majority Voting with k=9", {"k": 9}),
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -265,6 +296,7 @@ def evaluate_model(
     model: str,
     dataset: datasets.Dataset,
     approach: str,
+    approach_extra_body: Dict[str, Any] = None,
     max_samples: int = None
 ) -> Tuple[Dict[str, float], List[Dict[str, Any]]]:
     """
@@ -286,8 +318,18 @@ def evaluate_model(
     # Prepare the dataset
     examples = dataset if max_samples is None else dataset.select(range(max_samples))
     
-    # Create model name with approach
-    full_model_name = f"{approach}-{model}" if approach != "none" else model
+    # Create model name with approach - handle special cases
+    if approach == "none":
+        full_model_name = model
+    elif approach.startswith("thinkdeeper_"):
+        # For thinkdeeper, use base model name (decoding is passed in extra_body)
+        full_model_name = model
+    elif approach.startswith("majority_voting_"):
+        # For majority voting, use majority_voting prefix
+        full_model_name = f"majority_voting-{model}"
+    else:
+        # Standard approach prefix
+        full_model_name = f"{approach}-{model}"
     
     for example in tqdm(examples, desc=f"Evaluating {approach}"):
         try:
@@ -296,6 +338,11 @@ def evaluate_model(
             
             # Record start time
             start_time = time.time()
+            
+            # Prepare extra_body parameters
+            extra_body = {"spl_learning": False}
+            if approach_extra_body:
+                extra_body.update(approach_extra_body)
             
             # Make API call
             response = client.chat.completions.create(
@@ -306,7 +353,7 @@ def evaluate_model(
                 ],
                 temperature=0.2,
                 max_tokens=4096,
-                extra_body= {"spl_learning": False},
+                extra_body=extra_body,
             )
             
             # Calculate time taken
@@ -407,13 +454,19 @@ def save_results(metrics: Dict[str, float], detailed_results: List[Dict[str, Any
     
     logger.info(f"Results saved to {base_filename}_*")
 
-def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str):
+def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, is_test_time_compute: bool = False):
     """Generate a comprehensive report comparing all approaches."""
     report = []
     
     # Header
-    report.append("# OptiLLM Bench Evaluation Report")
+    report_title = "OptiLLM Bench Test-Time Compute Evaluation Report" if is_test_time_compute else "OptiLLM Bench Evaluation Report"
+    report.append(f"# {report_title}")
     report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    
+    if is_test_time_compute:
+        report.append("This report evaluates test-time compute scaling approaches:")
+        report.append("- **Sequential scaling**: ThinkDeeper with varying thinking token budgets")
+        report.append("- **Parallel scaling**: Majority voting with varying k values\n")
     
     # Overall Results Table
     report.append("## Overall Results")
@@ -469,6 +522,8 @@ def main():
                         help="Directory to save results")
     parser.add_argument("--approaches", nargs="+", 
                         help="Specific approaches to evaluate (default: all)")
+    parser.add_argument("--test-time-compute", action="store_true",
+                        help="Evaluate test-time compute approaches (sequential and parallel scaling)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     
@@ -494,44 +549,54 @@ def main():
     dataset = load_optillm_bench()
     
     # Determine which approaches to evaluate
-    approaches_to_test = (
-        [a[0] for a in APPROACHES if a[0] in args.approaches]
-        if args.approaches
-        else [a[0] for a in APPROACHES]
-    )
+    if args.test_time_compute:
+        # Use test-time compute approaches
+        approaches_config = TEST_TIME_COMPUTE_APPROACHES
+        if args.approaches:
+            # Filter test-time compute approaches if specific ones are requested
+            approaches_config = [a for a in TEST_TIME_COMPUTE_APPROACHES if a[0] in args.approaches]
+    else:
+        # Use standard approaches
+        if args.approaches:
+            approaches_config = [a for a in APPROACHES if a[0] in args.approaches]
+        else:
+            approaches_config = APPROACHES
     
     # Store all metrics for final report
     all_metrics = {}
     
     # Evaluate each approach
-    for approach in approaches_to_test:
-        logger.info(f"Evaluating approach: {approach}")
+    for approach_name, description, extra_body_params in approaches_config:
+        logger.info(f"Evaluating approach: {approach_name} - {description}")
+        if extra_body_params:
+            logger.info(f"Extra parameters: {extra_body_params}")
         
         try:
             metrics, detailed_results = evaluate_model(
                 client,
                 args.model,
                 dataset,
-                approach,
+                approach_name,
+                extra_body_params,
                 args.max_samples
             )
             
-            all_metrics[approach] = metrics
+            all_metrics[approach_name] = metrics
             
             # Save results for this approach
-            save_results(metrics, detailed_results, args.model, approach, 
+            save_results(metrics, detailed_results, args.model, approach_name, 
                         args.output_dir)
             
-            logger.info(f"Completed evaluation for {approach}")
+            logger.info(f"Completed evaluation for {approach_name}")
             logger.info(f"Accuracy: {metrics['accuracy']*100:.2f}%")
             logger.info(f"Average time per sample: {metrics['average_time']:.2f}s")
             
         except Exception as e:
-            logger.error(f"Error evaluating approach {approach}: {e}")
+            logger.error(f"Error evaluating approach {approach_name}: {e}")
             continue
     
     # Generate final report
-    generate_report(all_metrics, args.output_dir)
+    generate_report(all_metrics, args.output_dir, args.test_time_compute)
 
 if __name__ == "__main__":
     main()

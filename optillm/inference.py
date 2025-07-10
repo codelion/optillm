@@ -22,6 +22,7 @@ import sys
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
 from optillm.thinkdeeper import thinkdeeper_decode
+from optillm.thinkdeeper_mlx import thinkdeeper_decode_mlx
 from optillm.autothink import autothink_decode
 
 # Configure logging
@@ -33,6 +34,7 @@ try:
     import mlx.core as mx
     from mlx_lm import load as mlx_load, generate as mlx_generate
     from mlx_lm.tokenizer_utils import TokenizerWrapper
+    from mlx_lm.sample_utils import make_sampler
     MLX_AVAILABLE = True
     logger.info("MLX framework available")
 except ImportError:
@@ -349,85 +351,46 @@ class MLXInferencePipeline:
         return responses, token_counts, logprobs_results
     
     def _robust_mlx_generate(self, prompt: str, max_tokens: int, temperature: float, top_p: float, repetition_penalty: float) -> str:
-        """Robust MLX generation with multiple parameter combinations"""
+        """Robust MLX generation using sampler approach"""
         
-        # Try different parameter combinations based on MLX-LM version
-        parameter_combinations = [
-            # Version 1: Current style with positional args and temp
-            {
-                "style": "positional_temp",
-                "args": (self.model, self.tokenizer, prompt),
-                "kwargs": {
-                    "max_tokens": max_tokens,
-                    "temp": temperature,
-                    "top_p": top_p,
-                    "repetition_penalty": repetition_penalty,
-                    "verbose": False
-                }
-            },
-            # Version 2: All keyword arguments with temp
-            {
-                "style": "keyword_temp", 
-                "args": (),
-                "kwargs": {
-                    "model": self.model,
-                    "tokenizer": self.tokenizer,
-                    "prompt": prompt,
-                    "max_tokens": max_tokens,
-                    "temp": temperature,
-                    "top_p": top_p,
-                    "repetition_penalty": repetition_penalty,
-                    "verbose": False
-                }
-            },
-            # Version 3: Using temperature instead of temp
-            {
-                "style": "positional_temperature",
-                "args": (self.model, self.tokenizer, prompt),
-                "kwargs": {
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "repetition_penalty": repetition_penalty,
-                    "verbose": False
-                }
-            },
-            # Version 4: Minimal parameters only
-            {
-                "style": "minimal",
-                "args": (self.model, self.tokenizer, prompt),
-                "kwargs": {
-                    "max_tokens": max_tokens,
-                    "temp": temperature,
-                    "verbose": False
-                }
-            },
-            # Version 5: Just essential parameters
-            {
-                "style": "essential",
-                "args": (self.model, self.tokenizer, prompt),
-                "kwargs": {
-                    "max_tokens": max_tokens
-                }
-            }
-        ]
-        
-        last_error = None
-        
-        for combo in parameter_combinations:
+        try:
+            # Create sampler with generation parameters
+            sampler = make_sampler(
+                temp=temperature,
+                top_p=top_p,
+                min_p=0.0,  # Default min_p
+                min_tokens_to_keep=1  # Default min_tokens_to_keep
+            )
+            
+            # Generate using the sampler
+            response = mlx_generate(
+                self.model,
+                self.tokenizer,
+                prompt,
+                max_tokens=max_tokens,
+                sampler=sampler,
+                verbose=False
+            )
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"MLX generation with sampler failed: {str(e)}")
+            
+            # Fallback: Try minimal parameters without sampler
             try:
-                logger.debug(f"Trying MLX generation with style: {combo['style']}")
-                response = mlx_generate(*combo["args"], **combo["kwargs"])
-                logger.debug(f"Successfully generated with style: {combo['style']}")
+                logger.debug("Attempting MLX generation without sampler")
+                response = mlx_generate(
+                    self.model,
+                    self.tokenizer,
+                    prompt,
+                    max_tokens=max_tokens,
+                    verbose=False
+                )
                 return response
-                
-            except Exception as e:
-                last_error = e
-                logger.debug(f"Failed with style {combo['style']}: {str(e)}")
-                continue
-        
-        # If all combinations failed, raise the last error
-        raise RuntimeError(f"All MLX generation methods failed. Last error: {str(last_error)}")
+            except Exception as fallback_e:
+                logger.error(f"MLX fallback generation also failed: {str(fallback_e)}")
+                raise
     
     def format_chat_prompt(self, system_prompt: str, user_prompt: str) -> str:
         """Format the prompt according to model's chat template"""
@@ -1691,37 +1654,47 @@ class InferenceClient:
                     if decoding:
                         logger.info(f"Using specialized decoding approach: {decoding}")
 
-                        # Ensure model is in eval mode and on correct device
-                        pipeline.current_model.eval()
-                        device = pipeline.current_model.device
+                        # Check if this decoding approach is supported for MLX
+                        mlx_unsupported_decodings = ["cot_decoding", "entropy_decoding", "autothink"]
+                        if isinstance(pipeline, MLXInferencePipeline) and decoding in mlx_unsupported_decodings:
+                            logger.warning(f"{decoding} is not supported for MLX models. Falling back to standard generation.")
+                            decoding = None
+                        
+                    if decoding:
+                        # For PyTorch pipelines, ensure model is in eval mode and get device
+                        # MLX pipelines handle this differently
+                        if not isinstance(pipeline, MLXInferencePipeline):
+                            pipeline.current_model.eval()
+                            device = pipeline.current_model.device
+                        else:
+                            device = None  # MLX doesn't use torch devices
                         
                         if decoding == "cot_decoding":
                             # Use directly available parameters for CoT
-                            cot_params = {
-                                "k": k,
-                                "num_beams": num_beams,
-                                "max_new_tokens": max_tokens if max_tokens is not None else 512,
-                                "temperature": temperature,
-                                "top_p": top_p,
-                                "repetition_penalty": 1.0,
-                                "length_penalty": length_penalty,
-                                "no_repeat_ngram_size": no_repeat_ngram_size,
-                                "early_stopping": early_stopping,
-                                "aggregate_paths": aggregate_paths,
-                            }
-                            
-                            result, confidence = cot_decode(
-                                pipeline.current_model,
-                                pipeline.tokenizer,
-                                messages,
-                                **cot_params
-                            )
-                            responses = [result]
-                            logprobs_results = [{"confidence_score": confidence} if confidence is not None else None]
-                            completion_tokens = len(pipeline.tokenizer.encode(result))
+                                cot_params = {
+                                    "k": k,
+                                    "num_beams": num_beams,
+                                    "max_new_tokens": max_tokens if max_tokens is not None else 512,
+                                    "temperature": temperature,
+                                    "top_p": top_p,
+                                    "repetition_penalty": 1.0,
+                                    "length_penalty": length_penalty,
+                                    "no_repeat_ngram_size": no_repeat_ngram_size,
+                                    "early_stopping": early_stopping,
+                                    "aggregate_paths": aggregate_paths,
+                                }
+                                
+                                result, confidence = cot_decode(
+                                    pipeline.current_model,
+                                    pipeline.tokenizer,
+                                    messages,
+                                    **cot_params
+                                )
+                                responses = [result]
+                                logprobs_results = [{"confidence_score": confidence} if confidence is not None else None]
+                                completion_tokens = len(pipeline.tokenizer.encode(result))
                             
                         elif decoding == "entropy_decoding":
-
                             # Ensure model is using full precision
                             original_dtype = pipeline.current_model.dtype
                             pipeline.current_model = pipeline.current_model.to(torch.float32)
@@ -1778,43 +1751,66 @@ class InferenceClient:
                             }
                             thinkdeeper_config.update(custom_config)
 
-                            result = thinkdeeper_decode(
-                                pipeline.current_model,
-                                pipeline.tokenizer,
-                                messages,
-                                thinkdeeper_config
+                            # Check if we're using MLX pipeline
+                            if isinstance(pipeline, MLXInferencePipeline):
+                                logger.info("Using MLX ThinkDeeper implementation")
+                                
+                                # Ensure we have enough tokens for thinking + response
+                                user_max_tokens = max_tokens if max_tokens is not None else 512
+                                total_tokens_needed = max_thinking_tokens + 512  # thinking + response buffer
+                                adjusted_max_tokens = max(user_max_tokens, total_tokens_needed)
+                                
+                                # Add max_tokens to thinkdeeper config
+                                thinkdeeper_config_with_tokens = thinkdeeper_config.copy()
+                                thinkdeeper_config_with_tokens["max_tokens"] = adjusted_max_tokens
+                                
+                                logger.debug(f"ThinkDeeper tokens: user={user_max_tokens}, thinking={max_thinking_tokens}, adjusted={adjusted_max_tokens}")
+                                
+                                result = thinkdeeper_decode_mlx(
+                                    pipeline.model,
+                                    pipeline.tokenizer,
+                                    messages,
+                                    thinkdeeper_config_with_tokens
+                                )
+                            else:
+                                logger.info("Using PyTorch ThinkDeeper implementation")
+                                result = thinkdeeper_decode(
+                                    pipeline.current_model,
+                                    pipeline.tokenizer,
+                                    messages,
+                                    thinkdeeper_config
                                 )
                             responses = [result]
                             logprobs_results = [None]
                             completion_tokens = len(pipeline.tokenizer.encode(result))
                         elif decoding == "autothink":
                             # Get steering dataset configuration
-                            steering_dataset = kwargs.get("steering_dataset", "codelion/Qwen3-0.6B-pts-steering-vectors")
-                            target_layer = kwargs.get("target_layer", 19)
-                            
-                            # Prepare AutoThink configuration
-                            autothink_config = {
-                                "steering_dataset": steering_dataset,
-                                "target_layer": target_layer,
-                                "pattern_strengths": kwargs.get("pattern_strengths", {
-                                    "depth_and_thoroughness": 2.5,
-                                    "numerical_accuracy": 2.0,
-                                    "self_correction": 3.0,
-                                    "exploration": 2.0,
-                                    "organization": 1.5
-                                })
-                            }
-                            
-                            # Process with AutoThink
-                            result = autothink_decode(
-                                pipeline.current_model,
-                                pipeline.tokenizer,
-                                messages,
-                                autothink_config
-                            )
-                            responses = [result]
-                            logprobs_results = [None]
-                            completion_tokens = len(pipeline.tokenizer.encode(result))
+                                steering_dataset = kwargs.get("steering_dataset", "codelion/Qwen3-0.6B-pts-steering-vectors")
+                                target_layer = kwargs.get("target_layer", 19)
+                                
+                                # Prepare AutoThink configuration
+                                autothink_config = {
+                                    "steering_dataset": steering_dataset,
+                                    "target_layer": target_layer,
+                                    "pattern_strengths": kwargs.get("pattern_strengths", {
+                                        "depth_and_thoroughness": 2.5,
+                                        "numerical_accuracy": 2.0,
+                                        "self_correction": 3.0,
+                                        "exploration": 2.0,
+                                        "organization": 1.5
+                                    })
+                                }
+                                
+                                # Process with AutoThink
+                                result = autothink_decode(
+                                    pipeline.current_model,
+                                    pipeline.tokenizer,
+                                    messages,
+                                    autothink_config
+                                )
+                                responses = [result]
+                                logprobs_results = [None]
+                                completion_tokens = len(pipeline.tokenizer.encode(result))
                         else:
                             raise ValueError(f"Unknown specialized decoding approach: {decoding}")
                         

@@ -256,7 +256,7 @@ def analyze_logits_probs(logprobs_data: List[Dict]) -> Dict:
         "token_count": len(token_entropies)
     }
 
-def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> Union[str, List[Dict]]:
+def get_llm_response(problem: str, model: str, analyze_logits: bool = False, extra_body: dict = None) -> Union[str, List[Dict]]:
     """
     Get response from the LLM for a given problem.
     If multiple choices are returned, formats them as attempt dictionaries.
@@ -276,18 +276,16 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> 
             kwargs["logprobs"] = True
             kwargs["top_logprobs"] = 3
         
+        # Add extra_body if provided
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        
         response = client.with_options(timeout=1000.0).chat.completions.create(
             model=model,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
             max_tokens=8192,
-            # extra_body={
-            #     "decoding": "thinkdeeper",
-            #     "min_thinking_tokens" : 0,
-            #     "max_thinking_tokens" : 8000,
-            #     "max_thoughts": 100,
-            # },
             **kwargs
         )
         
@@ -333,7 +331,7 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False) -> 
         logger.error(f"Error getting LLM response: {e}")
         return ""
 
-def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False, analyze_logits: bool = False) -> List[Dict]:
+def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False, analyze_logits: bool = False, extra_body: dict = None) -> List[Dict]:
     """
     Make n attempts to solve a problem and return all responses and predictions.
     
@@ -351,7 +349,7 @@ def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = F
     remaining_attempts = n
     
     while remaining_attempts > 0:
-        response = get_llm_response(problem, model, analyze_logits)
+        response = get_llm_response(problem, model, analyze_logits, extra_body)
         
         # If response is already formatted as attempts
         if isinstance(response, list):
@@ -774,7 +772,7 @@ def save_raw_response(filename: str, problem_id: int, response_data: Dict):
     
     return response_id
 
-def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_logits: bool = False):
+def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_logits: bool = False, test_time_compute: bool = False, approach_name: str = None, extra_body: dict = None):
     """Main evaluation function that handles gaps in processed indexes."""
     os.makedirs("results", exist_ok=True)
     
@@ -784,6 +782,8 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
         suffix_parts.append("thought_analysis")
     if analyze_logits:
         suffix_parts.append("logit_analysis")
+    if approach_name:
+        suffix_parts.append(approach_name)
     
     suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
     results_file = f"results/evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
@@ -804,7 +804,7 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
         correct_answer = int(item['answer'])
         
         # Make n attempts for each problem
-        attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts, analyze_logits)
+        attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts, analyze_logits, extra_body)
         is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
         
         result = {
@@ -826,6 +826,51 @@ if __name__ == "__main__":
     parser.add_argument("--n", type=int, default=1, help="Number of attempts per problem (for pass@n evaluation)")
     parser.add_argument("--analyze-thoughts", action="store_true", help="Analyze thinking patterns in responses")
     parser.add_argument("--analyze-logits", action="store_true", help="Analyze token probability distributions")
+    parser.add_argument("--test-time-compute", action="store_true", help="Evaluate test-time compute scaling approaches")
     args = parser.parse_args()
     
-    main(args.model, args.n, args.analyze_thoughts, args.analyze_logits)
+    if args.test_time_compute:
+        # Define test-time compute approaches with same config as eval_optillmbench.py
+        TEST_TIME_COMPUTE_APPROACHES = [
+            # Baseline
+            ("none", "Baseline without any optimization", {}),
+            
+            # Sequential test-time compute using thinkdeeper with controlled thinking budgets
+            ("thinkdeeper_2k", "ThinkDeeper with 2K thinking tokens", {
+                "decoding": "thinkdeeper",
+                "min_thinking_tokens": 2048,
+                "max_thinking_tokens": 2560,  # min + 512 for flexibility
+                "max_tokens": 3072  # Total budget: max_thinking_tokens + 512
+            }),
+            ("thinkdeeper_4k", "ThinkDeeper with 4K thinking tokens", {
+                "decoding": "thinkdeeper", 
+                "min_thinking_tokens": 4096,
+                "max_thinking_tokens": 4608,  # min + 512 for flexibility
+                "max_tokens": 5120  # Total budget: max_thinking_tokens + 512
+            }),
+            ("thinkdeeper_8k", "ThinkDeeper with 8K thinking tokens", {
+                "decoding": "thinkdeeper",
+                "min_thinking_tokens": 8192,
+                "max_thinking_tokens": 8704,  # min + 512 for flexibility
+                "max_tokens": 9216  # Total budget: max_thinking_tokens + 512
+            }),
+            
+            # Parallel test-time compute using majority voting with different k values
+            ("majority_voting_3", "Majority Voting with k=3", {"k": 3}),
+            ("majority_voting_6", "Majority Voting with k=6", {"k": 6}),
+            ("majority_voting_9", "Majority Voting with k=9", {"k": 9}),
+        ]
+        
+        # Run evaluation for each approach
+        for approach_slug, approach_name, extra_body in TEST_TIME_COMPUTE_APPROACHES:
+            print(f"\n{'=' * 80}")
+            print(f"Evaluating: {approach_name}")
+            print(f"Model: {args.model}")
+            print(f"Approach: {approach_slug}")
+            print(f"Extra body: {extra_body}")
+            print(f"{'=' * 80}\n")
+            
+            main(args.model, args.n, args.analyze_thoughts, args.analyze_logits, 
+                 test_time_compute=True, approach_name=approach_slug, extra_body=extra_body)
+    else:
+        main(args.model, args.n, args.analyze_thoughts, args.analyze_logits)
