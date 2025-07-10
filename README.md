@@ -368,6 +368,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | [System Prompt Learning](optillm/plugins/spl)  | `spl`              | Implements what [Andrej Karpathy called the third paradigm](https://x.com/karpathy/status/1921368644069765486) for LLM learning, this enables the model to acquire program solving knowledge and strategies |
 | [Deep Think](optillm/plugins/deepthink)              | `deepthink`        | Implements a Gemini-like Deep Think approach using inference time scaling for reasoning LLMs |
 | [Long-Context Cerebras Planning and Optimization](optillm/plugins/longcepo)              | `longcepo`              | Combines planning and divide-and-conquer processing of long documents to enable infinite context  |
+| Majority Voting         | `majority_voting`  | Generates k candidate solutions and selects the most frequent answer through majority voting (default k=6) |
 | MCP Client              | `mcp`              | Implements the model context protocol (MCP) client, enabling you to use any LLM with any MCP Server  |
 | Router                  | `router`           | Uses the [optillm-modernbert-large](https://huggingface.co/codelion/optillm-modernbert-large) model to route requests to different approaches based on the user prompt |
 | Chain-of-Code           | `coc`              | Implements a chain of code approach that combines CoT with code execution and LLM based code simulation |
