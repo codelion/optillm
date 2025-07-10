@@ -41,30 +41,30 @@ TEST_TIME_COMPUTE_APPROACHES = [
     # Baseline
     ("none", "Baseline without any optimization", {}),
     
-    # Sequential test-time compute using thinkdeeper with different minimum thinking budgets
-    ("thinkdeeper_4k", "ThinkDeeper with 4K min thinking tokens", {
+    # Sequential test-time compute using thinkdeeper with controlled thinking budgets
+    ("thinkdeeper_2k", "ThinkDeeper with 2K thinking tokens", {
         "decoding": "thinkdeeper",
-        "min_thinking_tokens": 4000,
-        "max_thinking_tokens": 20000,  # Allow up to 20K for completion
-        "max_tokens": 24000  # Total budget: 20K thinking + 4K response
+        "min_thinking_tokens": 2048,
+        "max_thinking_tokens": 2560,  # min + 512 for flexibility
+        "max_tokens": 3072  # Total budget: max_thinking_tokens + 512
     }),
-    ("thinkdeeper_8k", "ThinkDeeper with 8K min thinking tokens", {
+    ("thinkdeeper_4k", "ThinkDeeper with 4K thinking tokens", {
         "decoding": "thinkdeeper", 
-        "min_thinking_tokens": 8000,
-        "max_thinking_tokens": 32000,  # Allow up to 32K for completion
-        "max_tokens": 36000  # Total budget: 32K thinking + 4K response
+        "min_thinking_tokens": 4096,
+        "max_thinking_tokens": 4608,  # min + 512 for flexibility
+        "max_tokens": 5120  # Total budget: max_thinking_tokens + 512
     }),
-    ("thinkdeeper_16k", "ThinkDeeper with 16K min thinking tokens", {
+    ("thinkdeeper_8k", "ThinkDeeper with 8K thinking tokens", {
         "decoding": "thinkdeeper",
-        "min_thinking_tokens": 16000,
-        "max_thinking_tokens": 48000,  # Allow up to 48K for completion
-        "max_tokens": 52000  # Total budget: 48K thinking + 4K response
+        "min_thinking_tokens": 8192,
+        "max_thinking_tokens": 8704,  # min + 512 for flexibility
+        "max_tokens": 9216  # Total budget: max_thinking_tokens + 512
     }),
     
     # Parallel test-time compute using majority voting with different k values
+    ("majority_voting_3", "Majority Voting with k=3", {"k": 3}),
     ("majority_voting_6", "Majority Voting with k=6", {"k": 6}),
-    ("majority_voting_12", "Majority Voting with k=12", {"k": 12}),
-    ("majority_voting_18", "Majority Voting with k=18", {"k": 18}),
+    ("majority_voting_9", "Majority Voting with k=9", {"k": 9}),
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
