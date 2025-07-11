@@ -1785,13 +1785,17 @@ class InferenceClient:
                             completion_tokens = len(pipeline.tokenizer.encode(result))
                         elif decoding == "autothink":
                             # Get steering dataset configuration
-                                steering_dataset = kwargs.get("steering_dataset", "codelion/Qwen3-0.6B-pts-steering-vectors")
+                                steering_dataset = kwargs.get("steering_dataset", "")
+                                thought_anchors_dataset = kwargs.get("thought_anchors_dataset", "codelion/Qwen3-0.6B-pts-thought-anchors")
                                 target_layer = kwargs.get("target_layer", 19)
                                 
                                 # Prepare AutoThink configuration
                                 autothink_config = {
                                     "steering_dataset": steering_dataset,
+                                    "thought_anchors_dataset": thought_anchors_dataset,
                                     "target_layer": target_layer,
+                                    "reasoning_path_steering": kwargs.get("reasoning_path_steering", True),
+                                    "correction_frequency": kwargs.get("correction_frequency", 50),
                                     "pattern_strengths": kwargs.get("pattern_strengths", {
                                         "depth_and_thoroughness": 2.5,
                                         "numerical_accuracy": 2.0,

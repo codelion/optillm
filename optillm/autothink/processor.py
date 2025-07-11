@@ -52,6 +52,7 @@ DEFAULT_CONFIG = {
     
     # Steering configuration
     "steering_dataset": "",
+    "thought_anchors_dataset": "codelion/Qwen3-0.6B-pts-thought-anchors",
     "target_layer": 19,
     "pattern_strengths": {
         "depth_and_thoroughness": 2.5,
@@ -59,7 +60,9 @@ DEFAULT_CONFIG = {
         "self_correction": 3.0,
         "exploration": 2.0,
         "organization": 1.5
-    }
+    },
+    "reasoning_path_steering": True,
+    "correction_frequency": 50  # Check for corrections every N tokens
 }
 
 class AutoThinkProcessor:
@@ -104,19 +107,24 @@ class AutoThinkProcessor:
         self.current_sequence = []  # Track recent tokens for sequence matching
         self.max_sequence_length = max(len(seq) for seq in self.thought_switch_sequences)
         
+        # Track reasoning for failure detection
+        self.reasoning_buffer = ""
+        self.tokens_generated = 0
+        
         # Initialize steering vector manager and hooks if dataset is provided
         self.steering_manager = None
         self.steering_hooks = []
         
-        if self.config["steering_dataset"]:
+        if self.config["steering_dataset"] or self.config["thought_anchors_dataset"]:
             self._setup_steering()
     
     def _setup_steering(self):
         """Set up steering vector management."""
         try:
-            # Initialize steering vector manager
+            # Initialize steering vector manager with thought anchors support
             self.steering_manager = SteeringVectorManager(
                 dataset_name=self.config["steering_dataset"],
+                thought_anchors_dataset=self.config["thought_anchors_dataset"],
                 target_layer=self.config["target_layer"]
             )
             
@@ -135,7 +143,16 @@ class AutoThinkProcessor:
                 self.tokenizer
             )
             
-            logger.info(f"STEERING: Set up steering with {len(self.steering_hooks)} hooks")
+            reasoning_mode = self.steering_manager.get_reasoning_mode()
+            logger.info(f"STEERING: Set up {reasoning_mode} with {len(self.steering_hooks)} hooks")
+            
+            # Log the reasoning mode for clarity
+            if reasoning_mode == "thought_anchors":
+                logger.info("STEERING: Using thought anchors for reasoning path steering")
+            elif reasoning_mode == "steering":
+                logger.info("STEERING: Using steering vectors for guidance")
+            else:
+                logger.info("STEERING: Using default autothink mode (no datasets)")
         
         except Exception as e:
             logger.error(f"STEERING: Error setting up steering: {e}")
@@ -344,6 +361,29 @@ class AutoThinkProcessor:
                 response_chunks.append(next_str)
                 if not seen_end_think:
                     n_thinking_tokens += 1
+                    self.tokens_generated += 1
+                    
+                    # Update reasoning buffer for failure detection
+                    self.reasoning_buffer += next_str
+                    
+                    # Check for reasoning path steering (thought anchors mode)
+                    if (self.steering_manager and 
+                        self.steering_manager.get_reasoning_mode() == "thought_anchors" and
+                        self.config["reasoning_path_steering"]):
+                        
+                        corrective_prompt = self.steering_manager.should_inject_correction(
+                            self.reasoning_buffer, 
+                            self.tokens_generated
+                        )
+                        
+                        if corrective_prompt:
+                            logger.info(f"THOUGHT_ANCHORS: Injecting corrective prompt: '{corrective_prompt[:50]}...'")
+                            response_chunks.append(corrective_prompt)
+                            # Tokenize and continue generation from corrective prompt
+                            correction_tokens = self.tokenizer.encode(corrective_prompt, add_special_tokens=False)
+                            n_thinking_tokens += len(correction_tokens)
+                            tokens = torch.tensor([correction_tokens]).to(tokens.device)
+                            continue
                 
                 # Update steering hooks with new token
                 if self.steering_hooks:
@@ -363,6 +403,10 @@ class AutoThinkProcessor:
                     
             # Clean up steering hooks
             self._cleanup_steering()
+            
+            # Reset reasoning tracking
+            self.reasoning_buffer = ""
+            self.tokens_generated = 0
             
             # Join all chunks and add framing tokens
             response = "".join(response_chunks)

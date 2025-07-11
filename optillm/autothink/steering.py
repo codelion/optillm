@@ -23,6 +23,7 @@ class SteeringVectorManager:
     def __init__(
         self, 
         dataset_name: str,
+        thought_anchors_dataset: Optional[str] = None,
         target_layer: int = 19,
         cache_dir: Optional[str] = None,
         device: Optional[str] = None
@@ -32,11 +33,13 @@ class SteeringVectorManager:
         
         Args:
             dataset_name: Name of the HuggingFace dataset containing steering vectors
+            thought_anchors_dataset: Name of the HuggingFace dataset containing thought anchors
             target_layer: Target layer for applying steering vectors
             cache_dir: Directory for caching the dataset
             device: Device to use for tensors
         """
         self.dataset_name = dataset_name
+        self.thought_anchors_dataset = thought_anchors_dataset
         self.target_layer = target_layer
         self.cache_dir = cache_dir
         self.device = device or (
@@ -50,6 +53,12 @@ class SteeringVectorManager:
         self.pattern_to_vectors = {}
         self.tokenized_contexts = {}
         
+        # Storage for thought anchors
+        self.thought_anchors = []
+        self.failure_patterns = {}
+        self.positive_patterns = {}
+        self.reasoning_mode = "steering"  # "steering" or "thought_anchors"
+        
         # Default steering strengths
         self.default_strength = 2.0
         self.pattern_strengths = {
@@ -61,9 +70,20 @@ class SteeringVectorManager:
             "unknown": 1.0
         }
         
-        # If dataset is provided, load it
-        if dataset_name:
+        # Determine reasoning mode and load appropriate dataset
+        if thought_anchors_dataset and dataset_name:
+            logger.warning("Both steering vectors and thought anchors datasets provided. Using thought anchors for reasoning path steering.")
+            self.reasoning_mode = "thought_anchors"
+            self.load_thought_anchors()
+        elif thought_anchors_dataset:
+            self.reasoning_mode = "thought_anchors"
+            self.load_thought_anchors()
+        elif dataset_name:
+            self.reasoning_mode = "steering"
             self.load_dataset()
+        else:
+            logger.info("No steering or thought anchors dataset provided, using default autothink mode")
+            self.reasoning_mode = "default"
         
     def load_dataset(self):
         """Load steering vectors from the HuggingFace dataset."""
@@ -105,6 +125,84 @@ class SteeringVectorManager:
             logger.error(f"Error loading steering vectors: {e}")
             self.steering_vectors = []
             self.pattern_to_vectors = {}
+    
+    def load_thought_anchors(self):
+        """Load thought anchors from the HuggingFace dataset."""
+        try:
+            logger.info(f"Loading thought anchors from dataset: {self.thought_anchors_dataset}")
+            
+            # Load the dataset
+            dataset = datasets.load_dataset(self.thought_anchors_dataset, cache_dir=self.cache_dir)
+            
+            # Get the main split (usually 'train')
+            main_split = list(dataset.keys())[0]
+            anchor_data = dataset[main_split]
+            
+            # Process each thought anchor
+            for item in anchor_data:
+                anchor = self._process_thought_anchor_item(item)
+                if anchor:
+                    self.thought_anchors.append(anchor)
+                    
+                    # Categorize by failure mode for reasoning path steering
+                    failure_mode = anchor.get("failure_mode")
+                    prob_delta = anchor.get("prob_delta", 0.0)
+                    
+                    if prob_delta < -0.3:  # Strong negative anchors
+                        if failure_mode and failure_mode != "None":
+                            if failure_mode not in self.failure_patterns:
+                                self.failure_patterns[failure_mode] = []
+                            self.failure_patterns[failure_mode].append(anchor)
+                    elif prob_delta > 0.5:  # Strong positive anchors
+                        if failure_mode not in self.positive_patterns:
+                            self.positive_patterns[failure_mode] = []
+                        self.positive_patterns[failure_mode].append(anchor)
+            
+            logger.info(f"Loaded {len(self.thought_anchors)} thought anchors")
+            logger.info(f"Found {len(self.failure_patterns)} failure patterns: {list(self.failure_patterns.keys())}")
+            logger.info(f"Found {len(self.positive_patterns)} positive patterns: {list(self.positive_patterns.keys())}")
+            
+        except Exception as e:
+            logger.error(f"Error loading thought anchors: {e}")
+            self.thought_anchors = []
+            self.failure_patterns = {}
+            self.positive_patterns = {}
+    
+    def _process_thought_anchor_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a thought anchor dataset item."""
+        try:
+            # Check if item has the required fields
+            required_fields = ["query", "sentence", "prob_delta"]
+            if not all(field in item for field in required_fields):
+                return None
+            
+            # Create the thought anchor dictionary
+            anchor = {
+                "query": item["query"],
+                "sentence": item["sentence"],
+                "sentence_id": item.get("sentence_id", -1),
+                "prefix_context": item.get("prefix_context", ""),
+                "suffix_context": item.get("suffix_context", ""),
+                "prob_with_sentence": item.get("prob_with_sentence", 0.0),
+                "prob_without_sentence": item.get("prob_without_sentence", 0.0),
+                "prob_delta": item.get("prob_delta", 0.0),
+                "model_id": item.get("model_id", ""),
+                "task_type": item.get("task_type", "generic"),
+                "failure_mode": item.get("failure_mode"),
+                "error_type": item.get("error_type"),
+                "correction_suggestion": item.get("correction_suggestion"),
+                "full_reasoning_trace": item.get("full_reasoning_trace", ""),
+                "sentence_embedding": item.get("sentence_embedding", []),
+                "logical_relationship": item.get("logical_relationship"),
+                "causal_dependencies": item.get("causal_dependencies", []),
+                "causal_dependents": item.get("causal_dependents", [])
+            }
+            
+            return anchor
+            
+        except Exception as e:
+            logger.error(f"Error processing thought anchor item: {e}")
+            return None
     
     def _process_dataset_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -227,6 +325,10 @@ class SteeringVectorManager:
         """
         return self.pattern_strengths.get(pattern, self.default_strength)
     
+    def get_reasoning_mode(self) -> str:
+        """Get the current reasoning mode."""
+        return self.reasoning_mode
+    
     def set_steering_strength(self, pattern: str, strength: float):
         """
         Set the steering strength for a specific pattern.
@@ -249,6 +351,79 @@ class SteeringVectorManager:
             List of steering vectors
         """
         return self.pattern_to_vectors.get(pattern, [])
+    
+    def detect_failure_pattern(self, current_reasoning: str) -> Optional[str]:
+        """Detect if current reasoning matches a known failure pattern."""
+        if self.reasoning_mode != "thought_anchors" or not self.failure_patterns:
+            return None
+        
+        # Simple pattern matching - check if current reasoning contains failure patterns
+        for failure_mode, anchors in self.failure_patterns.items():
+            for anchor in anchors:
+                # Check if the problematic sentence appears in current reasoning
+                if anchor["sentence"].lower() in current_reasoning.lower():
+                    logger.info(f"Detected failure pattern: {failure_mode} - '{anchor['sentence'][:50]}...'")
+                    return failure_mode
+                
+                # Check for similar reasoning patterns using prefix context
+                if anchor["prefix_context"] and len(anchor["prefix_context"]) > 20:
+                    if anchor["prefix_context"].lower() in current_reasoning.lower():
+                        logger.info(f"Detected failure context: {failure_mode}")
+                        return failure_mode
+        
+        return None
+    
+    def get_corrective_prompt(self, failure_mode: str) -> str:
+        """Generate a corrective prompt based on the detected failure mode."""
+        if failure_mode not in self.failure_patterns:
+            return ""
+        
+        # Get correction suggestions from the failure pattern
+        corrections = []
+        for anchor in self.failure_patterns[failure_mode]:
+            if anchor.get("correction_suggestion"):
+                corrections.append(anchor["correction_suggestion"])
+        
+        # Generate appropriate corrective prompt based on failure mode
+        if failure_mode == "logical_error":
+            base_prompt = "Wait, let me double-check this logical step. "
+            if corrections:
+                return base_prompt + corrections[0]
+            return base_prompt + "I need to verify this reasoning is sound."
+        
+        elif failure_mode == "computational_mistake":
+            base_prompt = "Let me recalculate this step carefully. "
+            if corrections:
+                return base_prompt + corrections[0]
+            return base_prompt + "I should verify this calculation."
+        
+        elif failure_mode == "missing_step":
+            base_prompt = "I think I might be missing an important step here. "
+            if corrections:
+                return base_prompt + corrections[0]
+            return base_prompt + "Let me think through this more systematically."
+        
+        else:
+            # Generic corrective prompt
+            if corrections:
+                return f"Let me reconsider this: {corrections[0]}"
+            return "Let me think about this differently and double-check my reasoning."
+    
+    def should_inject_correction(self, current_reasoning: str, tokens_generated: int) -> Optional[str]:
+        """Determine if a corrective prompt should be injected."""
+        if self.reasoning_mode != "thought_anchors":
+            return None
+        
+        # Only check for corrections periodically to avoid too many interruptions
+        if tokens_generated % 50 != 0:  # Check every 50 tokens
+            return None
+        
+        # Detect failure pattern
+        failure_mode = self.detect_failure_pattern(current_reasoning)
+        if failure_mode:
+            return self.get_corrective_prompt(failure_mode)
+        
+        return None
         
     def get_steering_vector(self, context: str, match_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
