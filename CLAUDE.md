@@ -13,7 +13,7 @@ OptILLM is an OpenAI API compatible optimizing inference proxy that implements s
 1. **Entry Points**: 
    - `optillm.py` - Main Flask server with inference routing
    - `optillm/inference.py` - Local inference engine with transformer models
-   - Setup via `setup.py` with console script `optillm=optillm:main`
+   - Setup via `pyproject.toml` with console script `optillm=optillm:main`
 
 2. **Optimization Techniques** (`optillm/`):
    - **Reasoning**: `cot_reflection.py`, `plansearch.py`, `leap.py`, `reread.py` 
