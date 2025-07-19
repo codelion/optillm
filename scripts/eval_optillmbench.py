@@ -67,6 +67,13 @@ TEST_TIME_COMPUTE_APPROACHES = [
     ("majority_voting_9", "Majority Voting with k=9", {"k": 9}),
 ]
 
+# Default test-time compute configuration for standard evaluation
+DEFAULT_TEST_TIME_COMPUTE = [
+    ("pass@1", "Baseline with 64 runs averaged", {"num_runs": 64}),
+    ("maj@64", "Majority Voting with k=64", {"approach": "majority_voting", "k": 64}),
+    ("genselect@64", "GenSelect with 64 candidates", {"approach": "genselect", "num_candidates": 64})
+]
+
 def load_optillm_bench() -> datasets.Dataset:
     """Load the OptiLLM Bench dataset."""
     try:
@@ -318,67 +325,96 @@ def evaluate_model(
     # Prepare the dataset
     examples = dataset if max_samples is None else dataset.select(range(max_samples))
     
+    # Check if we need to do multiple runs (for pass@1 calculation)
+    num_runs = approach_extra_body.get("num_runs", 1) if approach_extra_body else 1
+    
+    # Handle special approach names
+    actual_approach = approach
+    if approach == "pass@1":
+        actual_approach = "none"
+    elif approach == "maj@64":
+        actual_approach = "majority_voting"
+    elif approach == "genselect@64":
+        actual_approach = "genselect"
+    elif approach_extra_body and "approach" in approach_extra_body:
+        actual_approach = approach_extra_body["approach"]
+    
     # Create model name with approach - handle special cases
-    if approach == "none":
+    if actual_approach == "none":
         full_model_name = model
-    elif approach.startswith("thinkdeeper_"):
+    elif actual_approach.startswith("thinkdeeper_"):
         # For thinkdeeper, use base model name (decoding is passed in extra_body)
         full_model_name = model
-    elif approach.startswith("majority_voting_"):
+    elif actual_approach.startswith("majority_voting"):
         # For majority voting, use majority_voting prefix
         full_model_name = f"majority_voting-{model}"
     else:
         # Standard approach prefix
-        full_model_name = f"{approach}-{model}"
+        full_model_name = f"{actual_approach}-{model}"
     
     for example in tqdm(examples, desc=f"Evaluating {approach}"):
-        try:
-            # Get appropriate prompt for the category
-            prompt = get_prompt_for_category(example['question'], example['category'])
+        # For pass@1, we need to run multiple times and calculate average
+        if num_runs > 1:
+            run_results = []
+            total_run_time = 0
             
-            # Record start time
-            start_time = time.time()
+            for run_idx in range(num_runs):
+                try:
+                    # Get appropriate prompt for the category
+                    prompt = get_prompt_for_category(example['question'], example['category'])
+                    
+                    # Record start time
+                    start_time = time.time()
+                    
+                    # Prepare extra_body parameters (excluding num_runs)
+                    extra_body = {"spl_learning": False}
+                    if approach_extra_body:
+                        extra_body_clean = {k: v for k, v in approach_extra_body.items() if k != "num_runs"}
+                        extra_body.update(extra_body_clean)
+                    
+                    # Make API call
+                    response = client.chat.completions.create(
+                        model=full_model_name,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.7,  # Higher temperature for pass@k diversity
+                        max_tokens=4096,
+                        extra_body=extra_body,
+                    )
+                    
+                    # Calculate time taken
+                    time_taken = time.time() - start_time
+                    total_run_time += time_taken
+                    
+                    # Get the response text
+                    response_text = response.choices[0].message.content
+                    
+                    # Process the response to remove thinking blocks
+                    processed_response = remove_thinking_blocks(response_text)
+                    
+                    # Evaluate the processed response
+                    is_correct = evaluate_response(
+                        processed_response,
+                        example['answer'],
+                        example['category'],
+                        example['question']
+                    )
+                    
+                    run_results.append(is_correct)
+                    
+                except Exception as e:
+                    logger.error(f"Error in run {run_idx+1} for example {example['id']}: {e}")
+                    run_results.append(False)
             
-            # Prepare extra_body parameters
-            extra_body = {"spl_learning": False}
-            if approach_extra_body:
-                extra_body.update(approach_extra_body)
+            # Calculate average success rate for this example
+            success_rate = sum(run_results) / len(run_results) if run_results else 0
+            avg_time = total_run_time / len(run_results) if run_results else 0
             
-            # Make API call
-            response = client.chat.completions.create(
-                model=full_model_name,
-                messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                max_tokens=4096,
-                extra_body=extra_body,
-            )
-            
-            # Calculate time taken
-            time_taken = time.time() - start_time
-            
-            # Get the response text
-            response_text = response.choices[0].message.content
-            
-            # Also store the raw response for reference
-            raw_response = response_text
-            
-            # Process the response to remove thinking blocks
-            processed_response = remove_thinking_blocks(response_text)
-            
-            # Evaluate the processed response
-            is_correct = evaluate_response(
-                processed_response,
-                example['answer'],
-                example['category'],
-                example['question']  # Pass the question for MMLU evaluation
-            )
-            
-            # Update metrics
-            metrics["total_correct"] += int(is_correct)
-            metrics["total_time"] += time_taken
+            # Update metrics with average
+            metrics["total_correct"] += success_rate
+            metrics["total_time"] += avg_time
             metrics["samples"] += 1
             
             # Update category metrics
@@ -388,28 +424,101 @@ def evaluate_model(
                     "total": 0,
                     "time": 0
                 }
-            category_metrics[example['category']]["correct"] += int(is_correct)
+            category_metrics[example['category']]["correct"] += success_rate
             category_metrics[example['category']]["total"] += 1
-            category_metrics[example['category']]["time"] += time_taken
-            
-            # Check if thinking blocks were removed
-            has_thinking = '</think>' in raw_response
+            category_metrics[example['category']]["time"] += avg_time
             
             # Record detailed result
             detailed_results.append({
                 "id": example['id'],
                 "category": example['category'],
-                "correct": is_correct,
-                "time_taken": time_taken,
-                "raw_response": raw_response,
-                "processed_response": processed_response if has_thinking else None,
-                "has_thinking": has_thinking,
+                "correct": success_rate,  # Store success rate instead of boolean
+                "num_runs": num_runs,
+                "successes": sum(run_results),
+                "time_taken": avg_time,
                 "ground_truth": example['answer']
             })
             
-        except Exception as e:
-            logger.error(f"Error processing example {example['id']}: {e}")
-            continue
+        else:
+            # Single run (original logic)
+            try:
+                # Get appropriate prompt for the category
+                prompt = get_prompt_for_category(example['question'], example['category'])
+                
+                # Record start time
+                start_time = time.time()
+                
+                # Prepare extra_body parameters
+                extra_body = {"spl_learning": False}
+                if approach_extra_body:
+                    extra_body.update(approach_extra_body)
+                
+                # Make API call
+                response = client.chat.completions.create(
+                    model=full_model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=4096,
+                    extra_body=extra_body,
+                )
+                
+                # Calculate time taken
+                time_taken = time.time() - start_time
+                
+                # Get the response text
+                response_text = response.choices[0].message.content
+                
+                # Also store the raw response for reference
+                raw_response = response_text
+                
+                # Process the response to remove thinking blocks
+                processed_response = remove_thinking_blocks(response_text)
+                
+                # Evaluate the processed response
+                is_correct = evaluate_response(
+                    processed_response,
+                    example['answer'],
+                    example['category'],
+                    example['question']  # Pass the question for MMLU evaluation
+                )
+                
+                # Update metrics
+                metrics["total_correct"] += int(is_correct)
+                metrics["total_time"] += time_taken
+                metrics["samples"] += 1
+                
+                # Update category metrics
+                if example['category'] not in category_metrics:
+                    category_metrics[example['category']] = {
+                        "correct": 0,
+                        "total": 0,
+                        "time": 0
+                    }
+                category_metrics[example['category']]["correct"] += int(is_correct)
+                category_metrics[example['category']]["total"] += 1
+                category_metrics[example['category']]["time"] += time_taken
+                
+                # Check if thinking blocks were removed
+                has_thinking = '</think>' in raw_response
+                
+                # Record detailed result
+                detailed_results.append({
+                    "id": example['id'],
+                    "category": example['category'],
+                    "correct": is_correct,
+                    "time_taken": time_taken,
+                    "raw_response": raw_response,
+                    "processed_response": processed_response if has_thinking else None,
+                    "has_thinking": has_thinking,
+                    "ground_truth": example['answer']
+                })
+                
+            except Exception as e:
+                logger.error(f"Error processing example {example['id']}: {e}")
+                continue
     
     # Calculate final metrics
     final_metrics = {
@@ -458,12 +567,27 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     """Generate a comprehensive report comparing all approaches."""
     report = []
     
+    # Check if this is the default test-time compute evaluation
+    is_default_test_time = set(all_metrics.keys()) == {"pass@1", "maj@64", "genselect@64"}
+    
     # Header
-    report_title = "OptiLLM Bench Test-Time Compute Evaluation Report" if is_test_time_compute else "OptiLLM Bench Evaluation Report"
+    if is_default_test_time:
+        report_title = "OptiLLM Bench Test-Time Compute Evaluation Report"
+    elif is_test_time_compute:
+        report_title = "OptiLLM Bench Test-Time Compute Scaling Report"
+    else:
+        report_title = "OptiLLM Bench Evaluation Report"
+    
     report.append(f"# {report_title}")
     report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
-    if is_test_time_compute:
+    if is_default_test_time:
+        report.append("## Test-Time Compute Evaluation Results\n")
+        report.append("This report evaluates the potential of test-time compute with:")
+        report.append("- **pass@1**: Baseline averaged over 64 runs (measures consistency)")
+        report.append("- **maj@64**: Majority voting with 64 candidates")
+        report.append("- **genselect@64**: Generative selection with 64 candidates\n")
+    elif is_test_time_compute:
         report.append("This report evaluates test-time compute scaling approaches:")
         report.append("- **Sequential scaling**: ThinkDeeper with varying thinking token budgets")
         report.append("- **Parallel scaling**: Majority voting with varying k values\n")
@@ -504,6 +628,28 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
         
         df = pd.DataFrame(rows, columns=headers)
         report.append(df.to_markdown())
+    
+    # Add summary section for default test-time compute
+    if is_default_test_time:
+        report.append("\n## Summary")
+        if "pass@1" in all_metrics and "maj@64" in all_metrics and "genselect@64" in all_metrics:
+            pass1_acc = all_metrics["pass@1"]["accuracy"] * 100
+            maj64_acc = all_metrics["maj@64"]["accuracy"] * 100
+            genselect64_acc = all_metrics["genselect@64"]["accuracy"] * 100
+            
+            report.append(f"\n**Key Metrics:**")
+            report.append(f"- **pass@1** (baseline averaged over 64 runs): {pass1_acc:.2f}%")
+            report.append(f"- **maj@64** (majority voting with 64 candidates): {maj64_acc:.2f}%")
+            report.append(f"- **genselect@64** (quality-based selection from 64 candidates): {genselect64_acc:.2f}%")
+            
+            # Calculate improvements
+            if pass1_acc > 0:
+                maj_improvement = ((maj64_acc - pass1_acc) / pass1_acc) * 100
+                genselect_improvement = ((genselect64_acc - pass1_acc) / pass1_acc) * 100
+                
+                report.append(f"\n**Improvements over pass@1:**")
+                report.append(f"- maj@64: {'+' if maj_improvement > 0 else ''}{maj_improvement:.1f}%")
+                report.append(f"- genselect@64: {'+' if genselect_improvement > 0 else ''}{genselect_improvement:.1f}%")
     
     # Save report
     report_path = f"{output_dir}/evaluation_report.md"
@@ -555,12 +701,13 @@ def main():
         if args.approaches:
             # Filter test-time compute approaches if specific ones are requested
             approaches_config = [a for a in TEST_TIME_COMPUTE_APPROACHES if a[0] in args.approaches]
+    elif args.approaches:
+        # Specific approaches requested
+        approaches_config = [a for a in APPROACHES if a[0] in args.approaches]
     else:
-        # Use standard approaches
-        if args.approaches:
-            approaches_config = [a for a in APPROACHES if a[0] in args.approaches]
-        else:
-            approaches_config = APPROACHES
+        # Default: Use the default test-time compute configuration
+        approaches_config = DEFAULT_TEST_TIME_COMPUTE
+        logger.info("Using default test-time compute evaluation (pass@1, maj@64, genselect@64)")
     
     # Store all metrics for final report
     all_metrics = {}
@@ -596,7 +743,9 @@ def main():
             continue
     
     # Generate final report
-    generate_report(all_metrics, args.output_dir, args.test_time_compute)
+    # Determine if we're using default test-time compute or explicit test-time compute
+    is_test_time = args.test_time_compute or (not args.approaches and approaches_config == DEFAULT_TEST_TIME_COMPUTE)
+    generate_report(all_metrics, args.output_dir, is_test_time)
 
 if __name__ == "__main__":
     main()
