@@ -377,6 +377,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
 | Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
 | JSON                    | `json`             | Enables structured outputs using the outlines library, supports pydantic types and JSON schema |
+| GenSelect               | `genselect`        | Generative Solution Selection - generates multiple candidates and selects the best based on quality criteria |
 
 ## Available parameters
 
@@ -587,6 +588,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 - [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699) - [Inspired the implementation of rto](optillm/rto.py)
 - [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](optillm/moa.py)
 - [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](ptillm/rto.py)
+- [AIMO-2 Winning Solution: Building State-of-the-Art Mathematical Reasoning Models with OpenMathReasoning dataset](https://arxiv.org/abs/2504.16891) - [Implementation](optillm/plugins/genselect_plugin.py)
 
 ## Citation
 
