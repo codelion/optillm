@@ -165,8 +165,8 @@ def run(
     include_reasoning = config.get('include_reasoning', DEFAULT_INCLUDE_REASONING)
     max_tokens = config.get('max_tokens', 4096)
     
-    # Validate num_candidates is in reasonable range (2-16 as per paper)
-    num_candidates = max(2, min(16, num_candidates))
+    # Validate num_candidates is at least 2
+    num_candidates = max(2, num_candidates)
     
     logger.info(f"Generating {num_candidates} candidates with temperature={temperature}")
     
