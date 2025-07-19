@@ -659,7 +659,9 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     logger.info(f"Report saved to {report_path}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate a model on OptiLLM Bench")
+    parser = argparse.ArgumentParser(
+        description="Evaluate a model on OptiLLM Bench. By default, runs test-time compute evaluation with pass@1, maj@64, and genselect@64."
+    )
     parser.add_argument("--model", required=True, help="Model identifier")
     parser.add_argument("--base-url", default="http://localhost:8000/v1", 
                         help="Base URL for API endpoint")
@@ -667,9 +669,9 @@ def main():
     parser.add_argument("--output-dir", default="results", 
                         help="Directory to save results")
     parser.add_argument("--approaches", nargs="+", 
-                        help="Specific approaches to evaluate (default: all)")
+                        help="Specific approaches to evaluate (overrides default test-time compute)")
     parser.add_argument("--test-time-compute", action="store_true",
-                        help="Evaluate test-time compute approaches (sequential and parallel scaling)")
+                        help="Evaluate full test-time compute scaling approaches (ThinkDeeper and various k values)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     
