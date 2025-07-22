@@ -170,3 +170,4 @@ cython_debug/
 
 scripts/results/
 results/
+test_results.json

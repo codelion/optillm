@@ -302,9 +302,9 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
             if hasattr(request, 'json'):
                 data = request.get_json()
                 messages = data.get('messages', [])
-                # Copy all parameters except 'stream', 'model' , 'n' and 'messages'
+                # Copy all parameters except 'stream', 'model' and 'messages'
                 kwargs = {k: v for k, v in data.items() 
-                         if k not in ['model', 'messages', 'stream', 'n', 'optillm_approach']}
+                         if k not in ['model', 'messages', 'stream', 'optillm_approach']}
             response = none_approach(original_messages=messages, client=client, model=model, **kwargs)
             # For none approach, we return the response and a token count of 0
             # since the full token count is already in the response
@@ -641,17 +641,8 @@ def proxy():
         contains_none = any(approach == 'none' for approach in approaches)
 
         if operation == 'SINGLE' and approaches[0] == 'none':
-            # For none approach with n>1, make n separate calls
-            if n > 1:
-                responses = []
-                completion_tokens = 0
-                for _ in range(n):
-                    result, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
-                    responses.append(result)
-                    completion_tokens += tokens
-                result = responses
-            else:
-                result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
+            # Pass through the request including the n parameter
+            result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
             
             logger.debug(f'Direct proxy response: {result}')
 

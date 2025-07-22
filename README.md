@@ -565,6 +565,46 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
+## Testing
+
+OptILLM includes a comprehensive test suite to ensure reliability and compatibility.
+
+### Running Tests
+
+The main test suite can be run from the project root:
+```bash
+# Test all approaches with default test cases
+python tests/test.py
+
+# Test specific approaches
+python tests/test.py --approaches moa bon mcts
+
+# Run a single test
+python tests/test.py --single-test "Simple Math Problem"
+```
+
+### Unit and Integration Tests
+
+Additional tests are available in the `tests/` directory:
+```bash
+# Run all tests (requires pytest)
+./tests/run_tests.sh
+
+# Run specific test modules
+pytest tests/test_plugins.py -v
+pytest tests/test_api_compatibility.py -v
+```
+
+### CI/CD
+
+All tests are automatically run on pull requests via GitHub Actions. The workflow tests:
+- Multiple Python versions (3.10, 3.11, 3.12)
+- Unit tests for plugins and core functionality
+- API compatibility tests
+- Integration tests with various approaches
+
+See `tests/README.md` for more details on the test structure and how to write new tests.
+
 ## References
 - [Eliciting Fine-Tuned Transformer Capabilities via Inference-Time Techniques](https://arxiv.org/abs/2506.08060)
 - [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)

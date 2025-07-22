@@ -68,10 +68,12 @@ TEST_TIME_COMPUTE_APPROACHES = [
 ]
 
 # Default test-time compute configuration for standard evaluation
+# Using n=8 for all approaches to ensure fair comparison and memory efficiency
 DEFAULT_TEST_TIME_COMPUTE = [
-    ("pass@1", "Baseline with 64 runs averaged", {"num_runs": 64}),
-    ("maj@64", "Majority Voting with k=64", {"approach": "majority_voting", "k": 64}),
-    ("genselect@64", "GenSelect with 64 candidates", {"approach": "genselect", "num_candidates": 64})
+    ("avg@8", "Average of 8 parallel responses", {"n": 8}),
+    ("pass@8", "Pass@8 - success if any of 8 is correct", {"n": 8}),
+    ("maj@8", "Majority Voting with k=8", {"k": 8}),
+    ("genselect@8", "GenSelect with 8 candidates", {"num_candidates": 8})
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -327,34 +329,181 @@ def evaluate_model(
     
     # Check if we need to do multiple runs (for pass@1 calculation)
     num_runs = approach_extra_body.get("num_runs", 1) if approach_extra_body else 1
+    # Check if we're using n parameter for parallel generation
+    n_param = approach_extra_body.get("n", 1) if approach_extra_body else 1
     
-    # Handle special approach names
-    actual_approach = approach
-    if approach == "pass@1":
-        actual_approach = "none"
-    elif approach == "maj@64":
-        actual_approach = "majority_voting"
-    elif approach == "genselect@64":
-        actual_approach = "genselect"
-    elif approach_extra_body and "approach" in approach_extra_body:
-        actual_approach = approach_extra_body["approach"]
-    
-    # Create model name with approach - handle special cases
-    if actual_approach == "none":
+    # Handle special approach names and create model names
+    if approach.startswith("avg@") or approach.startswith("pass@"):
+        # For avg@N and pass@N, use base model without any prefix
         full_model_name = model
-    elif actual_approach.startswith("thinkdeeper_"):
+    elif approach.startswith("maj@"):
+        # For majority voting, use the plugin prefix
+        full_model_name = f"majority_voting-{model}"
+    elif approach.startswith("genselect@"):
+        # For genselect, use the plugin prefix  
+        full_model_name = f"genselect-{model}"
+    elif approach.startswith("thinkdeeper_"):
         # For thinkdeeper, use base model name (decoding is passed in extra_body)
         full_model_name = model
-    elif actual_approach.startswith("majority_voting"):
-        # For majority voting, use majority_voting prefix
+    elif approach.startswith("majority_voting"):
+        # For other majority voting configurations
         full_model_name = f"majority_voting-{model}"
+    elif approach == "none":
+        # For explicit none approach
+        full_model_name = model
     else:
         # Standard approach prefix
-        full_model_name = f"{actual_approach}-{model}"
+        full_model_name = f"{approach}-{model}"
     
     for example in tqdm(examples, desc=f"Evaluating {approach}"):
+        # For avg@N and pass@N with n parameter, we generate n responses in parallel
+        if n_param > 1 and (approach.startswith("avg@") or approach.startswith("pass@")):
+            try:
+                # Get appropriate prompt for the category
+                prompt = get_prompt_for_category(example['question'], example['category'])
+                
+                # Record start time
+                start_time = time.time()
+                
+                # Prepare extra_body parameters (excluding n)
+                extra_body = {"spl_learning": False}
+                if approach_extra_body:
+                    extra_body_clean = {k: v for k, v in approach_extra_body.items() if k not in ["n", "approach"]}
+                    extra_body.update(extra_body_clean)
+                
+                # Generate n responses - optillm handles n parameter properly
+                responses = []
+                try:
+                    # Make API call with n parameter
+                    response = client.chat.completions.create(
+                        model=full_model_name,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        n=n_param,
+                        temperature=0.7,  # High temperature for diversity
+                        max_tokens=4096,
+                        extra_body=extra_body,
+                    )
+                    
+                    # Extract responses - optillm returns OpenAI-compatible format
+                    responses = [(choice.message.content, time.time() - start_time) for choice in response.choices]
+                    logger.debug(f"Generated {len(responses)} responses using n={n_param}")
+                    
+                except Exception as e:
+                    # If n parameter fails, fall back to sequential generation
+                    logger.warning(f"Parallel generation failed: {type(e).__name__}: {str(e)}")
+                    logger.info("Falling back to sequential generation")
+                    for i in range(n_param):
+                        try:
+                            single_start = time.time()
+                            response = client.chat.completions.create(
+                                model=full_model_name,
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature=0.7,
+                                max_tokens=4096,
+                                extra_body=extra_body,
+                            )
+                            response_text = response.choices[0].message.content
+                            responses.append((response_text, time.time() - single_start))
+                        except Exception as seq_error:
+                            logger.error(f"Sequential generation {i+1}/{n_param} failed: {seq_error}")
+                            responses.append((None, 0))  # Add failed response
+                
+                # Calculate total time
+                time_taken = time.time() - start_time
+                
+                # Evaluate all responses
+                run_results = []
+                for response_text, _ in responses:
+                    if response_text is not None:
+                        processed_response = remove_thinking_blocks(response_text)
+                        is_correct = evaluate_response(
+                            processed_response,
+                            example['answer'],
+                            example['category'],
+                            example['question']
+                        )
+                        run_results.append(is_correct)
+                    else:
+                        run_results.append(False)  # Failed responses count as incorrect
+                
+                # Calculate success rate based on approach
+                if approach.startswith("avg@"):
+                    # Average success rate
+                    success_rate = sum(run_results) / len(run_results) if run_results else 0
+                elif approach.startswith("pass@"):
+                    # Pass@k: success if ANY response is correct
+                    success_rate = 1.0 if any(run_results) else 0.0
+                else:
+                    # Shouldn't reach here, but default to average
+                    success_rate = sum(run_results) / len(run_results) if run_results else 0
+                
+                # Update metrics with average
+                metrics["total_correct"] += success_rate
+                metrics["total_time"] += time_taken
+                metrics["samples"] += 1
+                
+                # Update category metrics
+                if example['category'] not in category_metrics:
+                    category_metrics[example['category']] = {
+                        "correct": 0,
+                        "total": 0,
+                        "time": 0
+                    }
+                category_metrics[example['category']]["correct"] += success_rate
+                category_metrics[example['category']]["total"] += 1
+                category_metrics[example['category']]["time"] += time_taken
+                
+                # Record detailed result
+                detailed_results.append({
+                    "id": example['id'],
+                    "category": example['category'],
+                    "correct": success_rate,  # Store success rate
+                    "n_param": n_param,
+                    "successes": sum(run_results),
+                    "time_taken": time_taken,
+                    "ground_truth": example['answer']
+                })
+                
+            except Exception as e:
+                logger.error(f"Error processing example {example['id']}: {e}")
+                # Count failed examples as incorrect
+                metrics["total_correct"] += 0
+                metrics["total_time"] += 0
+                metrics["samples"] += 1
+                
+                # Update category metrics for failed example
+                if example['category'] not in category_metrics:
+                    category_metrics[example['category']] = {
+                        "correct": 0,
+                        "total": 0,
+                        "time": 0
+                    }
+                category_metrics[example['category']]["correct"] += 0
+                category_metrics[example['category']]["total"] += 1
+                category_metrics[example['category']]["time"] += 0
+                
+                # Record detailed result for failed example
+                detailed_results.append({
+                    "id": example['id'],
+                    "category": example['category'],
+                    "correct": False,
+                    "time_taken": 0,
+                    "raw_response": f"ERROR: {str(e)}",
+                    "processed_response": None,
+                    "has_thinking": False,
+                    "ground_truth": example['answer'],
+                    "error": str(e)
+                })
+                continue
+                
         # For pass@1, we need to run multiple times and calculate average
-        if num_runs > 1:
+        elif num_runs > 1:
             run_results = []
             total_run_time = 0
             
@@ -366,10 +515,10 @@ def evaluate_model(
                     # Record start time
                     start_time = time.time()
                     
-                    # Prepare extra_body parameters (excluding num_runs)
+                    # Prepare extra_body parameters (excluding num_runs and approach)
                     extra_body = {"spl_learning": False}
                     if approach_extra_body:
-                        extra_body_clean = {k: v for k, v in approach_extra_body.items() if k != "num_runs"}
+                        extra_body_clean = {k: v for k, v in approach_extra_body.items() if k not in ["num_runs", "approach"]}
                         extra_body.update(extra_body_clean)
                     
                     # Make API call
@@ -448,10 +597,11 @@ def evaluate_model(
                 # Record start time
                 start_time = time.time()
                 
-                # Prepare extra_body parameters
+                # Prepare extra_body parameters (excluding approach)
                 extra_body = {"spl_learning": False}
                 if approach_extra_body:
-                    extra_body.update(approach_extra_body)
+                    extra_body_clean = {k: v for k, v in approach_extra_body.items() if k != "approach"}
+                    extra_body.update(extra_body_clean)
                 
                 # Make API call
                 response = client.chat.completions.create(
@@ -518,6 +668,34 @@ def evaluate_model(
                 
             except Exception as e:
                 logger.error(f"Error processing example {example['id']}: {e}")
+                # Count failed examples as incorrect
+                metrics["total_correct"] += 0  # Failed = incorrect
+                metrics["total_time"] += 0     # No time recorded for failed attempts
+                metrics["samples"] += 1
+                
+                # Update category metrics for failed example
+                if example['category'] not in category_metrics:
+                    category_metrics[example['category']] = {
+                        "correct": 0,
+                        "total": 0,
+                        "time": 0
+                    }
+                category_metrics[example['category']]["correct"] += 0  # Failed = incorrect
+                category_metrics[example['category']]["total"] += 1
+                category_metrics[example['category']]["time"] += 0
+                
+                # Record detailed result for failed example
+                detailed_results.append({
+                    "id": example['id'],
+                    "category": example['category'],
+                    "correct": False,
+                    "time_taken": 0,
+                    "raw_response": f"ERROR: {str(e)}",
+                    "processed_response": None,
+                    "has_thinking": False,
+                    "ground_truth": example['answer'],
+                    "error": str(e)
+                })
                 continue
     
     # Calculate final metrics
@@ -527,6 +705,13 @@ def evaluate_model(
         "total_time": metrics["total_time"],
         "total_samples": metrics["samples"],
     }
+    
+    # Log summary of failures if any
+    total_expected = len(examples)
+    failures = len([r for r in detailed_results if "error" in r])
+    if failures > 0:
+        logger.warning(f"Approach {approach}: {failures}/{total_expected} examples failed due to errors")
+        logger.warning(f"Failed examples are counted as incorrect in accuracy calculation")
     
     # Add category-specific metrics
     for category, cat_metrics in category_metrics.items():
@@ -568,7 +753,7 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     report = []
     
     # Check if this is the default test-time compute evaluation
-    is_default_test_time = set(all_metrics.keys()) == {"pass@1", "maj@64", "genselect@64"}
+    is_default_test_time = set(all_metrics.keys()) == {"avg@8", "pass@8", "maj@8", "genselect@8"}
     
     # Header
     if is_default_test_time:
@@ -584,9 +769,11 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     if is_default_test_time:
         report.append("## Test-Time Compute Evaluation Results\n")
         report.append("This report evaluates the potential of test-time compute with:")
-        report.append("- **pass@1**: Baseline averaged over 64 runs (measures consistency)")
-        report.append("- **maj@64**: Majority voting with 64 candidates")
-        report.append("- **genselect@64**: Generative selection with 64 candidates\n")
+        report.append("- **avg@8**: Average success rate of 8 parallel responses")
+        report.append("- **pass@8**: Success if ANY of 8 responses is correct")
+        report.append("- **maj@8**: Majority voting with 8 candidates")
+        report.append("- **genselect@8**: Quality-based selection from 8 candidates\n")
+        report.append("All approaches use n=8 parallel generation (with sequential fallback) for fair comparison.\n")
     elif is_test_time_compute:
         report.append("This report evaluates test-time compute scaling approaches:")
         report.append("- **Sequential scaling**: ThinkDeeper with varying thinking token budgets")
@@ -632,24 +819,35 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     # Add summary section for default test-time compute
     if is_default_test_time:
         report.append("\n## Summary")
-        if "pass@1" in all_metrics and "maj@64" in all_metrics and "genselect@64" in all_metrics:
-            pass1_acc = all_metrics["pass@1"]["accuracy"] * 100
-            maj64_acc = all_metrics["maj@64"]["accuracy"] * 100
-            genselect64_acc = all_metrics["genselect@64"]["accuracy"] * 100
+        if all(metric in all_metrics for metric in ["avg@8", "pass@8", "maj@8", "genselect@8"]):
+            avg8_acc = all_metrics["avg@8"]["accuracy"] * 100
+            pass8_acc = all_metrics["pass@8"]["accuracy"] * 100
+            maj8_acc = all_metrics["maj@8"]["accuracy"] * 100
+            genselect8_acc = all_metrics["genselect@8"]["accuracy"] * 100
             
             report.append(f"\n**Key Metrics:**")
-            report.append(f"- **pass@1** (baseline averaged over 64 runs): {pass1_acc:.2f}%")
-            report.append(f"- **maj@64** (majority voting with 64 candidates): {maj64_acc:.2f}%")
-            report.append(f"- **genselect@64** (quality-based selection from 64 candidates): {genselect64_acc:.2f}%")
+            report.append(f"- **avg@8** (average of 8 responses): {avg8_acc:.2f}%")
+            report.append(f"- **pass@8** (success if any correct): {pass8_acc:.2f}%")
+            report.append(f"- **maj@8** (majority voting): {maj8_acc:.2f}%")
+            report.append(f"- **genselect@8** (quality-based selection): {genselect8_acc:.2f}%")
             
-            # Calculate improvements
-            if pass1_acc > 0:
-                maj_improvement = ((maj64_acc - pass1_acc) / pass1_acc) * 100
-                genselect_improvement = ((genselect64_acc - pass1_acc) / pass1_acc) * 100
+            # Calculate improvements over baseline (avg@8)
+            if avg8_acc > 0:
+                pass_improvement = ((pass8_acc - avg8_acc) / avg8_acc) * 100
+                maj_improvement = ((maj8_acc - avg8_acc) / avg8_acc) * 100
+                genselect_improvement = ((genselect8_acc - avg8_acc) / avg8_acc) * 100
                 
-                report.append(f"\n**Improvements over pass@1:**")
-                report.append(f"- maj@64: {'+' if maj_improvement > 0 else ''}{maj_improvement:.1f}%")
-                report.append(f"- genselect@64: {'+' if genselect_improvement > 0 else ''}{genselect_improvement:.1f}%")
+                report.append(f"\n**Improvements over avg@8 baseline:**")
+                report.append(f"- pass@8: {'+' if pass_improvement > 0 else ''}{pass_improvement:.1f}%")
+                report.append(f"- maj@8: {'+' if maj_improvement > 0 else ''}{maj_improvement:.1f}%")
+                report.append(f"- genselect@8: {'+' if genselect_improvement > 0 else ''}{genselect_improvement:.1f}%")
+            
+            # Show variance indicator
+            if pass8_acc > avg8_acc:
+                variance_ratio = (pass8_acc - avg8_acc) / avg8_acc * 100
+                report.append(f"\n**Response Variance Indicator:**")
+                report.append(f"- Gap between pass@8 and avg@8: {variance_ratio:.1f}%")
+                report.append(f"- This indicates {'high' if variance_ratio > 50 else 'moderate' if variance_ratio > 20 else 'low'} variance in response quality")
     
     # Save report
     report_path = f"{output_dir}/evaluation_report.md"
@@ -704,12 +902,25 @@ def main():
             # Filter test-time compute approaches if specific ones are requested
             approaches_config = [a for a in TEST_TIME_COMPUTE_APPROACHES if a[0] in args.approaches]
     elif args.approaches:
-        # Specific approaches requested
-        approaches_config = [a for a in APPROACHES if a[0] in args.approaches]
+        # Specific approaches requested - check all available approach lists
+        all_available_approaches = APPROACHES + TEST_TIME_COMPUTE_APPROACHES + DEFAULT_TEST_TIME_COMPUTE
+        approaches_config = []
+        for requested_approach in args.approaches:
+            found = False
+            for approach_tuple in all_available_approaches:
+                if approach_tuple[0] == requested_approach:
+                    if approach_tuple not in approaches_config:  # Avoid duplicates
+                        approaches_config.append(approach_tuple)
+                    found = True
+                    break
+            if not found:
+                logger.warning(f"Approach '{requested_approach}' not found in any configuration")
+        if not approaches_config:
+            raise ValueError(f"No valid approaches found. Requested: {args.approaches}")
     else:
         # Default: Use the default test-time compute configuration
         approaches_config = DEFAULT_TEST_TIME_COMPUTE
-        logger.info("Using default test-time compute evaluation (pass@1, maj@64, genselect@64)")
+        logger.info("Using default test-time compute evaluation (avg@8, pass@8, maj@8, genselect@8)")
     
     # Store all metrics for final report
     all_metrics = {}
