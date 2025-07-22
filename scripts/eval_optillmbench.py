@@ -68,12 +68,12 @@ TEST_TIME_COMPUTE_APPROACHES = [
 ]
 
 # Default test-time compute configuration for standard evaluation
-# Using n=8 for all approaches to ensure fair comparison and memory efficiency
+# Using n=5 for all approaches to ensure fair comparison and memory efficiency
 DEFAULT_TEST_TIME_COMPUTE = [
-    ("avg@8", "Average of 8 parallel responses", {"n": 8}),
-    ("pass@8", "Pass@8 - success if any of 8 is correct", {"n": 8}),
-    ("maj@8", "Majority Voting with k=8", {"k": 8}),
-    ("genselect@8", "GenSelect with 8 candidates", {"num_candidates": 8})
+    ("avg@5", "Average of 5 parallel responses", {"n": 5}),
+    ("pass@5", "Pass@5 - success if any of 5 is correct", {"n": 5}),
+    ("maj@5", "Majority Voting with k=5", {"k": 5}),
+    ("genselect@5", "GenSelect with 5 candidates", {"num_candidates": 5})
 ]
 
 def load_optillm_bench() -> datasets.Dataset:
@@ -753,7 +753,7 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     report = []
     
     # Check if this is the default test-time compute evaluation
-    is_default_test_time = set(all_metrics.keys()) == {"avg@8", "pass@8", "maj@8", "genselect@8"}
+    is_default_test_time = set(all_metrics.keys()) == {"avg@5", "pass@5", "maj@5", "genselect@5"}
     
     # Header
     if is_default_test_time:
@@ -769,11 +769,11 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     if is_default_test_time:
         report.append("## Test-Time Compute Evaluation Results\n")
         report.append("This report evaluates the potential of test-time compute with:")
-        report.append("- **avg@8**: Average success rate of 8 parallel responses")
-        report.append("- **pass@8**: Success if ANY of 8 responses is correct")
-        report.append("- **maj@8**: Majority voting with 8 candidates")
-        report.append("- **genselect@8**: Quality-based selection from 8 candidates\n")
-        report.append("All approaches use n=8 parallel generation (with sequential fallback) for fair comparison.\n")
+        report.append("- **avg@5**: Average success rate of 5 parallel responses")
+        report.append("- **pass@5**: Success if ANY of 5 responses is correct")
+        report.append("- **maj@5**: Majority voting with 5 candidates")
+        report.append("- **genselect@5**: Quality-based selection from 5 candidates\n")
+        report.append("All approaches use n=5 parallel generation (with sequential fallback) for fair comparison.\n")
     elif is_test_time_compute:
         report.append("This report evaluates test-time compute scaling approaches:")
         report.append("- **Sequential scaling**: ThinkDeeper with varying thinking token budgets")
@@ -819,34 +819,34 @@ def generate_report(all_metrics: Dict[str, Dict[str, float]], output_dir: str, i
     # Add summary section for default test-time compute
     if is_default_test_time:
         report.append("\n## Summary")
-        if all(metric in all_metrics for metric in ["avg@8", "pass@8", "maj@8", "genselect@8"]):
-            avg8_acc = all_metrics["avg@8"]["accuracy"] * 100
-            pass8_acc = all_metrics["pass@8"]["accuracy"] * 100
-            maj8_acc = all_metrics["maj@8"]["accuracy"] * 100
-            genselect8_acc = all_metrics["genselect@8"]["accuracy"] * 100
+        if all(metric in all_metrics for metric in ["avg@5", "pass@5", "maj@5", "genselect@5"]):
+            avg5_acc = all_metrics["avg@5"]["accuracy"] * 100
+            pass5_acc = all_metrics["pass@5"]["accuracy"] * 100
+            maj5_acc = all_metrics["maj@5"]["accuracy"] * 100
+            genselect5_acc = all_metrics["genselect@5"]["accuracy"] * 100
             
             report.append(f"\n**Key Metrics:**")
-            report.append(f"- **avg@8** (average of 8 responses): {avg8_acc:.2f}%")
-            report.append(f"- **pass@8** (success if any correct): {pass8_acc:.2f}%")
-            report.append(f"- **maj@8** (majority voting): {maj8_acc:.2f}%")
-            report.append(f"- **genselect@8** (quality-based selection): {genselect8_acc:.2f}%")
+            report.append(f"- **avg@5** (average of 5 responses): {avg5_acc:.2f}%")
+            report.append(f"- **pass@5** (success if any correct): {pass5_acc:.2f}%")
+            report.append(f"- **maj@5** (majority voting): {maj5_acc:.2f}%")
+            report.append(f"- **genselect@5** (quality-based selection): {genselect5_acc:.2f}%")
             
-            # Calculate improvements over baseline (avg@8)
-            if avg8_acc > 0:
-                pass_improvement = ((pass8_acc - avg8_acc) / avg8_acc) * 100
-                maj_improvement = ((maj8_acc - avg8_acc) / avg8_acc) * 100
-                genselect_improvement = ((genselect8_acc - avg8_acc) / avg8_acc) * 100
+            # Calculate improvements over baseline (avg@5)
+            if avg5_acc > 0:
+                pass_improvement = ((pass5_acc - avg5_acc) / avg5_acc) * 100
+                maj_improvement = ((maj5_acc - avg5_acc) / avg5_acc) * 100
+                genselect_improvement = ((genselect5_acc - avg5_acc) / avg5_acc) * 100
                 
-                report.append(f"\n**Improvements over avg@8 baseline:**")
-                report.append(f"- pass@8: {'+' if pass_improvement > 0 else ''}{pass_improvement:.1f}%")
-                report.append(f"- maj@8: {'+' if maj_improvement > 0 else ''}{maj_improvement:.1f}%")
-                report.append(f"- genselect@8: {'+' if genselect_improvement > 0 else ''}{genselect_improvement:.1f}%")
+                report.append(f"\n**Improvements over avg@5 baseline:**")
+                report.append(f"- pass@5: {'+' if pass_improvement > 0 else ''}{pass_improvement:.1f}%")
+                report.append(f"- maj@5: {'+' if maj_improvement > 0 else ''}{maj_improvement:.1f}%")
+                report.append(f"- genselect@5: {'+' if genselect_improvement > 0 else ''}{genselect_improvement:.1f}%")
             
             # Show variance indicator
-            if pass8_acc > avg8_acc:
-                variance_ratio = (pass8_acc - avg8_acc) / avg8_acc * 100
+            if pass5_acc > avg5_acc:
+                variance_ratio = (pass5_acc - avg5_acc) / avg5_acc * 100
                 report.append(f"\n**Response Variance Indicator:**")
-                report.append(f"- Gap between pass@8 and avg@8: {variance_ratio:.1f}%")
+                report.append(f"- Gap between pass@5 and avg@5: {variance_ratio:.1f}%")
                 report.append(f"- This indicates {'high' if variance_ratio > 50 else 'moderate' if variance_ratio > 20 else 'low'} variance in response quality")
     
     # Save report
@@ -920,7 +920,7 @@ def main():
     else:
         # Default: Use the default test-time compute configuration
         approaches_config = DEFAULT_TEST_TIME_COMPUTE
-        logger.info("Using default test-time compute evaluation (avg@8, pass@8, maj@8, genselect@8)")
+        logger.info("Using default test-time compute evaluation (avg@5, pass@5, maj@5, genselect@5)")
     
     # Store all metrics for final report
     all_metrics = {}

@@ -1,12 +1,12 @@
 """
-Majority Voting Plugin for OptILLM
+Majority Voting Plugin V2 for OptILLM
 
-This plugin implements a majority voting approach where k candidate solutions
-are generated and the most frequent answer is selected. This is particularly
-effective for problems with discrete answers (math, coding, multiple choice).
-
-The plugin uses the OpenAI API's n parameter to generate multiple responses
-efficiently in a single API call.
+Enhanced version with:
+- Category-aware answer extraction
+- Adaptive temperature control
+- Improved answer normalization
+- Response quality filtering
+- Smart fallback strategies
 """
 
 import re
@@ -14,45 +14,136 @@ import logging
 from typing import Tuple, Dict, Any, List, Optional
 from collections import Counter
 import json
+from fractions import Fraction
 
 logger = logging.getLogger(__name__)
 
 # Plugin identifier
 SLUG = "majority_voting"
 
-# Default number of candidates to generate
-DEFAULT_K = 6
+# Default configuration
+DEFAULT_K = 8
+DEFAULT_TEMPERATURE = 0.3  # Lower for better consistency
 
-# Default temperature for candidate generation
-DEFAULT_TEMPERATURE = 0.6
+# Category-specific temperatures
+CATEGORY_TEMPERATURES = {
+    "gsm8k": 0.2,      # Math needs precision
+    "mmlu_math": 0.3,  # Multiple choice math
+    "boolq": 0.3,      # Boolean questions
+    "aqua_rat": 0.3,   # Reasoning with choices
+    "default": 0.3     # General default
+}
+
+def detect_category(query: str) -> str:
+    """
+    Try to detect the problem category from the query.
+    
+    Returns:
+        Category string or 'default' if unknown
+    """
+    query_lower = query.lower()
+    
+    # GSM8K patterns
+    if "###" in query or ("calculate" in query_lower and any(word in query_lower for word in ["total", "sum", "difference", "product"])):
+        return "gsm8k"
+    
+    # MMLU patterns (multiple choice)
+    if re.search(r'\b[A-E]\s*[:\)]\s*', query) or "which of the following" in query_lower:
+        return "mmlu_math"
+    
+    # BoolQ patterns
+    if query_lower.strip().endswith("?") and any(word in query_lower for word in ["is", "are", "was", "were", "does", "do", "did", "can", "could", "will", "would"]):
+        return "boolq"
+    
+    # AQUA-RAT patterns
+    if re.search(r'options?:\s*[A-E]', query, re.IGNORECASE):
+        return "aqua_rat"
+    
+    return "default"
+
+
+def extract_answer_by_category(text: str, category: str) -> Optional[str]:
+    """
+    Extract answer based on problem category.
+    
+    Args:
+        text: Response text
+        category: Problem category
+        
+    Returns:
+        Extracted answer or None
+    """
+    text = text.strip()
+    
+    if category == "gsm8k":
+        # Look for ### pattern specifically
+        match = re.search(r'###\s*(-?\d*\.?\d+)', text)
+        if match:
+            return match.group(1)
+        
+        # Fallback: look for "answer is" pattern with number
+        match = re.search(r'answer\s+is\s*:?\s*\$?(-?\d*\.?\d+)', text, re.IGNORECASE)
+        if match:
+            return match.group(1)
+            
+    elif category == "mmlu_math":
+        # Look for letter choices first
+        patterns = [
+            r'\b([A-E])\b(?:\s*\)|:|\.)?(?:\s|$)',  # Letter with optional punctuation
+            r'(?:answer|choice|option)\s*(?:is\s*)?:?\s*([A-E])\b',
+            r'^([A-E])$',  # Just a letter
+            r'\b([0-3])\b(?:\s*\)|:|\.)?(?:\s|$)',  # Index (0-3)
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                return match.group(1)
+                
+    elif category == "boolq":
+        # Extract boolean answers
+        text_lower = text.lower()
+        
+        # Direct true/false
+        if re.search(r'\b(true|false)\b', text_lower):
+            match = re.search(r'\b(true|false)\b', text_lower)
+            return match.group(1)
+        
+        # Yes/no
+        if re.search(r'\b(yes|no)\b', text_lower):
+            match = re.search(r'\b(yes|no)\b', text_lower)
+            return match.group(1)
+            
+    elif category == "aqua_rat":
+        # Similar to MMLU but may have more complex patterns
+        patterns = [
+            r'(?:answer|option)\s*(?:is\s*)?:?\s*\(?([A-E])\)?',
+            r'\b([A-E])\s*\)',
+            r'^([A-E])$',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                return match.group(1)
+    
+    # If category-specific extraction fails, fall back to generic
+    return extract_answer(text)
+
 
 def extract_answer(text: str) -> Optional[str]:
     """
-    Extract the answer from a response text.
-    
-    This function looks for common answer patterns in the response:
-    1. Text after "Answer:" or "Final Answer:"
-    2. Text within \\boxed{} (LaTeX format)
-    3. Numbers at the end of the response
-    4. The last line if it's short (likely the answer)
-    
-    Args:
-        text: The response text to extract answer from
-        
-    Returns:
-        The extracted answer or None if no clear answer found
+    Generic answer extraction fallback.
+    Enhanced from original version.
     """
-    # Remove any trailing whitespace
     text = text.strip()
     
-    # Pattern 1: Look for LaTeX boxed format first (handle both \boxed and \\boxed)
+    # LaTeX boxed format
     boxed_match = re.search(r'\\{1,2}boxed\{([^}]+)\}', text)
     if boxed_match:
-        answer = boxed_match.group(1).strip()
-        logger.debug(f"Extracted boxed answer: {answer}")
-        return answer
+        return boxed_match.group(1).strip()
     
-    # Pattern 2: Look for "Answer:" or "Final Answer:" patterns
+    # Answer patterns
     answer_patterns = [
         r'(?:final\s+)?answer\s*[:=]\s*(.+?)(?:\n|$)',
         r'(?:the\s+)?(?:final\s+)?answer\s+is\s*[:=]?\s*(.+?)(?:\n|$)',
@@ -62,97 +153,155 @@ def extract_answer(text: str) -> Optional[str]:
     for pattern in answer_patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            answer = match.group(1).strip()
-            # Clean up the answer
-            answer = answer.rstrip('.,;')
+            answer = match.group(1).strip().rstrip('.,;')
             if answer:
-                logger.debug(f"Extracted answer using pattern: {answer}")
                 return answer
     
-    # Pattern 3: Look for standalone numbers (useful for math problems)
-    # Check the last few lines for a number
+    # Check last line if short
     lines = text.split('\n')
-    for line in reversed(lines[-3:]):  # Check last 3 lines
-        line = line.strip()
-        # Match numbers (including decimals, fractions, negative numbers)
-        number_match = re.match(r'^-?\d+\.?\d*$|^-?\d+/\d+$', line)
-        if number_match:
-            logger.debug(f"Extracted number answer: {line}")
-            return line
-    
-    # Pattern 4: For multiple choice, look for single letter answers
-    # Check this before the generic last line check
-    mc_patterns = [
-        r'(?:the\s+)?(?:correct\s+)?(?:answer|option)\s+is\s+([A-E])(?:\b|$)',
-        r'(?:choose|select|pick)\s+(?:option\s+)?([A-E])(?:\b|$)',
-        r'\b([A-E])\s*\)\s*[A-Za-z]+.*is\s+(?:the\s+)?(?:correct|right)',
-        r'^([A-E])$',  # Just a letter on its own line
-    ]
-    
-    for pattern in mc_patterns:
-        mc_match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-        if mc_match:
-            answer = mc_match.group(1).upper()
-            logger.debug(f"Extracted multiple choice answer: {answer}")
-            return answer
-    
-    # Pattern 5: If the last line is short (< 50 chars), it might be the answer
     if lines:
         last_line = lines[-1].strip()
         if last_line and len(last_line) < 50 and not last_line.endswith(':'):
-            logger.debug(f"Using last line as answer: {last_line}")
             return last_line
     
-    logger.warning("Could not extract a clear answer from the response")
     return None
 
-def normalize_answer(answer: str) -> str:
+
+def normalize_answer_enhanced(answer: str, category: str = "default") -> str:
     """
-    Normalize an answer for comparison.
-    
-    This helps ensure that equivalent answers are treated as the same:
-    - Converts to lowercase
-    - Removes extra whitespace
-    - Removes quotes
-    - Normalizes number formats
+    Enhanced answer normalization with category awareness.
     
     Args:
-        answer: The answer to normalize
+        answer: Raw answer text
+        category: Problem category for specific normalization
         
     Returns:
-        The normalized answer
+        Normalized answer
     """
-    # Convert to lowercase
+    if not answer:
+        return ""
+        
+    # Basic normalization
     answer = answer.lower().strip()
-    
-    # Remove quotes
     answer = answer.strip('"\'')
-    
-    # Normalize whitespace
     answer = ' '.join(answer.split())
     
-    # Try to normalize numbers
-    try:
-        # Check if it's a float
-        if '.' in answer:
+    # Category-specific normalization
+    if category in ["gsm8k", "mmlu_math"] and re.match(r'^-?\d*\.?\d+$', answer):
+        # Numeric normalization
+        try:
+            # Handle different number formats
+            answer = answer.replace(',', '')  # Remove commas
+            
+            # Convert to float for consistent representation
             num = float(answer)
-            # Format to remove trailing zeros
-            answer = f"{num:g}"
-        else:
-            # Try integer
-            num = int(answer)
-            answer = str(num)
-    except ValueError:
-        # Not a number, keep as is
-        pass
+            
+            # Handle integers
+            if num.is_integer():
+                return str(int(num))
+            else:
+                # Format to remove trailing zeros
+                return f"{num:g}"
+                
+        except ValueError:
+            pass
     
-    # Handle yes/no variations
-    if answer in ['yes', 'yeah', 'yep', 'true', 'correct']:
-        answer = 'yes'
-    elif answer in ['no', 'nope', 'false', 'incorrect']:
-        answer = 'no'
+    elif category == "mmlu_math":
+        # Ensure single letter answers are uppercase
+        if len(answer) == 1 and answer.isalpha():
+            return answer.upper()
+        
+        # Extract letter from "option A", "choice B", etc.
+        match = re.match(r'(?:option|choice|answer)\s*([a-e])', answer, re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+            
+    elif category == "boolq":
+        # Boolean normalization
+        true_values = ['yes', 'true', 'correct', '1', 't', 'y']
+        false_values = ['no', 'false', 'incorrect', '0', 'f', 'n']
+        
+        if answer in true_values:
+            return 'true'
+        elif answer in false_values:
+            return 'false'
+    
+    # Handle mathematical expressions
+    if category in ["gsm8k", "mmlu_math"]:
+        # Try to evaluate simple fractions
+        fraction_match = re.match(r'^(\d+)/(\d+)$', answer)
+        if fraction_match:
+            try:
+                frac = Fraction(int(fraction_match.group(1)), int(fraction_match.group(2)))
+                return str(float(frac))
+            except:
+                pass
+        
+        # Handle percentages
+        percent_match = re.match(r'^(\d*\.?\d+)%$', answer)
+        if percent_match:
+            try:
+                return str(float(percent_match.group(1)) / 100)
+            except:
+                pass
     
     return answer
+
+
+def score_response_quality(response: str, category: str) -> float:
+    """
+    Score response quality for weighted voting.
+    
+    Returns:
+        Quality score between 0 and 1
+    """
+    if not response:
+        return 0.0
+    
+    score = 1.0
+    
+    # Check for completeness
+    if len(response.strip()) < 10:
+        score *= 0.5
+    
+    # Check for uncertainty markers
+    uncertainty_words = ['maybe', 'probably', 'might', 'could be', 'not sure', 'guess']
+    for word in uncertainty_words:
+        if word in response.lower():
+            score *= 0.7
+    
+    # Category-specific checks
+    if category == "gsm8k":
+        # Should have ### marker
+        if "###" not in response:
+            score *= 0.8
+    elif category in ["mmlu_math", "aqua_rat"]:
+        # Should have clear choice indication
+        if not re.search(r'\b[A-E]\b', response):
+            score *= 0.8
+    
+    # Check if response seems cut off
+    if response.strip().endswith(('...', 'Therefore,', 'So,', 'Thus,')):
+        score *= 0.5
+    
+    return score
+
+
+def add_self_consistency_prompt(system_prompt: str, query: str, category: str) -> str:
+    """
+    Add format instructions to encourage consistency.
+    """
+    format_instructions = {
+        "gsm8k": "\n\nIMPORTANT: After showing your work, provide your final numerical answer after ### on a new line.",
+        "mmlu_math": "\n\nIMPORTANT: After your reasoning, clearly state your choice as a single letter (A, B, C, D, or E).",
+        "boolq": "\n\nIMPORTANT: After your analysis, clearly state your answer as either 'true' or 'false'.",
+        "aqua_rat": "\n\nIMPORTANT: After solving the problem, clearly indicate your choice with the letter (A, B, C, D, or E).",
+        "default": "\n\nIMPORTANT: Clearly state your final answer at the end of your response."
+    }
+    
+    instruction = format_instructions.get(category, format_instructions["default"])
+    return system_prompt + instruction
+
 
 def run(
     system_prompt: str,
@@ -162,45 +311,40 @@ def run(
     request_config: Dict[str, Any] = None
 ) -> Tuple[str, int]:
     """
-    Main entry point for the majority voting plugin.
-    
-    Generates k candidate solutions and returns the most frequent answer.
-    
-    Args:
-        system_prompt: System prompt for the model
-        initial_query: User's query
-        client: OpenAI-compatible client instance
-        model: Model identifier
-        request_config: Additional configuration parameters
-        
-    Returns:
-        Tuple of (response_text, completion_tokens_used)
+    Enhanced majority voting with category awareness and better extraction.
     """
-    logger.info("Starting majority voting process")
+    logger.info("Starting enhanced majority voting process")
     
-    # Extract parameters from request_config
-    k = DEFAULT_K
-    temperature = DEFAULT_TEMPERATURE
+    # Detect category
+    category = detect_category(initial_query)
+    logger.info(f"Detected category: {category}")
     
-    if request_config:
-        k = request_config.get('k', DEFAULT_K)
-        # Allow overriding temperature if needed
-        temperature = request_config.get('temperature', DEFAULT_TEMPERATURE)
-        # Respect max_tokens if provided
-        max_tokens = request_config.get('max_tokens', 4096)
-    else:
-        max_tokens = 4096
+    # Extract parameters
+    k = request_config.get('k', DEFAULT_K) if request_config else DEFAULT_K
     
-    logger.info(f"Generating {k} candidates with temperature={temperature}")
+    # Use category-specific temperature
+    base_temperature = CATEGORY_TEMPERATURES.get(category, DEFAULT_TEMPERATURE)
+    temperature = request_config.get('temperature', base_temperature) if request_config else base_temperature
+    
+    max_tokens = request_config.get('max_tokens', 4096) if request_config else 4096
+    
+    logger.info(f"Generating {k} candidates with temperature={temperature} for category={category}")
+    
+    # Add self-consistency prompt
+    enhanced_system_prompt = add_self_consistency_prompt(system_prompt, initial_query, category)
     
     # Prepare messages
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": enhanced_system_prompt},
         {"role": "user", "content": initial_query}
     ]
     
+    # Generate candidates
+    candidates = []
+    total_tokens = 0
+    
     try:
-        # Generate k candidates in a single API call using n parameter
+        # Try parallel generation first
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -209,20 +353,12 @@ def run(
             max_tokens=max_tokens
         )
         
-        # Extract all candidate responses
         candidates = [choice.message.content for choice in response.choices]
         total_tokens = response.usage.completion_tokens
         
-        logger.info(f"Generated {len(candidates)} candidates using n parameter. Tokens used: {total_tokens}")
-        
     except Exception as e:
-        logger.warning(f"n parameter not supported by provider: {str(e)}")
-        logger.info(f"Falling back to generating {k} candidates one by one")
-        
-        # Fallback: Generate candidates one by one in a loop
-        candidates = []
-        total_tokens = 0
-        
+        logger.warning(f"Parallel generation failed: {str(e)}")
+        # Fallback to sequential
         for i in range(k):
             try:
                 response = client.chat.completions.create(
@@ -233,61 +369,54 @@ def run(
                 )
                 candidates.append(response.choices[0].message.content)
                 total_tokens += response.usage.completion_tokens
-                logger.debug(f"Generated candidate {i+1}/{k}")
-                
-            except Exception as fallback_error:
-                logger.error(f"Error generating candidate {i+1}: {str(fallback_error)}")
+            except Exception as err:
+                logger.error(f"Error generating candidate {i+1}: {str(err)}")
                 continue
-        
-        if not candidates:
-            logger.error("Failed to generate any candidates")
-            return "Error: Could not generate any candidates", 0
-        
-        logger.info(f"Generated {len(candidates)} candidates using fallback method. Total tokens used: {total_tokens}")
     
-    # Extract answers from each candidate
-    answers = []
-    answer_to_response = {}  # Map normalized answers to full responses
+    if not candidates:
+        return "Error: Could not generate any candidates", 0
+    
+    # Extract and normalize answers with quality scores
+    answer_data = []  # List of (normalized_answer, raw_answer, response, quality_score)
     
     for i, candidate in enumerate(candidates):
-        answer = extract_answer(candidate)
+        # Extract answer using category-aware extraction
+        answer = extract_answer_by_category(candidate, category)
+        
         if answer:
-            normalized = normalize_answer(answer)
-            answers.append(normalized)
-            # Keep the first full response for each unique answer
-            if normalized not in answer_to_response:
-                answer_to_response[normalized] = candidate
-            logger.debug(f"Candidate {i+1} answer: {answer} (normalized: {normalized})")
+            normalized = normalize_answer_enhanced(answer, category)
+            quality = score_response_quality(candidate, category)
+            answer_data.append((normalized, answer, candidate, quality))
+            logger.debug(f"Candidate {i+1}: {answer} -> {normalized} (quality: {quality:.2f})")
         else:
             logger.warning(f"Could not extract answer from candidate {i+1}")
     
-    if not answers:
-        logger.warning("No answers could be extracted from any candidate")
-        # Return the first candidate as fallback
-        return candidates[0] if candidates else "Error: No candidates generated", total_tokens
+    if not answer_data:
+        # Fallback: return highest quality response
+        quality_scores = [(score_response_quality(c, category), c) for c in candidates]
+        quality_scores.sort(reverse=True)
+        return quality_scores[0][1], total_tokens
     
-    # Count answer frequencies
-    answer_counts = Counter(answers)
-    logger.info(f"Answer distribution: {dict(answer_counts)}")
+    # Count weighted votes
+    weighted_votes = Counter()
+    answer_to_response = {}
     
-    # Get the most common answer
-    most_common_answer, count = answer_counts.most_common(1)[0]
-    confidence = count / len(answers)
+    for normalized, raw, response, quality in answer_data:
+        weighted_votes[normalized] += quality
+        # Keep the highest quality response for each answer
+        if normalized not in answer_to_response or quality > answer_to_response[normalized][1]:
+            answer_to_response[normalized] = (response, quality)
     
-    logger.info(f"Most common answer: '{most_common_answer}' with {count}/{len(answers)} votes ({confidence:.1%} confidence)")
+    # Get the answer with highest weighted votes
+    most_common_answer, weighted_score = weighted_votes.most_common(1)[0]
     
-    # Get the full response corresponding to the most common answer
-    winning_response = answer_to_response.get(most_common_answer, candidates[0])
+    # Calculate confidence
+    total_weight = sum(weighted_votes.values())
+    confidence = weighted_score / total_weight if total_weight > 0 else 0
     
-    # Log voting summary to console instead of adding to response
-    logger.info("Majority Voting Summary:")
-    logger.info(f"  - Generated {len(candidates)} candidates")
-    logger.info(f"  - Most common answer: {most_common_answer}")
-    logger.info(f"  - Votes: {count}/{len(answers)} ({confidence:.1%} confidence)")
+    logger.info(f"Most common answer: '{most_common_answer}' with weighted score {weighted_score:.2f} ({confidence:.1%} confidence)")
     
-    if len(answer_counts) > 1:
-        other_answers = [f"{ans} ({cnt} votes)" for ans, cnt in answer_counts.items() if ans != most_common_answer]
-        logger.info(f"  - Other answers: {', '.join(other_answers)}")
+    # Return the best response for the winning answer
+    winning_response = answer_to_response[most_common_answer][0]
     
-    # Return only the full response from the winning answer
     return winning_response, total_tokens
