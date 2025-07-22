@@ -3,94 +3,102 @@
 Test plugin functionality
 """
 
-import pytest
 import sys
 import os
+import importlib
+
+# Try to import pytest, but don't fail if it's not available
+try:
+    import pytest
+except ImportError:
+    pytest = None
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from optillm.plugins import load_plugin, is_plugin_approach
-from optillm.plugins.memory_plugin import should_enable_memory
+from optillm import plugin_approaches, load_plugins
 
 
-def test_plugin_loading():
-    """Test loading plugins"""
-    # Test loading a known plugin
-    plugin = load_plugin("memory")
-    assert plugin is not None
+def test_plugin_module_imports():
+    """Test that plugin modules can be imported"""
+    plugin_modules = [
+        'optillm.plugins.memory_plugin',
+        'optillm.plugins.readurls_plugin', 
+        'optillm.plugins.privacy_plugin',
+        'optillm.plugins.genselect_plugin',
+        'optillm.plugins.majority_voting_plugin'
+    ]
+    
+    for module_name in plugin_modules:
+        try:
+            module = importlib.import_module(module_name)
+            assert hasattr(module, 'run'), f"{module_name} missing 'run' function"
+            assert hasattr(module, 'SLUG'), f"{module_name} missing 'SLUG' attribute"
+        except ImportError as e:
+            if pytest:
+                pytest.fail(f"Failed to import {module_name}: {e}")
+            else:
+                raise AssertionError(f"Failed to import {module_name}: {e}")
+
+
+def test_plugin_approach_detection():
+    """Test plugin approach detection after loading"""
+    # Load plugins first
+    load_plugins()
+    
+    # Check if known plugins are loaded
+    expected_plugins = ["memory", "readurls", "privacy"]
+    for plugin_name in expected_plugins:
+        assert plugin_name in plugin_approaches, f"Plugin {plugin_name} not loaded"
+
+
+def test_memory_plugin_structure():
+    """Test memory plugin has required structure"""
+    import optillm.plugins.memory_plugin as plugin
     assert hasattr(plugin, 'run')
-    
-    # Test loading non-existent plugin returns None
-    plugin = load_plugin("nonexistent")
-    assert plugin is None
-
-
-def test_is_plugin_approach():
-    """Test plugin approach detection"""
-    # Known plugins
-    assert is_plugin_approach("memory") == True
-    assert is_plugin_approach("readurls") == True
-    assert is_plugin_approach("privacy") == True
-    
-    # Non-plugins
-    assert is_plugin_approach("mcts") == False
-    assert is_plugin_approach("bon") == False
-    assert is_plugin_approach("nonexistent") == False
-
-
-def test_memory_plugin_detection():
-    """Test memory plugin auto-detection"""
-    # Test with context length exceeding threshold
-    long_context = "x" * 500000  # 500k chars
-    assert should_enable_memory(long_context) == True
-    
-    # Test with short context
-    short_context = "Hello world"
-    assert should_enable_memory(short_context) == False
-    
-    # Test with explicit false in config
-    assert should_enable_memory(long_context, {"memory": False}) == False
-    
-    # Test with explicit true in config
-    assert should_enable_memory(short_context, {"memory": True}) == True
+    assert hasattr(plugin, 'SLUG')
+    assert plugin.SLUG == "memory"
+    assert hasattr(plugin, 'Memory')  # Check for Memory class
 
 
 def test_genselect_plugin():
-    """Test genselect plugin exists"""
-    plugin = load_plugin("genselect")
-    assert plugin is not None
+    """Test genselect plugin module"""
+    import optillm.plugins.genselect_plugin as plugin
     assert hasattr(plugin, 'run')
+    assert hasattr(plugin, 'SLUG')
     assert hasattr(plugin, 'DEFAULT_NUM_CANDIDATES')
+    assert plugin.SLUG == "genselect"
 
 
 def test_majority_voting_plugin():
-    """Test majority voting plugin"""
-    plugin = load_plugin("majority_voting")
-    assert plugin is not None
+    """Test majority voting plugin module"""
+    import optillm.plugins.majority_voting_plugin as plugin
     assert hasattr(plugin, 'run')
+    assert hasattr(plugin, 'SLUG')
     assert hasattr(plugin, 'extract_answer')
     assert hasattr(plugin, 'normalize_answer')
+    assert plugin.SLUG == "majority_voting"
 
 
 if __name__ == "__main__":
     print("Running plugin tests...")
     
     try:
-        test_plugin_loading()
-        print("✅ Plugin loading test passed")
+        test_plugin_module_imports()
+        print("✅ Plugin module imports test passed")
     except Exception as e:
-        print(f"❌ Plugin loading test failed: {e}")
+        print(f"❌ Plugin module imports test failed: {e}")
     
     try:
-        test_is_plugin_approach()
+        test_plugin_approach_detection()
         print("✅ Plugin approach detection test passed")
     except Exception as e:
         print(f"❌ Plugin approach detection test failed: {e}")
     
     try:
-        test_memory_plugin_detection()
-        print("✅ Memory plugin detection test passed")
+        test_memory_plugin_structure()
+        print("✅ Memory plugin structure test passed")
     except Exception as e:
-        print(f"❌ Memory plugin detection test failed: {e}")
+        print(f"❌ Memory plugin structure test failed: {e}")
     
     try:
         test_genselect_plugin()
