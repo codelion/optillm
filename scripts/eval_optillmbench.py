@@ -382,7 +382,7 @@ def evaluate_model(
                             {"role": "user", "content": prompt}
                         ],
                         n=n_param,
-                        temperature=0.7,  # High temperature for diversity
+                        temperature=0.6,  # Unified temperature for all approaches
                         max_tokens=4096,
                         extra_body=extra_body,
                     )
@@ -404,7 +404,7 @@ def evaluate_model(
                                     {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
                                     {"role": "user", "content": prompt}
                                 ],
-                                temperature=0.7,
+                                temperature=0.6,
                                 max_tokens=4096,
                                 extra_body=extra_body,
                             )
@@ -528,7 +528,7 @@ def evaluate_model(
                             {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
                             {"role": "user", "content": prompt}
                         ],
-                        temperature=0.7,  # Higher temperature for pass@k diversity
+                        temperature=0.6,  # Unified temperature for all approaches
                         max_tokens=4096,
                         extra_body=extra_body,
                     )
@@ -610,7 +610,7 @@ def evaluate_model(
                         {"role": "system", "content": "You are a helpful AI assistant focused on providing precise answers in the requested format."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.2,
+                    temperature=0.6,
                     max_tokens=4096,
                     extra_body=extra_body,
                 )
