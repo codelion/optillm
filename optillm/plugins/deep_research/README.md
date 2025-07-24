@@ -32,7 +32,7 @@ deep_research/
 The core implementation of the TTD-DR algorithm with the following key methods:
 
 - **`decompose_query()`** - Implements query planning phase
-- **`perform_web_search()`** - Orchestrates web search using Chrome automation
+- **`perform_web_search()`** - Orchestrates web search using individual queries to avoid truncation
 - **`extract_and_fetch_urls()`** - Extracts sources and fetches content
 - **`synthesize_with_memory()`** - Processes unbounded context with citations
 - **`evaluate_completeness()`** - Assesses research gaps
@@ -225,6 +225,11 @@ Potential improvements aligned with research directions:
 4. **Citation Extraction**
    - URL parsing depends on search result format
    - Plugin includes fallback parsing methods
+
+5. **Search Query Processing**
+   - Plugin uses individual searches for each sub-query to prevent truncation
+   - If search results seem incomplete, check that decomposed queries are reasonable
+   - Each sub-query is processed separately to ensure complete coverage
 
 ### Debug Mode
 

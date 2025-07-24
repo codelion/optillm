@@ -98,17 +98,37 @@ class DeepResearcher:
         """
         Perform web search for multiple queries using the web_search plugin
         """
-        combined_query = "Search for the following topics:\n" + "\n".join([f"- {q}" for q in queries])
+        all_results = []
         
-        try:
-            enhanced_query, _ = web_search_run("", combined_query, None, None, {
-                "num_results": self.max_sources,
-                "delay_seconds": 3,  # Increased delay to avoid rate limiting
-                "headless": False  # Allow CAPTCHA solving if needed
-            })
-            return enhanced_query
-        except Exception as e:
-            return f"Web search failed: {str(e)}"
+        # Perform individual searches for each query to avoid truncation issues
+        for i, query in enumerate(queries):
+            try:
+                # Format as a clean search query
+                search_query = f"search for {query.strip()}"
+                
+                # Perform search with reduced results per query to stay within limits
+                results_per_query = max(1, self.max_sources // len(queries))
+                
+                enhanced_query, _ = web_search_run("", search_query, None, None, {
+                    "num_results": results_per_query,
+                    "delay_seconds": 2 if i == 0 else 1,  # Shorter delay for subsequent queries
+                    "headless": False  # Allow CAPTCHA solving if needed
+                })
+                
+                if enhanced_query and "Web Search Results" in enhanced_query:
+                    all_results.append(enhanced_query)
+                    
+            except Exception as e:
+                # Continue with other queries if one fails
+                all_results.append(f"Search failed for query '{query}': {str(e)}")
+                continue
+        
+        if not all_results:
+            return "Web search failed: No results obtained from any query"
+        
+        # Combine all search results
+        combined_results = "\n\n".join(all_results)
+        return combined_results
     
     def extract_and_fetch_urls(self, search_results: str) -> Tuple[str, List[Dict]]:
         """
