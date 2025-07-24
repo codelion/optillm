@@ -165,6 +165,21 @@ response = client.chat.completions.create(
 - **Token Usage**: 1,000-5,000 tokens per iteration
 - **Memory Requirements**: Scales with content volume and context size
 
+## Reasoning Model Compatibility
+
+The plugin is fully compatible with reasoning models that include internal thinking processes:
+
+- **Automatic Cleanup**: Removes `<think>`, `<thinking>`, `<reasoning>`, `<reflection>` tags from all responses
+- **Professional Output**: Ensures final reports contain only clean, formatted content
+- **Seamless Integration**: Works transparently with any model type
+- **Supported Tags**: `<think>`, `<thinking>`, `<reasoning>`, `<thought>`, `<reflect>`, `<reflection>`
+
+Example cleanup:
+```
+Input:  "<think>Let me analyze this</think>\n\n# Research Report\nContent here..."
+Output: "# Research Report\nContent here..."
+```
+
 ## Error Handling
 
 The plugin includes comprehensive error handling:
@@ -183,6 +198,7 @@ The implementation follows the TTD-DR paper's quality criteria:
 - **Citation Accuracy** - Proper attribution for all claims and findings
 - **Academic Rigor** - Maintains objectivity and scholarly tone
 - **Iterative Refinement** - Continuously improves research quality
+- **Clean Output** - Automatically removes reasoning tags (`<think>`, `<thinking>`, etc.) for professional reports
 
 ## Comparison to Simple Search
 

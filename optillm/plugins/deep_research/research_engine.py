@@ -19,6 +19,48 @@ from optillm.plugins.readurls_plugin import run as readurls_run
 from optillm.plugins.memory_plugin import run as memory_run
 
 
+def clean_reasoning_tags(text: str) -> str:
+    """
+    Remove reasoning tags from model responses for clean final output.
+    
+    Removes common reasoning tags like:
+    - <think></think>
+    - <thinking></thinking>
+    - <reasoning></reasoning>
+    - <thought></thought>
+    
+    Args:
+        text: Raw model response text
+        
+    Returns:
+        Cleaned text with reasoning tags removed
+    """
+    if not text:
+        return text
+    
+    # List of reasoning tag patterns to remove
+    reasoning_patterns = [
+        r'<think>.*?</think>',
+        r'<thinking>.*?</thinking>',
+        r'<reasoning>.*?</reasoning>',
+        r'<thought>.*?</thought>',
+        r'<reflect>.*?</reflect>',
+        r'<reflection>.*?</reflection>',
+    ]
+    
+    cleaned_text = text
+    for pattern in reasoning_patterns:
+        # Use DOTALL flag to match across newlines
+        cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # Clean up any extra whitespace left behind, but preserve markdown formatting
+    cleaned_text = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_text)  # Multiple empty lines to double
+    cleaned_text = re.sub(r'  +', ' ', cleaned_text)  # Multiple spaces to single space (but preserve intentional double spaces)
+    cleaned_text = cleaned_text.strip()
+    
+    return cleaned_text
+
+
 class DeepResearcher:
     """
     Implementation of Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
@@ -77,6 +119,8 @@ class DeepResearcher:
             )
             
             content = response.choices[0].message.content.strip()
+            # Clean reasoning tags from query decomposition response
+            content = clean_reasoning_tags(content)
             self.total_tokens += response.usage.completion_tokens
             
             # Extract numbered queries
@@ -217,6 +261,8 @@ class DeepResearcher:
         
         try:
             synthesis, tokens = memory_run(system_prompt, memory_input, self.client, self.model)
+            # Clean reasoning tags from synthesis response
+            synthesis = clean_reasoning_tags(synthesis)
             return synthesis, tokens
         except Exception as e:
             return f"Memory synthesis failed: {str(e)}", 0
@@ -254,6 +300,8 @@ class DeepResearcher:
             )
             
             content = response.choices[0].message.content.strip()
+            # Clean reasoning tags from completeness evaluation response
+            content = clean_reasoning_tags(content)
             self.total_tokens += response.usage.completion_tokens
             
             # Parse response
@@ -352,6 +400,8 @@ class DeepResearcher:
             )
             
             report_content = response.choices[0].message.content.strip()
+            # Clean reasoning tags from final report response
+            report_content = clean_reasoning_tags(report_content)
             self.total_tokens += response.usage.completion_tokens
             
             # Add references section with proper formatting
