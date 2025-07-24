@@ -1,158 +1,77 @@
 """
 Majority Voting Plugin for OptILLM
 
-This plugin implements a majority voting approach where k candidate solutions
-are generated and the most frequent answer is selected. This is particularly
-effective for problems with discrete answers (math, coding, multiple choice).
-
-The plugin uses the OpenAI API's n parameter to generate multiple responses
-efficiently in a single API call.
+Generic implementation that generates multiple candidates and selects
+the most common response through simple voting.
 """
 
 import re
 import logging
 from typing import Tuple, Dict, Any, List, Optional
 from collections import Counter
-import json
 
 logger = logging.getLogger(__name__)
 
 # Plugin identifier
 SLUG = "majority_voting"
 
-# Default number of candidates to generate
-DEFAULT_K = 6
+# Default configuration
+DEFAULT_K = 8
+DEFAULT_TEMPERATURE = 0.6  # Unified temperature for consistency
 
-# Default temperature for candidate generation
-DEFAULT_TEMPERATURE = 0.6
 
-def extract_answer(text: str) -> Optional[str]:
+def normalize_response(response: str) -> str:
     """
-    Extract the answer from a response text.
-    
-    This function looks for common answer patterns in the response:
-    1. Text after "Answer:" or "Final Answer:"
-    2. Text within \\boxed{} (LaTeX format)
-    3. Numbers at the end of the response
-    4. The last line if it's short (likely the answer)
-    
-    Args:
-        text: The response text to extract answer from
-        
-    Returns:
-        The extracted answer or None if no clear answer found
+    Basic normalization for comparing responses.
+    Removes extra whitespace, punctuation at ends, and lowercases.
     """
-    # Remove any trailing whitespace
-    text = text.strip()
+    if not response:
+        return ""
     
-    # Pattern 1: Look for LaTeX boxed format first (handle both \boxed and \\boxed)
-    boxed_match = re.search(r'\\{1,2}boxed\{([^}]+)\}', text)
-    if boxed_match:
-        answer = boxed_match.group(1).strip()
-        logger.debug(f"Extracted boxed answer: {answer}")
-        return answer
+    # Remove thinking blocks if present
+    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
     
-    # Pattern 2: Look for "Answer:" or "Final Answer:" patterns
-    answer_patterns = [
-        r'(?:final\s+)?answer\s*[:=]\s*(.+?)(?:\n|$)',
-        r'(?:the\s+)?(?:final\s+)?answer\s+is\s*[:=]?\s*(.+?)(?:\n|$)',
-        r'(?:therefore|thus|so)\s*,?\s*(.+?)(?:\n|$)'
-    ]
+    # Basic normalization
+    response = response.strip()
+    response = response.lower()
     
-    for pattern in answer_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            answer = match.group(1).strip()
-            # Clean up the answer
-            answer = answer.rstrip('.,;')
-            if answer:
-                logger.debug(f"Extracted answer using pattern: {answer}")
-                return answer
-    
-    # Pattern 3: Look for standalone numbers (useful for math problems)
-    # Check the last few lines for a number
-    lines = text.split('\n')
-    for line in reversed(lines[-3:]):  # Check last 3 lines
-        line = line.strip()
-        # Match numbers (including decimals, fractions, negative numbers)
-        number_match = re.match(r'^-?\d+\.?\d*$|^-?\d+/\d+$', line)
-        if number_match:
-            logger.debug(f"Extracted number answer: {line}")
-            return line
-    
-    # Pattern 4: For multiple choice, look for single letter answers
-    # Check this before the generic last line check
-    mc_patterns = [
-        r'(?:the\s+)?(?:correct\s+)?(?:answer|option)\s+is\s+([A-E])(?:\b|$)',
-        r'(?:choose|select|pick)\s+(?:option\s+)?([A-E])(?:\b|$)',
-        r'\b([A-E])\s*\)\s*[A-Za-z]+.*is\s+(?:the\s+)?(?:correct|right)',
-        r'^([A-E])$',  # Just a letter on its own line
-    ]
-    
-    for pattern in mc_patterns:
-        mc_match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-        if mc_match:
-            answer = mc_match.group(1).upper()
-            logger.debug(f"Extracted multiple choice answer: {answer}")
-            return answer
-    
-    # Pattern 5: If the last line is short (< 50 chars), it might be the answer
-    if lines:
-        last_line = lines[-1].strip()
-        if last_line and len(last_line) < 50 and not last_line.endswith(':'):
-            logger.debug(f"Using last line as answer: {last_line}")
-            return last_line
-    
-    logger.warning("Could not extract a clear answer from the response")
-    return None
-
-def normalize_answer(answer: str) -> str:
-    """
-    Normalize an answer for comparison.
-    
-    This helps ensure that equivalent answers are treated as the same:
-    - Converts to lowercase
-    - Removes extra whitespace
-    - Removes quotes
-    - Normalizes number formats
-    
-    Args:
-        answer: The answer to normalize
-        
-    Returns:
-        The normalized answer
-    """
-    # Convert to lowercase
-    answer = answer.lower().strip()
-    
-    # Remove quotes
-    answer = answer.strip('"\'')
+    # Remove trailing punctuation
+    response = response.rstrip('.,;:!?')
     
     # Normalize whitespace
-    answer = ' '.join(answer.split())
+    response = ' '.join(response.split())
     
-    # Try to normalize numbers
-    try:
-        # Check if it's a float
-        if '.' in answer:
-            num = float(answer)
-            # Format to remove trailing zeros
-            answer = f"{num:g}"
-        else:
-            # Try integer
-            num = int(answer)
-            answer = str(num)
-    except ValueError:
-        # Not a number, keep as is
-        pass
+    return response
+
+
+def extract_final_answer(response: str) -> str:
+    """
+    Try to extract just the final answer from a response.
+    This is generic and looks for common patterns.
+    """
+    if not response:
+        return response
     
-    # Handle yes/no variations
-    if answer in ['yes', 'yeah', 'yep', 'true', 'correct']:
-        answer = 'yes'
-    elif answer in ['no', 'nope', 'false', 'incorrect']:
-        answer = 'no'
+    # Remove thinking blocks
+    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
     
-    return answer
+    # Look for common answer patterns
+    patterns = [
+        r'(?:final answer|answer):\s*(.+?)(?:\n|$)',
+        r'(?:the answer is|answer is)\s*(.+?)(?:\n|$)',
+        r'###\s*(.+?)(?:\n|$)',  # Common in math problems
+        r'^([A-E])\b',  # Single letter at start
+        r'\b([A-E])\b\s*$',  # Single letter at end
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, response, re.IGNORECASE | re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+    
+    # If no pattern found, return the whole response
+    return response
+
 
 def run(
     system_prompt: str,
@@ -162,34 +81,14 @@ def run(
     request_config: Dict[str, Any] = None
 ) -> Tuple[str, int]:
     """
-    Main entry point for the majority voting plugin.
-    
-    Generates k candidate solutions and returns the most frequent answer.
-    
-    Args:
-        system_prompt: System prompt for the model
-        initial_query: User's query
-        client: OpenAI-compatible client instance
-        model: Model identifier
-        request_config: Additional configuration parameters
-        
-    Returns:
-        Tuple of (response_text, completion_tokens_used)
+    Generic majority voting implementation.
     """
     logger.info("Starting majority voting process")
     
-    # Extract parameters from request_config
-    k = DEFAULT_K
-    temperature = DEFAULT_TEMPERATURE
-    
-    if request_config:
-        k = request_config.get('k', DEFAULT_K)
-        # Allow overriding temperature if needed
-        temperature = request_config.get('temperature', DEFAULT_TEMPERATURE)
-        # Respect max_tokens if provided
-        max_tokens = request_config.get('max_tokens', 4096)
-    else:
-        max_tokens = 4096
+    # Extract parameters
+    k = request_config.get('k', DEFAULT_K) if request_config else DEFAULT_K
+    temperature = request_config.get('temperature', DEFAULT_TEMPERATURE) if request_config else DEFAULT_TEMPERATURE
+    max_tokens = request_config.get('max_tokens', 4096) if request_config else 4096
     
     logger.info(f"Generating {k} candidates with temperature={temperature}")
     
@@ -199,8 +98,12 @@ def run(
         {"role": "user", "content": initial_query}
     ]
     
+    # Generate candidates
+    candidates = []
+    total_tokens = 0
+    
     try:
-        # Generate k candidates in a single API call using n parameter
+        # Try parallel generation first
         response = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -209,20 +112,12 @@ def run(
             max_tokens=max_tokens
         )
         
-        # Extract all candidate responses
         candidates = [choice.message.content for choice in response.choices]
         total_tokens = response.usage.completion_tokens
         
-        logger.info(f"Generated {len(candidates)} candidates using n parameter. Tokens used: {total_tokens}")
-        
     except Exception as e:
-        logger.warning(f"n parameter not supported by provider: {str(e)}")
-        logger.info(f"Falling back to generating {k} candidates one by one")
-        
-        # Fallback: Generate candidates one by one in a loop
-        candidates = []
-        total_tokens = 0
-        
+        logger.warning(f"Parallel generation failed: {str(e)}")
+        # Fallback to sequential
         for i in range(k):
             try:
                 response = client.chat.completions.create(
@@ -233,61 +128,45 @@ def run(
                 )
                 candidates.append(response.choices[0].message.content)
                 total_tokens += response.usage.completion_tokens
-                logger.debug(f"Generated candidate {i+1}/{k}")
-                
-            except Exception as fallback_error:
-                logger.error(f"Error generating candidate {i+1}: {str(fallback_error)}")
+            except Exception as err:
+                logger.error(f"Error generating candidate {i+1}: {str(err)}")
                 continue
-        
-        if not candidates:
-            logger.error("Failed to generate any candidates")
-            return "Error: Could not generate any candidates", 0
-        
-        logger.info(f"Generated {len(candidates)} candidates using fallback method. Total tokens used: {total_tokens}")
     
-    # Extract answers from each candidate
-    answers = []
-    answer_to_response = {}  # Map normalized answers to full responses
+    if not candidates:
+        return "Error: Could not generate any candidates", 0
+    
+    # Extract and normalize answers for voting
+    answer_votes = Counter()
+    answer_to_responses = {}
     
     for i, candidate in enumerate(candidates):
-        answer = extract_answer(candidate)
-        if answer:
-            normalized = normalize_answer(answer)
-            answers.append(normalized)
-            # Keep the first full response for each unique answer
-            if normalized not in answer_to_response:
-                answer_to_response[normalized] = candidate
-            logger.debug(f"Candidate {i+1} answer: {answer} (normalized: {normalized})")
+        # Try to extract just the answer part
+        answer = extract_final_answer(candidate)
+        
+        # Normalize for comparison
+        normalized = normalize_response(answer)
+        
+        if normalized:
+            answer_votes[normalized] += 1
+            
+            # Keep track of original responses for each normalized answer
+            if normalized not in answer_to_responses:
+                answer_to_responses[normalized] = []
+            answer_to_responses[normalized].append(candidate)
+            
+            logger.debug(f"Candidate {i+1}: '{answer}' -> '{normalized}'")
         else:
-            logger.warning(f"Could not extract answer from candidate {i+1}")
+            logger.warning(f"Could not extract/normalize answer from candidate {i+1}")
     
-    if not answers:
-        logger.warning("No answers could be extracted from any candidate")
-        # Return the first candidate as fallback
-        return candidates[0] if candidates else "Error: No candidates generated", total_tokens
-    
-    # Count answer frequencies
-    answer_counts = Counter(answers)
-    logger.info(f"Answer distribution: {dict(answer_counts)}")
-    
-    # Get the most common answer
-    most_common_answer, count = answer_counts.most_common(1)[0]
-    confidence = count / len(answers)
-    
-    logger.info(f"Most common answer: '{most_common_answer}' with {count}/{len(answers)} votes ({confidence:.1%} confidence)")
-    
-    # Get the full response corresponding to the most common answer
-    winning_response = answer_to_response.get(most_common_answer, candidates[0])
-    
-    # Log voting summary to console instead of adding to response
-    logger.info("Majority Voting Summary:")
-    logger.info(f"  - Generated {len(candidates)} candidates")
-    logger.info(f"  - Most common answer: {most_common_answer}")
-    logger.info(f"  - Votes: {count}/{len(answers)} ({confidence:.1%} confidence)")
-    
-    if len(answer_counts) > 1:
-        other_answers = [f"{ans} ({cnt} votes)" for ans, cnt in answer_counts.items() if ans != most_common_answer]
-        logger.info(f"  - Other answers: {', '.join(other_answers)}")
-    
-    # Return only the full response from the winning answer
-    return winning_response, total_tokens
+    # Select the most voted answer
+    if answer_votes:
+        most_common_normalized, count = answer_votes.most_common(1)[0]
+        logger.info(f"Most common answer: '{most_common_normalized}' with {count}/{k} votes")
+        
+        # Return the first original response that mapped to this answer
+        winning_responses = answer_to_responses[most_common_normalized]
+        return winning_responses[0], total_tokens
+    else:
+        # If no answers could be extracted, return the first candidate
+        logger.warning("No answers could be extracted, returning first candidate")
+        return candidates[0], total_tokens

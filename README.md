@@ -377,6 +377,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | Read URLs               | `readurls`         | Reads all URLs found in the request, fetches the content at the URL and adds it to the context |
 | Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
 | JSON                    | `json`             | Enables structured outputs using the outlines library, supports pydantic types and JSON schema |
+| GenSelect               | `genselect`        | Generative Solution Selection - generates multiple candidates and selects the best based on quality criteria |
 
 ## Available parameters
 
@@ -564,6 +565,46 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ![Results showing optillm mixture of agents approach used with patchflows](https://raw.githubusercontent.com/codelion/optillm/main/moa-patchwork-results.png)
 
+## Testing
+
+OptILLM includes a comprehensive test suite to ensure reliability and compatibility.
+
+### Running Tests
+
+The main test suite can be run from the project root:
+```bash
+# Test all approaches with default test cases
+python tests/test.py
+
+# Test specific approaches
+python tests/test.py --approaches moa bon mcts
+
+# Run a single test
+python tests/test.py --single-test "Simple Math Problem"
+```
+
+### Unit and Integration Tests
+
+Additional tests are available in the `tests/` directory:
+```bash
+# Run all tests (requires pytest)
+./tests/run_tests.sh
+
+# Run specific test modules
+pytest tests/test_plugins.py -v
+pytest tests/test_api_compatibility.py -v
+```
+
+### CI/CD
+
+All tests are automatically run on pull requests via GitHub Actions. The workflow tests:
+- Multiple Python versions (3.10, 3.11, 3.12)
+- Unit tests for plugins and core functionality
+- API compatibility tests
+- Integration tests with various approaches
+
+See `tests/README.md` for more details on the test structure and how to write new tests.
+
 ## References
 - [Eliciting Fine-Tuned Transformer Capabilities via Inference-Time Techniques](https://arxiv.org/abs/2506.08060)
 - [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)
@@ -587,6 +628,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 - [Unsupervised Evaluation of Code LLMs with Round-Trip Correctness](https://arxiv.org/abs/2402.08699) - [Inspired the implementation of rto](optillm/rto.py)
 - [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](optillm/moa.py)
 - [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](ptillm/rto.py)
+- [AIMO-2 Winning Solution: Building State-of-the-Art Mathematical Reasoning Models with OpenMathReasoning dataset](https://arxiv.org/abs/2504.16891) - [Implementation](optillm/plugins/genselect_plugin.py)
 
 ## Citation
 

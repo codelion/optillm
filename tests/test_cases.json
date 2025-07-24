@@ -33,5 +33,15 @@
     "name" : "GH",
     "system_prompt" : "",
     "query" : "Find the largest possible real part of[(75+117i)z+\frac{96+144i}{z}]where z is a complex number with |z|=4"
+  },
+  {
+    "name": "GenSelect Math",
+    "system_prompt": "You are a helpful AI assistant with expertise in mathematical reasoning.",
+    "query": "A farmer has 17 sheep. All but 9 die. How many sheep does the farmer have left? Explain your reasoning step by step."
+  },
+  {
+    "name": "Simple Math Problem",
+    "system_prompt": "You are a helpful assistant.",
+    "query": "What is 2 + 2?"
   }
 ]

@@ -2,10 +2,14 @@ import argparse
 import json
 import time
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict
 import logging
 from openai import OpenAI
+
+# Add parent directory to path to import optillm modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from optillm.litellm_wrapper import LiteLLMWrapper
 from optillm.mcts import chat_with_mcts
@@ -61,8 +65,23 @@ def load_test_cases(file_path: str) -> List[Dict]:
 def run_approach(approach_name: str, system_prompt: str, query: str, client, model: str) -> Dict:
     start_time = time.time()
     try:
-        approach_func = APPROACHES[approach_name]
-        result = approach_func(system_prompt, query, client, model)
+        if approach_name == 'none':
+            # Direct pass-through for 'none' approach
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": query})
+            
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.7
+            )
+            result = (response.choices[0].message.content, response.usage.total_tokens)
+        else:
+            approach_func = APPROACHES[approach_name]
+            result = approach_func(system_prompt, query, client, model)
+        
         end_time = time.time()
         return {
             'approach': approach_name,
@@ -118,12 +137,22 @@ def print_summary(results: List[Dict]):
 
 def main():
     parser = argparse.ArgumentParser(description="Test different LLM inference approaches.")
-    parser.add_argument("--test_cases", type=str, default="test_cases.json", help="Path to test cases JSON file")
+    parser.add_argument("--test_cases", type=str, default=None, help="Path to test cases JSON file")
     parser.add_argument("--approaches", nargs='+', default=list(APPROACHES.keys()), help="Approaches to test")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model to use for testing")
     parser.add_argument("--base-url", type=str, default=None, help="The base_url for the OpenAI API compatible endpoint")
     parser.add_argument("--single-test", type=str, default=None, help="Name of a single test case to run")
     args = parser.parse_args()
+    
+    # Set default test_cases path relative to this script
+    if args.test_cases is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        args.test_cases = os.path.join(script_dir, "test_cases.json")
+    
+    # If using local inference mode, override model to a local model
+    if os.environ.get("OPTILLM_API_KEY") == "optillm" and args.model == "gpt-4o-mini":
+        args.model = "Qwen/Qwen2.5-0.5B-Instruct"
+        logger.info(f"Using local model: {args.model}")
 
     test_cases = load_test_cases(args.test_cases)
 
