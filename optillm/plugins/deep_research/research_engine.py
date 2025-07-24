@@ -14,7 +14,7 @@ import re
 from typing import Tuple, List, Dict, Optional, Any
 from datetime import datetime
 from collections import defaultdict
-from optillm.plugins.web_search_plugin import run as web_search_run
+from optillm.plugins.web_search_plugin import run as web_search_run, BrowserSessionManager
 from optillm.plugins.readurls_plugin import run as readurls_run
 from optillm.plugins.memory_plugin import run as memory_run
 
@@ -250,6 +250,7 @@ class DeepResearcher:
             "integration_ability": 1.0
         }
         self.gap_analysis_history = []  # Track identified gaps over time
+        self.session_manager = None  # Browser session manager for web searches
     
     def cleanup_placeholder_tags(self, text: str) -> str:
         """
@@ -386,6 +387,10 @@ For more detailed information on specific aspects of {original_query}, additiona
         """
         all_results = []
         
+        # Check if session manager is available
+        if not hasattr(self, 'session_manager'):
+            self.session_manager = None
+        
         # Perform individual searches for each query to avoid truncation issues
         for i, query in enumerate(queries):
             try:
@@ -398,7 +403,8 @@ For more detailed information on specific aspects of {original_query}, additiona
                 enhanced_query, _ = web_search_run("", search_query, None, None, {
                     "num_results": results_per_query,
                     "delay_seconds": None,  # Use default random delay (4-32 seconds)
-                    "headless": False  # Allow CAPTCHA solving if needed
+                    "headless": False,  # Allow CAPTCHA solving if needed
+                    "session_manager": self.session_manager  # Use shared browser session
                 })
                 
                 if enhanced_query and "Web Search Results" in enhanced_query:
@@ -710,6 +716,10 @@ For more detailed information on specific aspects of {original_query}, additiona
         """
         all_results = []
         
+        # Check if session manager is available
+        if not hasattr(self, 'session_manager'):
+            self.session_manager = None
+        
         # Sort gaps by priority - HIGH priority first (placeholder tags)
         sorted_gaps = sorted(gaps, key=lambda g: (
             0 if g.get('priority', '').upper() == 'HIGH' else
@@ -729,7 +739,8 @@ For more detailed information on specific aspects of {original_query}, additiona
                 enhanced_query, _ = web_search_run("", search_query, None, None, {
                     "num_results": max(1, self.max_sources // len(gaps)),
                     "delay_seconds": None,  # Use default random delay (4-32 seconds)
-                    "headless": False
+                    "headless": False,
+                    "session_manager": self.session_manager  # Use shared browser session
                 })
                 
                 if enhanced_query and "Web Search Results" in enhanced_query:
@@ -995,77 +1006,87 @@ For more detailed information on specific aspects of {original_query}, additiona
         4. Quality-guided termination
         """
         
-        # PHASE 1: INITIALIZATION - Generate preliminary draft (updatable skeleton)
-        print("TTD-DR: Generating preliminary draft...")
-        self.current_draft = self.generate_preliminary_draft(system_prompt, initial_query)
-        self.draft_history.append(self.current_draft)
+        # Use a single browser session for all searches in this research
+        with BrowserSessionManager(headless=False, timeout=30) as session_manager:
+            print("🔬 Starting deep research with single browser session")
+            self.session_manager = session_manager  # Store for use in search methods
+            
+            try:
+                # PHASE 1: INITIALIZATION - Generate preliminary draft (updatable skeleton)
+                print("TTD-DR: Generating preliminary draft...")
+                self.current_draft = self.generate_preliminary_draft(system_prompt, initial_query)
+                self.draft_history.append(self.current_draft)
         
-        # PHASE 2: ITERATIVE DENOISING LOOP
-        for iteration in range(self.max_iterations):
-            self.research_state["iteration"] = iteration + 1
-            print(f"TTD-DR: Denoising iteration {iteration + 1}/{self.max_iterations}")
-            
-            # STEP 1: Analyze current draft for gaps (draft-guided search)
-            print("  - Analyzing draft gaps...")
-            gaps = self.analyze_draft_gaps(self.current_draft, initial_query)
-            self.gap_analysis_history.append(gaps)
-            
-            if not gaps:
-                print("  - No significant gaps found, research complete")
-                break
-            
-            # STEP 2: Perform gap-targeted retrieval
-            print(f"  - Performing targeted search for {len(gaps)} gaps...")
-            retrieval_content = self.perform_gap_targeted_search(gaps)
-            
-            # STEP 3: Extract and fetch URLs from search results
-            print("  - Extracting and fetching content...")
-            content_with_urls, sources = self.extract_and_fetch_urls(retrieval_content)
-            
-            # Register sources for citations
-            for source in sources:
-                if 'url' in source:
-                    self.citation_counter += 1
-                    self.citations[self.citation_counter] = source
-            
-            # STEP 4: DENOISING - Integrate retrieved info with current draft
-            print("  - Performing denoising step...")
-            previous_draft = self.current_draft
-            self.current_draft = self.denoise_draft_with_retrieval(
-                self.current_draft, content_with_urls, initial_query
-            )
-            self.draft_history.append(self.current_draft)
-            
-            # STEP 5: Evaluate quality improvement
-            print("  - Evaluating draft quality...")
-            quality_scores = self.evaluate_draft_quality(
-                self.current_draft, previous_draft, initial_query
-            )
-            
-            # STEP 6: Component self-evolution based on feedback
-            self.update_component_fitness(quality_scores)
-            
-            # STEP 7: Check termination conditions
-            completeness = quality_scores.get('completeness', 0.0)
-            improvement = quality_scores.get('improvement', 0.0)
-            
-            print(f"  - Quality scores: Completeness={completeness:.2f}, Improvement={improvement:.2f}")
-            
-            # Terminate if high quality achieved or minimal improvement
-            # More lenient termination to ensure complete research
-            if completeness > 0.9 or (improvement < 0.03 and completeness > 0.7):
-                print("  - Quality threshold reached, research complete")
-                break
-            
-            # Store current state for tracking
-            self.research_state["content"].append(content_with_urls)
-            self.research_state["sources"].extend([s['url'] for s in sources if 'url' in s])
-        
-        # PHASE 3: FINALIZATION - Polish the final draft
-        print("TTD-DR: Finalizing research report...")
-        final_report = self.finalize_research_report(system_prompt, initial_query, self.current_draft)
-        
-        return final_report, self.total_tokens
+                # PHASE 2: ITERATIVE DENOISING LOOP
+                for iteration in range(self.max_iterations):
+                    self.research_state["iteration"] = iteration + 1
+                    print(f"TTD-DR: Denoising iteration {iteration + 1}/{self.max_iterations}")
+                    
+                    # STEP 1: Analyze current draft for gaps (draft-guided search)
+                    print("  - Analyzing draft gaps...")
+                    gaps = self.analyze_draft_gaps(self.current_draft, initial_query)
+                    self.gap_analysis_history.append(gaps)
+                    
+                    if not gaps:
+                        print("  - No significant gaps found, research complete")
+                        break
+                    
+                    # STEP 2: Perform gap-targeted retrieval
+                    print(f"  - Performing targeted search for {len(gaps)} gaps...")
+                    retrieval_content = self.perform_gap_targeted_search(gaps)
+                    
+                    # STEP 3: Extract and fetch URLs from search results
+                    print("  - Extracting and fetching content...")
+                    content_with_urls, sources = self.extract_and_fetch_urls(retrieval_content)
+                    
+                    # Register sources for citations
+                    for source in sources:
+                        if 'url' in source:
+                            self.citation_counter += 1
+                            self.citations[self.citation_counter] = source
+                    
+                    # STEP 4: DENOISING - Integrate retrieved info with current draft
+                    print("  - Performing denoising step...")
+                    previous_draft = self.current_draft
+                    self.current_draft = self.denoise_draft_with_retrieval(
+                        self.current_draft, content_with_urls, initial_query
+                    )
+                    self.draft_history.append(self.current_draft)
+                    
+                    # STEP 5: Evaluate quality improvement
+                    print("  - Evaluating draft quality...")
+                    quality_scores = self.evaluate_draft_quality(
+                        self.current_draft, previous_draft, initial_query
+                    )
+                    
+                    # STEP 6: Component self-evolution based on feedback
+                    self.update_component_fitness(quality_scores)
+                    
+                    # STEP 7: Check termination conditions
+                    completeness = quality_scores.get('completeness', 0.0)
+                    improvement = quality_scores.get('improvement', 0.0)
+                    
+                    print(f"  - Quality scores: Completeness={completeness:.2f}, Improvement={improvement:.2f}")
+                    
+                    # Terminate if high quality achieved or minimal improvement
+                    # More lenient termination to ensure complete research
+                    if completeness > 0.9 or (improvement < 0.03 and completeness > 0.7):
+                        print("  - Quality threshold reached, research complete")
+                        break
+                    
+                    # Store current state for tracking
+                    self.research_state["content"].append(content_with_urls)
+                    self.research_state["sources"].extend([s['url'] for s in sources if 'url' in s])
+                
+                # PHASE 3: FINALIZATION - Polish the final draft
+                print("TTD-DR: Finalizing research report...")
+                final_report = self.finalize_research_report(system_prompt, initial_query, self.current_draft)
+                
+                return final_report, self.total_tokens
+                
+            finally:
+                # Clean up session manager reference
+                self.session_manager = None
     
     def finalize_research_report(self, system_prompt: str, original_query: str, final_draft: str) -> str:
         """
