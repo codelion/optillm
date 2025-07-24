@@ -55,7 +55,8 @@ class BrowserSessionManager:
         """Perform a search using the managed browser session"""
         searcher = self.get_or_create_searcher()
         self._search_count += 1
-        print(f"🔍 Search #{self._search_count} in current session: {query[:50]}...")
+        session_duration = time.time() - self._session_start_time if self._session_start_time else 0
+        print(f"🔍 Search #{self._search_count} in current session (instance: {id(self)}, duration: {session_duration:.1f}s): {query[:50]}...")
         return searcher.search(query, num_results, delay_seconds)
     
     def close(self):
@@ -458,34 +459,62 @@ def extract_search_queries(text: str) -> List[str]:
     
     # Look for explicit search requests
     # Note: Removed period (.) from exclusion to allow queries like "Python 3.12" to work
+    # Updated to require at least one non-whitespace character after the prefix
     search_patterns = [
-        r"search for[:\s]+([^\n]+?)(?:\s*\n|$)",
-        r"find information about[:\s]+([^\n]+?)(?:\s*\n|$)",
-        r"look up[:\s]+([^\n]+?)(?:\s*\n|$)", 
-        r"research[:\s]+([^\n]+?)(?:\s*\n|$)",
+        r"search for[:\s]+(\S[^\n]*?)(?:\s*\n|$)",
+        r"find information about[:\s]+(\S[^\n]*?)(?:\s*\n|$)",
+        r"look up[:\s]+(\S[^\n]*?)(?:\s*\n|$)", 
+        r"research[:\s]+(\S[^\n]*?)(?:\s*\n|$)",
     ]
     
     queries = []
     for pattern in search_patterns:
         matches = re.findall(pattern, text, re.IGNORECASE)
-        queries.extend([match.strip() for match in matches])
+        for match in matches:
+            # Clean up the match
+            cleaned = match.strip()
+            # Remove trailing quotes (single or double)
+            cleaned = cleaned.rstrip('"\'')
+            # Remove leading quotes if they exist
+            cleaned = cleaned.lstrip('"\'')
+            # Only add non-empty queries
+            if cleaned:
+                queries.append(cleaned)
     
     # If no explicit patterns, use the text as a search query
     if not queries:
-        # Remove question marks and clean up
-        cleaned_query = text.replace("?", "").strip()
-        # If it looks like a question or search query, use it
-        if cleaned_query and len(cleaned_query.split()) > 2:
-            queries.append(cleaned_query)
-        else:
-            # Clean up the text to make it search-friendly
-            cleaned_query = re.sub(r'[^\w\s]', ' ', text)
-            cleaned_query = ' '.join(cleaned_query.split())
-            if len(cleaned_query) > 100:
-                # Take first 100 characters
-                cleaned_query = cleaned_query[:100].rsplit(' ', 1)[0]
-            if cleaned_query:
+        # Check if this is a search command with empty query (e.g., "search for" with nothing after)
+        search_prefixes = ["search for", "find information about", "look up", "research"]
+        text_lower = text.lower().strip()
+        
+        # Don't use fallback if it's just a search prefix with nothing meaningful after
+        is_empty_search = any(
+            text_lower.startswith(prefix) and 
+            len(text_lower.replace(prefix, "").strip().strip('"\'')) < 2
+            for prefix in search_prefixes
+        )
+        
+        if not is_empty_search:
+            # Remove question marks and clean up
+            cleaned_query = text.replace("?", "").strip()
+            # Remove quotes from the query
+            cleaned_query = cleaned_query.strip('"\'')
+            
+            # If it looks like a question or search query, use it
+            if cleaned_query and len(cleaned_query.split()) > 2:
                 queries.append(cleaned_query)
+            else:
+                # Clean up the text to make it search-friendly
+                cleaned_query = re.sub(r'[^\w\s\.]', ' ', text)  # Keep periods for version numbers
+                cleaned_query = ' '.join(cleaned_query.split())
+                # Remove quotes after regex cleaning
+                cleaned_query = cleaned_query.strip('"\'')
+                
+                if len(cleaned_query) > 100:
+                    # Take first 100 characters
+                    cleaned_query = cleaned_query[:100].rsplit(' ', 1)[0]
+                if cleaned_query and len(cleaned_query) > 2:  # Ensure minimum length
+                    queries.append(cleaned_query)
     
     return queries
 
