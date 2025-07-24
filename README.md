@@ -378,6 +378,8 @@ Check this log file for connection issues, tool execution errors, and other diag
 | Execute Code            | `executecode`      | Enables use of code interpreter to execute python code in requests and LLM generated responses |
 | JSON                    | `json`             | Enables structured outputs using the outlines library, supports pydantic types and JSON schema |
 | GenSelect               | `genselect`        | Generative Solution Selection - generates multiple candidates and selects the best based on quality criteria |
+| Web Search              | `web_search`       | Performs Google searches using Chrome automation (Selenium) to gather search results and URLs |
+| Deep Research           | `deep_research`    | Implements Test-Time Diffusion Deep Researcher (TTD-DR) for comprehensive research reports using iterative refinement |
 
 ## Available parameters
 
