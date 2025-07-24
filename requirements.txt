@@ -13,6 +13,8 @@ litellm
 requests
 beautifulsoup4
 lxml
+selenium
+webdriver-manager
 presidio_analyzer
 presidio_anonymizer
 nbformat
