@@ -77,8 +77,9 @@ def cleanup_placeholder_tags(text: str) -> str:
     if not text:
         return text
     
-    # Patterns for research placeholder tags
+    # Comprehensive patterns for research placeholder tags
     placeholder_patterns = [
+        # Research placeholders
         r'\[NEEDS RESEARCH[^\]]*\]',
         r'\[SOURCE NEEDED[^\]]*\]', 
         r'\[RESEARCH NEEDED[^\]]*\]',
@@ -88,6 +89,24 @@ def cleanup_placeholder_tags(text: str) -> str:
         r'\[TO BE RESEARCHED[^\]]*\]',
         r'\[VERIFY[^\]]*\]',
         r'\[CHECK[^\]]*\]',
+        
+        # Citation placeholders (like your example)
+        r'\[Placeholder for[^\]]+\]',
+        r'\[\d+\]\s*\[Placeholder[^\]]+\]',
+        r'\[Insert citation[^\]]*\]',  
+        r'\[Add reference[^\]]*\]',
+        r'\[Reference needed[^\]]*\]',
+        
+        # Content placeholders
+        r'\[To be completed[^\]]*\]',
+        r'\[Under development[^\]]*\]',
+        r'\[Coming soon[^\]]*\]',
+        r'\[TBD[^\]]*\]',
+        r'\[TODO[^\]]*\]',
+        
+        # Question placeholders and incomplete sections
+        r'\[Question \d+[^\]]*\]',
+        r'\[Research question[^\]]*\]',
     ]
     
     cleaned_text = text
@@ -113,6 +132,85 @@ def cleanup_placeholder_tags(text: str) -> str:
     result = result.strip()
     
     return result
+
+
+def validate_report_completeness(text: str) -> Dict[str, Any]:
+    """
+    Validate that the research report is complete and ready for publication.
+    
+    Checks for:
+    - Placeholder citations
+    - Incomplete sections
+    - Unfinished research questions
+    - Missing content indicators
+    
+    Returns:
+        Dict with validation results and suggestions for fixes
+    """
+    if not text:
+        return {"is_complete": False, "issues": ["Empty report"], "suggestions": []}
+    
+    issues = []
+    suggestions = []
+    
+    # Check for placeholder citations
+    placeholder_citation_patterns = [
+        r'\[Placeholder for[^\]]+\]',
+        r'\[\d+\]\s*\[Placeholder[^\]]+\]',
+        r'\[Insert citation[^\]]*\]',
+        r'\[Reference needed[^\]]*\]',
+    ]
+    
+    for pattern in placeholder_citation_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        if matches:
+            issues.append(f"Found {len(matches)} placeholder citations: {matches[:3]}")
+            suggestions.append("Replace placeholder citations with actual sources or remove incomplete claims")
+    
+    # Check for incomplete research questions sections
+    if "Research Questions for Investigation" in text:
+        # Look for sections that seem to be lists of questions without answers
+        question_section_match = re.search(r'## Research Questions for Investigation.*?(?=##|$)', text, re.DOTALL)
+        if question_section_match:
+            question_content = question_section_match.group(0)
+            # Count questions vs answers
+            question_lines = [line for line in question_content.split('\n') if line.strip().startswith('*') or line.strip().startswith('-')]
+            if len(question_lines) > 3:  # Many unanswered questions
+                issues.append("Report contains unanswered research questions section")
+                suggestions.append("Convert research questions into answered findings or remove incomplete section")
+    
+    # Check for incomplete sections (sections with only placeholders)
+    section_pattern = r'##\s+([^#\n]+)\n(.*?)(?=##|$)'
+    sections = re.findall(section_pattern, text, re.DOTALL)
+    
+    for section_title, section_content in sections:
+        # Check if section is mostly placeholders
+        placeholder_count = len(re.findall(r'\[[^\]]*(?:placeholder|needed|research|todo|tbd)[^\]]*\]', section_content, re.IGNORECASE))
+        content_lines = [line.strip() for line in section_content.split('\n') if line.strip()]
+        
+        if placeholder_count > len(content_lines) / 3:  # More than 1/3 placeholders
+            issues.append(f"Section '{section_title.strip()}' is mostly placeholders")
+            suggestions.append(f"Complete content for '{section_title.strip()}' section or remove it")
+    
+    # Check for incomplete reference lists
+    if text.count('[') - text.count(']') != 0:
+        issues.append("Unmatched brackets detected - possible incomplete citations")
+        suggestions.append("Review and fix citation formatting")
+    
+    # Check for very short sections that might be incomplete
+    if len(text.split()) < 500:  # Very short report
+        issues.append("Report appears to be very short, possibly incomplete")
+        suggestions.append("Ensure all research areas are adequately covered")
+    
+    is_complete = len(issues) == 0
+    
+    return {
+        "is_complete": is_complete,
+        "issues": issues,
+        "suggestions": suggestions,
+        "word_count": len(text.split()),
+        "section_count": len(sections)
+    }
 
 
 class DeepResearcher:
@@ -167,6 +265,70 @@ class DeepResearcher:
             Text with all placeholder tags removed
         """
         return cleanup_placeholder_tags(text)
+    
+    def fix_incomplete_report(self, report: str, validation: Dict[str, Any], original_query: str) -> str:
+        """
+        Attempt to fix an incomplete report by removing problematic sections
+        and ensuring a coherent final document.
+        
+        This is a fallback when the report contains placeholders or incomplete sections.
+        """
+        print("🔧 Attempting to fix incomplete report...")
+        
+        # Start with the basic cleanup
+        fixed_report = cleanup_placeholder_tags(report)
+        
+        # Remove sections that are mostly placeholders or incomplete
+        if "Research Questions for Investigation" in fixed_report:
+            # Remove unanswered research questions sections
+            fixed_report = re.sub(
+                r'## Research Questions for Investigation.*?(?=##|$)', 
+                '', 
+                fixed_report, 
+                flags=re.DOTALL
+            )
+            print("   - Removed incomplete research questions section")
+        
+        # Remove citation placeholders from reference section  
+        fixed_report = re.sub(
+            r'\[\d+\]\s*\[Placeholder[^\]]+\]\n?',
+            '',
+            fixed_report
+        )
+        
+        # Clean up any empty sections
+        fixed_report = re.sub(r'##\s+([^#\n]+)\n\s*(?=##)', '', fixed_report)
+        
+        # If report is still very short, add a completion note
+        if len(fixed_report.split()) < 300:
+            completion_note = f"""
+            
+## Note on Report Completion
+
+This research report represents the findings gathered during the available research time. While comprehensive coverage was the goal, some areas may require additional investigation for complete analysis.
+
+For more detailed information on specific aspects of {original_query}, additional focused research sessions may be beneficial.
+"""
+            # Insert before references section if it exists
+            if "## References" in fixed_report:
+                fixed_report = fixed_report.replace("## References", completion_note + "\n## References")
+            else:
+                fixed_report += completion_note
+            
+            print("   - Added completion note due to short report length")
+        
+        # Final cleanup
+        fixed_report = re.sub(r'\n\s*\n\s*\n+', '\n\n', fixed_report)
+        fixed_report = fixed_report.strip()
+        
+        # Validate the fix
+        new_validation = validate_report_completeness(fixed_report)
+        if new_validation["is_complete"]:
+            print("✅ Report successfully fixed and validated")
+        else:
+            print(f"⚠️  Report still has {len(new_validation['issues'])} issues after fixing")
+        
+        return fixed_report
     
     def decompose_query(self, system_prompt: str, initial_query: str) -> List[str]:
         """
@@ -235,7 +397,7 @@ class DeepResearcher:
                 
                 enhanced_query, _ = web_search_run("", search_query, None, None, {
                     "num_results": results_per_query,
-                    "delay_seconds": 2 if i == 0 else 1,  # Shorter delay for subsequent queries
+                    "delay_seconds": None,  # Use default random delay (4-32 seconds)
                     "headless": False  # Allow CAPTCHA solving if needed
                 })
                 
@@ -566,7 +728,7 @@ class DeepResearcher:
                 # Perform search with context about what gap we're filling
                 enhanced_query, _ = web_search_run("", search_query, None, None, {
                     "num_results": max(1, self.max_sources // len(gaps)),
-                    "delay_seconds": 2,
+                    "delay_seconds": None,  # Use default random delay (4-32 seconds)
                     "headless": False
                 })
                 
@@ -927,7 +1089,13 @@ class DeepResearcher:
         7. Replace any remaining placeholders with actual content or remove incomplete sections
         8. Polish language and style for clarity and impact
         
-        **IMPORTANT**: The final report must NOT contain any [NEEDS RESEARCH], [SOURCE NEEDED], [RESEARCH NEEDED], [CITATION NEEDED], or similar placeholder tags. If any placeholders remain, replace them with available information or remove the incomplete statements.
+        **CRITICAL REQUIREMENTS**: 
+        - The final report must NOT contain ANY placeholder tags: [NEEDS RESEARCH], [SOURCE NEEDED], [Placeholder for...], etc.
+        - Remove incomplete "Research Questions for Investigation" sections with unanswered questions
+        - Do not include citation placeholders like "[1] [Placeholder for specific research citation]"
+        - If sections are incomplete, either complete them with available information or remove them entirely
+        - Ensure all statements are backed by available evidence or are clearly marked as preliminary findings
+        - The report must be publication-ready with no incomplete elements
         
         Return the final polished research report.
         """
@@ -948,6 +1116,19 @@ class DeepResearcher:
             
             # Final cleanup: Remove any remaining placeholder tags
             polished_report = self.cleanup_placeholder_tags(polished_report)
+            
+            # Validate report completeness
+            validation = validate_report_completeness(polished_report)
+            
+            if not validation["is_complete"]:
+                print(f"⚠️  Report validation found {len(validation['issues'])} issues:")
+                for issue in validation['issues']:
+                    print(f"   - {issue}")
+                
+                # Attempt to fix incomplete report
+                polished_report = self.fix_incomplete_report(polished_report, validation, original_query)
+            else:
+                print("✅ Report validation passed - report is complete")
             
             self.total_tokens += response.usage.completion_tokens
             

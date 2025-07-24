@@ -93,33 +93,41 @@ class GoogleSearcher:
         except:
             return False
     
-    def wait_for_captcha_resolution(self, max_wait: int = 120) -> bool:
-        """Wait for CAPTCHA to be resolved"""
-        print("CAPTCHA detected! Please solve it in the browser window.")
-        print(f"Waiting up to {max_wait} seconds for CAPTCHA to be solved...")
+    def wait_for_captcha_resolution(self, max_wait: int = 300) -> bool:
+        """Wait for CAPTCHA to be resolved with user confirmation"""
+        print("🚨 CAPTCHA DETECTED! 🚨")
+        print("Please solve the CAPTCHA in the browser window.")
+        print("After solving the CAPTCHA, press ENTER here to continue...")
         
-        start_time = time.time()
-        check_interval = 2  # Check every 2 seconds
+        if self.headless:
+            print("ERROR: CAPTCHA detected in headless mode - cannot solve automatically")
+            return False
         
-        while time.time() - start_time < max_wait:
-            time.sleep(check_interval)
-            
-            # Check if we're still on CAPTCHA page
+        # Wait for user to press Enter after solving CAPTCHA
+        try:
+            input("Press ENTER after you have solved the CAPTCHA: ")
+        except KeyboardInterrupt:
+            print("\\nSearch cancelled by user")
+            return False
+        
+        # Give a moment for the page to update after CAPTCHA resolution
+        print("Checking if CAPTCHA has been resolved...")
+        time.sleep(2)
+        
+        # Verify CAPTCHA is actually resolved
+        for attempt in range(3):
             if not self.detect_captcha():
-                # Check if we have search results
-                try:
-                    self.driver.find_element(By.CSS_SELECTOR, "div.g")
-                    print("CAPTCHA solved! Continuing with search...")
-                    return True
-                except:
-                    # Might be on Google homepage, not CAPTCHA
-                    pass
-            
-            remaining = int(max_wait - (time.time() - start_time))
-            if remaining % 10 == 0 and remaining > 0:
-                print(f"Still waiting... {remaining} seconds remaining")
+                print("✅ CAPTCHA resolved successfully!")
+                return True
+            else:
+                print(f"CAPTCHA still detected (attempt {attempt + 1}/3)")
+                if attempt < 2:
+                    response = input("CAPTCHA still present. Try again? Press ENTER to continue or 'q' to quit: ")
+                    if response.lower() == 'q':
+                        return False
+                    time.sleep(2)
         
-        print("Timeout waiting for CAPTCHA resolution")
+        print("❌ CAPTCHA still not resolved after 3 attempts")
         return False
     
     def search(self, query: str, num_results: int = 10, delay_seconds: Optional[int] = None) -> List[Dict[str, str]]:
@@ -224,9 +232,9 @@ class GoogleSearcher:
             
             results = []
             
-            # Apply delay AFTER search results are loaded
+            # Apply delay AFTER search results are loaded (to prevent triggering anti-bot measures)
             if delay_seconds is None:
-                delay_seconds = random.randint(8, 64)
+                delay_seconds = random.randint(4, 32)  # Updated range: 4-32 seconds
             
             if delay_seconds > 0:
                 print(f"Applying {delay_seconds} second delay after search...")
@@ -244,17 +252,21 @@ class GoogleSearcher:
                                    driver.find_elements(By.CSS_SELECTOR, "[data-sokoban-container]")
                 )
             except TimeoutException:
-                print("Timeout waiting for search results. Possible CAPTCHA.")
-                if not self.headless:
-                    input("Please solve the CAPTCHA if present and press Enter to continue...")
+                print("Timeout waiting for search results. Checking for CAPTCHA...")
+                if self.detect_captcha():
+                    if not self.wait_for_captcha_resolution():
+                        return []
                     # Try waiting again after CAPTCHA
                     try:
                         WebDriverWait(self.driver, 10).until(
                             lambda driver: driver.find_elements(By.CSS_SELECTOR, "div.g")
                         )
                     except:
-                        print("Still no results after CAPTCHA attempt")
+                        print("Still no results after CAPTCHA resolution")
                         return []
+                else:
+                    print("No CAPTCHA detected, but timeout occurred - search may have failed")
+                    return []
             
             # Debug: Print current URL and page title
             print(f"Current URL: {self.driver.current_url}")
@@ -443,7 +455,7 @@ def run(system_prompt: str, initial_query: str, client=None, model: str = None, 
         model: Model name (unused for this plugin) 
         request_config: Optional configuration dict with keys:
             - num_results: Number of search results (default: 10)
-            - delay_seconds: Delay between searches in seconds (default: random 8-64)
+            - delay_seconds: Delay between searches in seconds (default: random 4-32)
                             Set to 0 to disable delays, or specify exact seconds
             - headless: Run browser in headless mode (default: False)
             - timeout: Browser timeout in seconds (default: 30)
