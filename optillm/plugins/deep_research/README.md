@@ -2,19 +2,7 @@
 
 ## Overview
 
-The Deep Research plugin implements the **Test-Time Diffusion Deep Researcher (TTD-DR)** algorithm, a state-of-the-art approach for comprehensive research report generation. This implementation is based on the paper ["A Statistical Framework for Deep Researcher"](https://arxiv.org/html/2507.16075v1) and provides iterative, in-depth research capabilities for complex queries.
-
-## Paper Citation
-
-```bibtex
-@article{ttd_dr_2024,
-  title={A Statistical Framework for Deep Researcher},
-  author={[Paper Authors]},
-  journal={arXiv preprint arXiv:2507.16075},
-  year={2024},
-  url={https://arxiv.org/html/2507.16075v1}
-}
-```
+The Deep Research plugin implements the **Test-Time Diffusion Deep Researcher (TTD-DR)** algorithm, a state-of-the-art approach for comprehensive research report generation. This implementation is based on the paper ["Deep Researcher with Test-Time Diffusion"](https://arxiv.org/abs/2507.16075v1) and provides iterative, in-depth research capabilities for complex queries.
 
 ## Algorithm Overview
 
@@ -252,6 +240,3 @@ When contributing to the Deep Research plugin:
 4. Test with various query types and complexity levels
 5. Document any new configuration options
 
-## License
-
-This implementation follows the same license as the OptILLM project and includes proper attribution to the original TTD-DR paper authors.

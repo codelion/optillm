@@ -2,7 +2,7 @@
 Deep Research Engine - Core Implementation
 
 This module implements the Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
-as described in "A Statistical Framework for Deep Researcher" (https://arxiv.org/html/2507.16075v1).
+as described in "Deep Researcher with Test-Time Diffusion" (https://arxiv.org/abs/2507.16075v1).
 
 The TTD-DR approach treats research as a diffusion process with iterative refinement
 through denoising and retrieval, generating comprehensive research reports.
@@ -26,7 +26,7 @@ class DeepResearcher:
     This class implements the paper's approach of treating research as a diffusion process
     with iterative refinement through denoising and retrieval.
     
-    Based on: https://arxiv.org/html/2507.16075v1
+    Based on: https://arxiv.org/abs/2507.16075v1
     """
     
     def __init__(self, client, model: str, max_iterations: int = 5, max_sources: int = 10):

@@ -2,9 +2,9 @@
 Deep Research Plugin - OptILLM Plugin Interface
 
 This plugin implements the Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
-from the paper "A Statistical Framework for Deep Researcher".
+from the paper "Deep Researcher with Test-Time Diffusion".
 
-Paper: https://arxiv.org/html/2507.16075v1
+Paper: https://arxiv.org/abs/2507.16075v1
 
 The plugin orchestrates web search, URL fetching, and memory synthesis to provide
 comprehensive research responses using an iterative refinement approach.
@@ -23,8 +23,8 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
     This plugin orchestrates web search, URL fetching, and memory synthesis to provide
     comprehensive research responses using an iterative refinement approach.
     
-    Based on: "A Statistical Framework for Deep Researcher" 
-    https://arxiv.org/html/2507.16075v1
+    Based on: "Deep Researcher with Test-Time Diffusion" 
+    https://arxiv.org/abs/2507.16075v1
     
     Args:
         system_prompt: System prompt for the conversation
