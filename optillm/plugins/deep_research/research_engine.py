@@ -87,6 +87,17 @@ class DeepResearcher:
         self.citations = {}  # Map citation number to source info
         self.citation_counter = 0
         self.source_content_map = {}  # Map URL to content for citations
+        
+        # TTD-DR specific components
+        self.current_draft = ""  # Persistent evolving draft
+        self.draft_history = []  # Track draft evolution
+        self.component_fitness = {  # Self-evolution fitness tracking
+            "search_strategy": 1.0,
+            "synthesis_quality": 1.0,
+            "gap_detection": 1.0,
+            "integration_ability": 1.0
+        }
+        self.gap_analysis_history = []  # Track identified gaps over time
     
     def decompose_query(self, system_prompt: str, initial_query: str) -> List[str]:
         """
@@ -331,6 +342,303 @@ class DeepResearcher:
         
         return focused_queries[:3]  # Limit to 3 additional queries per iteration
     
+    def generate_preliminary_draft(self, system_prompt: str, initial_query: str) -> str:
+        """
+        Generate the preliminary draft (updatable skeleton) from LLM internal knowledge
+        This serves as the initial state for the diffusion process
+        """
+        draft_prompt = f"""
+        Generate a preliminary research report structure for the following query using your internal knowledge.
+        This will serve as an evolving draft that gets refined through iterative research.
+        
+        Query: {initial_query}
+        
+        Create a structured report with:
+        1. Title and Executive Summary (brief)
+        2. Introduction and Background (what you know)
+        3. Key Areas to Explore (identify knowledge gaps)
+        4. Preliminary Findings (from internal knowledge)
+        5. Research Questions for Investigation
+        6. Conclusion (preliminary thoughts)
+        
+        Mark sections that need external research with [NEEDS RESEARCH] tags.
+        Use placeholder citations like [SOURCE NEEDED] where external evidence is required.
+        
+        This is an initial draft - it should be substantive but acknowledge limitations.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": draft_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+            
+            draft = response.choices[0].message.content.strip()
+            draft = clean_reasoning_tags(draft)
+            self.total_tokens += response.usage.completion_tokens
+            
+            return draft
+            
+        except Exception as e:
+            return f"Failed to generate preliminary draft: {str(e)}"
+    
+    def analyze_draft_gaps(self, current_draft: str, original_query: str) -> List[Dict[str, str]]:
+        """
+        Analyze the current draft to identify gaps, weaknesses, and areas needing research
+        This guides the next retrieval iteration (draft-guided search)
+        """
+        gap_analysis_prompt = f"""
+        Analyze the following research draft to identify specific gaps and areas that need external research.
+        
+        Original Query: {original_query}
+        
+        Current Draft:
+        {current_draft}
+        
+        For each gap you identify, provide:
+        1. SECTION: Which section has the gap
+        2. GAP_TYPE: [MISSING_INFO, OUTDATED_INFO, NEEDS_EVIDENCE, LACKS_DEPTH, NEEDS_EXAMPLES]
+        3. SPECIFIC_NEED: Exactly what information is needed
+        4. SEARCH_QUERY: A specific search query to address this gap
+        
+        Format each gap as:
+        GAP_ID: [number]
+        SECTION: [section name]
+        GAP_TYPE: [type]
+        SPECIFIC_NEED: [what's missing]
+        SEARCH_QUERY: [search query to find this info]
+        
+        Identify 3-5 most critical gaps.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert research analyst."},
+                    {"role": "user", "content": gap_analysis_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000
+            )
+            
+            content = response.choices[0].message.content.strip()
+            content = clean_reasoning_tags(content)
+            self.total_tokens += response.usage.completion_tokens
+            
+            # Parse the gaps
+            gaps = []
+            current_gap = {}
+            
+            for line in content.split('\n'):
+                line = line.strip()
+                if line.startswith('GAP_ID:'):
+                    if current_gap:
+                        gaps.append(current_gap)
+                    current_gap = {'id': line.split(':', 1)[1].strip()}
+                elif line.startswith('SECTION:'):
+                    current_gap['section'] = line.split(':', 1)[1].strip()
+                elif line.startswith('GAP_TYPE:'):
+                    current_gap['gap_type'] = line.split(':', 1)[1].strip()
+                elif line.startswith('SPECIFIC_NEED:'):
+                    current_gap['specific_need'] = line.split(':', 1)[1].strip()
+                elif line.startswith('SEARCH_QUERY:'):
+                    current_gap['search_query'] = line.split(':', 1)[1].strip()
+            
+            if current_gap:
+                gaps.append(current_gap)
+            
+            return gaps
+            
+        except Exception as e:
+            # Fallback: create basic gaps from the draft
+            return [{
+                'id': '1',
+                'section': 'General',
+                'gap_type': 'MISSING_INFO',
+                'specific_need': 'More detailed information needed',
+                'search_query': original_query
+            }]
+    
+    def perform_gap_targeted_search(self, gaps: List[Dict[str, str]]) -> str:
+        """
+        Perform targeted searches based on identified gaps in the current draft
+        """
+        all_results = []
+        
+        for gap in gaps:
+            search_query = gap.get('search_query', '')
+            if not search_query:
+                continue
+                
+            try:
+                # Format as a clean search query
+                search_query = f"search for {search_query.strip()}"
+                
+                # Perform search with context about what gap we're filling
+                enhanced_query, _ = web_search_run("", search_query, None, None, {
+                    "num_results": max(1, self.max_sources // len(gaps)),
+                    "delay_seconds": 2,
+                    "headless": False
+                })
+                
+                if enhanced_query and "Web Search Results" in enhanced_query:
+                    # Tag results with gap context
+                    gap_context = f"[ADDRESSING GAP: {gap.get('section', 'Unknown')} - {gap.get('specific_need', 'General research')}]\n"
+                    all_results.append(gap_context + enhanced_query)
+                    
+            except Exception as e:
+                continue
+        
+        return "\n\n".join(all_results) if all_results else "No gap-targeted search results obtained"
+    
+    def denoise_draft_with_retrieval(self, current_draft: str, retrieval_content: str, original_query: str) -> str:
+        """
+        Core denoising step: integrate retrieved information with current draft
+        This is the heart of the diffusion process
+        """
+        denoising_prompt = f"""
+        You are performing a denoising step in a research diffusion process.
+        
+        TASK: Integrate new retrieved information with the existing draft to reduce "noise" (gaps, inaccuracies, incompleteness).
+        
+        Original Query: {original_query}
+        
+        Current Draft:
+        {current_draft}
+        
+        New Retrieved Information:
+        {retrieval_content}
+        
+        DENOISING INSTRUCTIONS:
+        1. Identify where the new information fills gaps marked with [NEEDS RESEARCH] or [SOURCE NEEDED]
+        2. Replace placeholder content with specific, detailed information
+        3. Add proper citations for new information using [1], [2], etc.
+        4. Resolve any conflicts between new and existing information
+        5. Maintain the overall structure and coherence of the draft
+        6. Enhance depth and accuracy without losing existing valuable insights
+        7. Mark any remaining research needs with [NEEDS RESEARCH]
+        
+        Return the improved draft with integrated information.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert research synthesizer performing draft denoising."},
+                    {"role": "user", "content": denoising_prompt}
+                ],
+                temperature=0.6,
+                max_tokens=3000
+            )
+            
+            denoised_draft = response.choices[0].message.content.strip()
+            denoised_draft = clean_reasoning_tags(denoised_draft)
+            self.total_tokens += response.usage.completion_tokens
+            
+            return denoised_draft
+            
+        except Exception as e:
+            return f"Denoising failed: {str(e)}\n\nFalling back to current draft:\n{current_draft}"
+    
+    def evaluate_draft_quality(self, draft: str, previous_draft: str, original_query: str) -> Dict[str, float]:
+        """
+        Evaluate the quality improvement of the current draft vs previous iteration
+        Used for termination decisions and component fitness updates
+        """
+        evaluation_prompt = f"""
+        Evaluate the research draft quality improvement.
+        
+        Original Query: {original_query}
+        
+        Previous Draft:
+        {previous_draft}
+        
+        Current Draft:
+        {draft}
+        
+        Rate the following aspects from 0.0 to 1.0:
+        
+        COMPLETENESS: How well does the current draft address all aspects of the query?
+        ACCURACY: How accurate and reliable is the information?
+        DEPTH: How detailed and comprehensive is the analysis?
+        COHERENCE: How well-structured and logically organized is the draft?
+        CITATIONS: How well are sources cited and integrated?
+        IMPROVEMENT: How much better is this draft compared to the previous version?
+        
+        Respond ONLY with:
+        COMPLETENESS: [score]
+        ACCURACY: [score]
+        DEPTH: [score]
+        COHERENCE: [score]
+        CITATIONS: [score]
+        IMPROVEMENT: [score]
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert research quality evaluator."},
+                    {"role": "user", "content": evaluation_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=500
+            )
+            
+            content = response.choices[0].message.content.strip()
+            content = clean_reasoning_tags(content)
+            self.total_tokens += response.usage.completion_tokens
+            
+            # Parse scores
+            scores = {}
+            for line in content.split('\n'):
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    key = key.strip().lower()
+                    try:
+                        scores[key] = float(value.strip())
+                    except ValueError:
+                        scores[key] = 0.5  # Default score
+            
+            return scores
+            
+        except Exception as e:
+            # Default scores
+            return {
+                'completeness': 0.5,
+                'accuracy': 0.5,
+                'depth': 0.5,
+                'coherence': 0.5,
+                'citations': 0.5,
+                'improvement': 0.1
+            }
+    
+    def update_component_fitness(self, quality_scores: Dict[str, float]):
+        """
+        Update component fitness based on performance (self-evolution)
+        """
+        # Update fitness based on quality improvements
+        improvement = quality_scores.get('improvement', 0.0)
+        
+        if improvement > 0.1:  # Significant improvement
+            self.component_fitness['search_strategy'] *= 1.1
+            self.component_fitness['synthesis_quality'] *= 1.1
+            self.component_fitness['integration_ability'] *= 1.1
+        elif improvement < 0.05:  # Poor improvement
+            self.component_fitness['search_strategy'] *= 0.95
+            self.component_fitness['synthesis_quality'] *= 0.95
+            
+        # Cap fitness values
+        for key in self.component_fitness:
+            self.component_fitness[key] = max(0.1, min(2.0, self.component_fitness[key]))
+    
     def generate_structured_report(self, system_prompt: str, original_query: str, synthesis: str) -> str:
         """
         Generate a properly structured research report with sections and citations
@@ -433,64 +741,144 @@ class DeepResearcher:
     
     def research(self, system_prompt: str, initial_query: str) -> Tuple[str, int]:
         """
-        Main research loop implementing TTD-DR algorithm
+        TTD-DR (Test-Time Diffusion Deep Researcher) main algorithm
         
-        This method orchestrates the entire research process:
-        1. Query decomposition
-        2. Iterative search and synthesis
-        3. Completeness evaluation
-        4. Focused refinement
-        5. Final report generation
+        Implements the true diffusion process with:
+        1. Preliminary draft generation (initial noisy state)
+        2. Iterative denoising through draft-guided retrieval
+        3. Component-wise self evolution
+        4. Quality-guided termination
         """
-        # Initialize research state
-        self.research_state["queries"] = [initial_query]
-        current_synthesis = ""
         
+        # PHASE 1: INITIALIZATION - Generate preliminary draft (updatable skeleton)
+        print("TTD-DR: Generating preliminary draft...")
+        self.current_draft = self.generate_preliminary_draft(system_prompt, initial_query)
+        self.draft_history.append(self.current_draft)
+        
+        # PHASE 2: ITERATIVE DENOISING LOOP
         for iteration in range(self.max_iterations):
             self.research_state["iteration"] = iteration + 1
+            print(f"TTD-DR: Denoising iteration {iteration + 1}/{self.max_iterations}")
             
-            # Step 1: Decompose current queries (first iteration) or use focused queries
-            if iteration == 0:
-                queries = self.decompose_query(system_prompt, initial_query)
-            else:
-                # Use queries from previous iteration's gap analysis
-                queries = self.research_state["queries"]
+            # STEP 1: Analyze current draft for gaps (draft-guided search)
+            print("  - Analyzing draft gaps...")
+            gaps = self.analyze_draft_gaps(self.current_draft, initial_query)
+            self.gap_analysis_history.append(gaps)
             
-            # Step 2: Perform web search
-            search_results = self.perform_web_search(queries)
+            if not gaps:
+                print("  - No significant gaps found, research complete")
+                break
             
-            # Step 3: Extract and fetch content from URLs
-            content_with_urls, sources = self.extract_and_fetch_urls(search_results)
+            # STEP 2: Perform gap-targeted retrieval
+            print(f"  - Performing targeted search for {len(gaps)} gaps...")
+            retrieval_content = self.perform_gap_targeted_search(gaps)
             
-            # Step 4: Synthesize information using memory plugin
-            current_synthesis, tokens = self.synthesize_with_memory(
-                system_prompt, initial_query, content_with_urls, sources
+            # STEP 3: Extract and fetch URLs from search results
+            print("  - Extracting and fetching content...")
+            content_with_urls, sources = self.extract_and_fetch_urls(retrieval_content)
+            
+            # Register sources for citations
+            for source in sources:
+                if 'url' in source:
+                    self.citation_counter += 1
+                    self.citations[self.citation_counter] = source
+            
+            # STEP 4: DENOISING - Integrate retrieved info with current draft
+            print("  - Performing denoising step...")
+            previous_draft = self.current_draft
+            self.current_draft = self.denoise_draft_with_retrieval(
+                self.current_draft, content_with_urls, initial_query
             )
-            self.total_tokens += tokens
+            self.draft_history.append(self.current_draft)
             
-            # Step 5: Evaluate completeness
-            is_complete, missing_aspects = self.evaluate_completeness(
-                system_prompt, initial_query, current_synthesis
+            # STEP 5: Evaluate quality improvement
+            print("  - Evaluating draft quality...")
+            quality_scores = self.evaluate_draft_quality(
+                self.current_draft, previous_draft, initial_query
             )
             
-            # Store current state
+            # STEP 6: Component self-evolution based on feedback
+            self.update_component_fitness(quality_scores)
+            
+            # STEP 7: Check termination conditions
+            completeness = quality_scores.get('completeness', 0.0)
+            improvement = quality_scores.get('improvement', 0.0)
+            
+            print(f"  - Quality scores: Completeness={completeness:.2f}, Improvement={improvement:.2f}")
+            
+            # Terminate if high quality achieved or minimal improvement
+            if completeness > 0.85 or improvement < 0.05:
+                print("  - Quality threshold reached, research complete")
+                break
+            
+            # Store current state for tracking
             self.research_state["content"].append(content_with_urls)
-            self.research_state["synthesis"] = current_synthesis
             self.research_state["sources"].extend([s['url'] for s in sources if 'url' in s])
-            
-            # Check if research is complete or max iterations reached
-            if is_complete or iteration == self.max_iterations - 1:
-                break
-            
-            # Step 6: Generate focused queries for next iteration
-            if missing_aspects:
-                self.research_state["queries"] = self.generate_focused_queries(
-                    missing_aspects, initial_query
-                )
-            else:
-                break
         
-        # Generate final structured report
-        final_report = self.generate_structured_report(system_prompt, initial_query, current_synthesis)
+        # PHASE 3: FINALIZATION - Polish the final draft
+        print("TTD-DR: Finalizing research report...")
+        final_report = self.finalize_research_report(system_prompt, initial_query, self.current_draft)
         
         return final_report, self.total_tokens
+    
+    def finalize_research_report(self, system_prompt: str, original_query: str, final_draft: str) -> str:
+        """
+        Apply final polishing to the research report
+        """
+        finalization_prompt = f"""
+        Apply final polishing to this research report. This is the last step in the TTD-DR diffusion process.
+        
+        Original Query: {original_query}
+        
+        Current Draft:
+        {final_draft}
+        
+        FINALIZATION TASKS:
+        1. Ensure professional academic formatting with clear sections
+        2. Verify all citations are properly formatted as [1], [2], etc.
+        3. Add a compelling title and executive summary
+        4. Ensure smooth transitions between sections
+        5. Add conclusion that directly addresses the original query
+        6. Remove any remaining [NEEDS RESEARCH] tags
+        7. Polish language and style for clarity and impact
+        
+        Return the final polished research report.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": finalization_prompt}
+                ],
+                temperature=0.5,
+                max_tokens=3000
+            )
+            
+            polished_report = response.choices[0].message.content.strip()
+            polished_report = clean_reasoning_tags(polished_report)
+            self.total_tokens += response.usage.completion_tokens
+            
+            # Add references section
+            references = "\n\n## References\n\n"
+            for num, source in sorted(self.citations.items()):
+                title = source.get('title', 'Untitled')
+                url = source['url']
+                access_date = source.get('access_date', datetime.now().strftime('%Y-%m-%d'))
+                references += f"[{num}] {title}. Available at: <{url}> [Accessed: {access_date}]\n\n"
+            
+            # Add TTD-DR metadata
+            metadata = "\n---\n\n**TTD-DR Research Metadata:**\n"
+            metadata += f"- Algorithm: Test-Time Diffusion Deep Researcher\n"
+            metadata += f"- Denoising iterations: {len(self.draft_history)}\n"
+            metadata += f"- Total gaps addressed: {sum(len(gaps) for gaps in self.gap_analysis_history)}\n"
+            metadata += f"- Component fitness: {self.component_fitness}\n"
+            metadata += f"- Total sources consulted: {len(self.citations)}\n"
+            metadata += f"- Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            metadata += f"- Total tokens used: {self.total_tokens}\n"
+            
+            return polished_report + references + metadata
+            
+        except Exception as e:
+            return f"Finalization failed: {str(e)}\n\nReturning current draft:\n{final_draft}"

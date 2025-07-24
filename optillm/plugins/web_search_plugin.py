@@ -384,11 +384,12 @@ def extract_search_queries(text: str) -> List[str]:
             text = text[len(prefix):].strip()
     
     # Look for explicit search requests
+    # Note: Removed period (.) from exclusion to allow queries like "Python 3.12" to work
     search_patterns = [
-        r"search for[:\s]+([^\n\.]+)",
-        r"find information about[:\s]+([^\n\.]+)",
-        r"look up[:\s]+([^\n\.]+)",
-        r"research[:\s]+([^\n\.]+)",
+        r"search for[:\s]+([^\n]+?)(?:\s*\n|$)",
+        r"find information about[:\s]+([^\n]+?)(?:\s*\n|$)",
+        r"look up[:\s]+([^\n]+?)(?:\s*\n|$)", 
+        r"research[:\s]+([^\n]+?)(?:\s*\n|$)",
     ]
     
     queries = []
