@@ -61,6 +61,60 @@ def clean_reasoning_tags(text: str) -> str:
     return cleaned_text
 
 
+def cleanup_placeholder_tags(text: str) -> str:
+    """
+    Remove any remaining placeholder tags from the final report.
+    
+    This is a final cleanup step to ensure no incomplete research tags remain
+    in the published report.
+    
+    Args:
+        text: Research report text
+        
+    Returns:
+        Text with all placeholder tags removed
+    """
+    if not text:
+        return text
+    
+    # Patterns for research placeholder tags
+    placeholder_patterns = [
+        r'\[NEEDS RESEARCH[^\]]*\]',
+        r'\[SOURCE NEEDED[^\]]*\]', 
+        r'\[RESEARCH NEEDED[^\]]*\]',
+        r'\[CITATION NEEDED[^\]]*\]',
+        r'\[MORE RESEARCH NEEDED[^\]]*\]',
+        r'\[REQUIRES INVESTIGATION[^\]]*\]',
+        r'\[TO BE RESEARCHED[^\]]*\]',
+        r'\[VERIFY[^\]]*\]',
+        r'\[CHECK[^\]]*\]',
+    ]
+    
+    cleaned_text = text
+    for pattern in placeholder_patterns:
+        # Remove the placeholder tags
+        cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.IGNORECASE)
+    
+    # Also remove any sentences that are entirely placeholder-based
+    lines = cleaned_text.split('\n')
+    filtered_lines = []
+    
+    for line in lines:
+        # Skip lines that are mostly just removed placeholders (now empty or just punctuation)
+        stripped = line.strip()
+        if stripped and not re.match(r'^[\s\-\*\.\,\;\:]*$', stripped):
+            filtered_lines.append(line)
+        elif not stripped:  # Keep empty lines for formatting
+            filtered_lines.append(line)
+    
+    # Rejoin and clean up extra whitespace
+    result = '\n'.join(filtered_lines)
+    result = re.sub(r'\n\s*\n\s*\n+', '\n\n', result)  # Multiple empty lines to double
+    result = result.strip()
+    
+    return result
+
+
 class DeepResearcher:
     """
     Implementation of Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
@@ -71,7 +125,7 @@ class DeepResearcher:
     Based on: https://arxiv.org/abs/2507.16075v1
     """
     
-    def __init__(self, client, model: str, max_iterations: int = 5, max_sources: int = 10):
+    def __init__(self, client, model: str, max_iterations: int = 8, max_sources: int = 15):
         self.client = client
         self.model = model
         self.max_iterations = max_iterations
@@ -98,6 +152,21 @@ class DeepResearcher:
             "integration_ability": 1.0
         }
         self.gap_analysis_history = []  # Track identified gaps over time
+    
+    def cleanup_placeholder_tags(self, text: str) -> str:
+        """
+        Remove any remaining placeholder tags from the final report.
+        
+        This is a final cleanup step to ensure no incomplete research tags remain
+        in the published report.
+        
+        Args:
+            text: Research report text
+            
+        Returns:
+            Text with all placeholder tags removed
+        """
+        return cleanup_placeholder_tags(text)
     
     def decompose_query(self, system_prompt: str, initial_query: str) -> List[str]:
         """
@@ -394,17 +463,23 @@ class DeepResearcher:
         """
         gap_analysis_prompt = f"""
         Analyze the following research draft to identify specific gaps and areas that need external research.
+        Pay special attention to any placeholder tags like [NEEDS RESEARCH], [SOURCE NEEDED], etc.
         
         Original Query: {original_query}
         
         Current Draft:
         {current_draft}
         
+        PRIORITY ANALYSIS:
+        1. First, identify any [NEEDS RESEARCH], [SOURCE NEEDED], [CITATION NEEDED] or similar placeholder tags
+        2. Then identify other substantial gaps in content, evidence, or depth
+        
         For each gap you identify, provide:
         1. SECTION: Which section has the gap
-        2. GAP_TYPE: [MISSING_INFO, OUTDATED_INFO, NEEDS_EVIDENCE, LACKS_DEPTH, NEEDS_EXAMPLES]
+        2. GAP_TYPE: [PLACEHOLDER_TAG, MISSING_INFO, OUTDATED_INFO, NEEDS_EVIDENCE, LACKS_DEPTH, NEEDS_EXAMPLES]
         3. SPECIFIC_NEED: Exactly what information is needed
         4. SEARCH_QUERY: A specific search query to address this gap
+        5. PRIORITY: [HIGH, MEDIUM, LOW] - HIGH for placeholder tags that need immediate resolution
         
         Format each gap as:
         GAP_ID: [number]
@@ -412,8 +487,9 @@ class DeepResearcher:
         GAP_TYPE: [type]
         SPECIFIC_NEED: [what's missing]
         SEARCH_QUERY: [search query to find this info]
+        PRIORITY: [priority level]
         
-        Identify 3-5 most critical gaps.
+        Identify 3-6 most critical gaps, prioritizing any placeholder tags that need resolution.
         """
         
         try:
@@ -468,10 +544,17 @@ class DeepResearcher:
     def perform_gap_targeted_search(self, gaps: List[Dict[str, str]]) -> str:
         """
         Perform targeted searches based on identified gaps in the current draft
+        Prioritizes HIGH priority gaps (placeholder tags) first
         """
         all_results = []
         
-        for gap in gaps:
+        # Sort gaps by priority - HIGH priority first (placeholder tags)
+        sorted_gaps = sorted(gaps, key=lambda g: (
+            0 if g.get('priority', '').upper() == 'HIGH' else
+            1 if g.get('priority', '').upper() == 'MEDIUM' else 2
+        ))
+        
+        for gap in sorted_gaps:
             search_query = gap.get('search_query', '')
             if not search_query:
                 continue
@@ -807,7 +890,8 @@ class DeepResearcher:
             print(f"  - Quality scores: Completeness={completeness:.2f}, Improvement={improvement:.2f}")
             
             # Terminate if high quality achieved or minimal improvement
-            if completeness > 0.85 or improvement < 0.05:
+            # More lenient termination to ensure complete research
+            if completeness > 0.9 or (improvement < 0.03 and completeness > 0.7):
                 print("  - Quality threshold reached, research complete")
                 break
             
@@ -839,8 +923,11 @@ class DeepResearcher:
         3. Add a compelling title and executive summary
         4. Ensure smooth transitions between sections
         5. Add conclusion that directly addresses the original query
-        6. Remove any remaining [NEEDS RESEARCH] tags
-        7. Polish language and style for clarity and impact
+        6. **CRITICAL**: Remove ALL [NEEDS RESEARCH], [SOURCE NEEDED], and similar placeholder tags
+        7. Replace any remaining placeholders with actual content or remove incomplete sections
+        8. Polish language and style for clarity and impact
+        
+        **IMPORTANT**: The final report must NOT contain any [NEEDS RESEARCH], [SOURCE NEEDED], [RESEARCH NEEDED], [CITATION NEEDED], or similar placeholder tags. If any placeholders remain, replace them with available information or remove the incomplete statements.
         
         Return the final polished research report.
         """
@@ -858,6 +945,10 @@ class DeepResearcher:
             
             polished_report = response.choices[0].message.content.strip()
             polished_report = clean_reasoning_tags(polished_report)
+            
+            # Final cleanup: Remove any remaining placeholder tags
+            polished_report = self.cleanup_placeholder_tags(polished_report)
+            
             self.total_tokens += response.usage.completion_tokens
             
             # Add references section

@@ -32,16 +32,16 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
         client: OpenAI client for LLM calls
         model: Model name to use for synthesis
         request_config: Optional configuration dict with keys:
-            - max_iterations: Maximum research iterations (default: 5)
-            - max_sources: Maximum web sources per search (default: 10)
+            - max_iterations: Maximum research iterations (default: 8)
+            - max_sources: Maximum web sources per search (default: 15)
     
     Returns:
         Tuple of (comprehensive_research_response, total_completion_tokens)
     """
     # Parse configuration
     config = request_config or {}
-    max_iterations = config.get("max_iterations", 5)
-    max_sources = config.get("max_sources", 10)
+    max_iterations = config.get("max_iterations", 8)  # Increased to 8 for thorough research
+    max_sources = config.get("max_sources", 15)  # Increased to 15 for comprehensive coverage
     
     # Validate inputs
     if not initial_query.strip():
