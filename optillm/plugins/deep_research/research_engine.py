@@ -225,7 +225,7 @@ class DeepResearcher:
     Based on: https://arxiv.org/abs/2507.16075v1
     """
     
-    def __init__(self, client, model: str, max_iterations: int = 8, max_sources: int = 15):
+    def __init__(self, client, model: str, max_iterations: int = 5, max_sources: int = 30):
         self.client = client
         self.model = model
         self.max_iterations = max_iterations
@@ -606,10 +606,17 @@ For more detailed information on specific aspects of {original_query}, additiona
         5. Research Questions for Investigation
         6. Conclusion (preliminary thoughts)
         
-        Mark sections that need external research with [NEEDS RESEARCH] tags.
-        Use placeholder citations like [SOURCE NEEDED] where external evidence is required.
+        IMPORTANT: You MUST mark multiple areas that need external research with [NEEDS RESEARCH] tags.
+        Every claim that would benefit from external evidence should have [SOURCE NEEDED].
+        This is a preliminary draft - it should have many gaps for iterative improvement.
         
-        This is an initial draft - it should be substantive but acknowledge limitations.
+        Example of proper marking:
+        - "Recent studies show [SOURCE NEEDED] that quantum computing..."
+        - "The economic impact [NEEDS RESEARCH: current market data] is significant..."
+        - "Historical context [NEEDS RESEARCH: specific timeline and events] shows..."
+        
+        Include AT LEAST 5-10 [NEEDS RESEARCH] or [SOURCE NEEDED] tags throughout the draft.
+        Be explicit about what you don't know and what needs external validation.
         """
         
         try:
@@ -639,23 +646,27 @@ For more detailed information on specific aspects of {original_query}, additiona
         """
         gap_analysis_prompt = f"""
         Analyze the following research draft to identify specific gaps and areas that need external research.
-        Pay special attention to any placeholder tags like [NEEDS RESEARCH], [SOURCE NEEDED], etc.
+        Be thorough and aggressive in finding areas for improvement - even good drafts can be enhanced.
         
         Original Query: {original_query}
         
         Current Draft:
         {current_draft}
         
-        PRIORITY ANALYSIS:
-        1. First, identify any [NEEDS RESEARCH], [SOURCE NEEDED], [CITATION NEEDED] or similar placeholder tags
-        2. Then identify other substantial gaps in content, evidence, or depth
+        CRITICAL ANALYSIS REQUIRED:
+        1. MANDATORY: Find ALL [NEEDS RESEARCH], [SOURCE NEEDED], [CITATION NEEDED] tags
+        2. Identify claims lacking evidence (even if not explicitly marked)
+        3. Find areas that could benefit from recent data or statistics
+        4. Spot generalizations that need specific examples
+        5. Locate outdated information or areas needing current updates
+        6. Identify missing perspectives or counterarguments
         
         For each gap you identify, provide:
         1. SECTION: Which section has the gap
-        2. GAP_TYPE: [PLACEHOLDER_TAG, MISSING_INFO, OUTDATED_INFO, NEEDS_EVIDENCE, LACKS_DEPTH, NEEDS_EXAMPLES]
+        2. GAP_TYPE: [PLACEHOLDER_TAG, MISSING_INFO, OUTDATED_INFO, NEEDS_EVIDENCE, LACKS_DEPTH, NEEDS_EXAMPLES, MISSING_PERSPECTIVE]
         3. SPECIFIC_NEED: Exactly what information is needed
-        4. SEARCH_QUERY: A specific search query to address this gap
-        5. PRIORITY: [HIGH, MEDIUM, LOW] - HIGH for placeholder tags that need immediate resolution
+        4. SEARCH_QUERY: A specific, targeted search query to address this gap
+        5. PRIORITY: [HIGH, MEDIUM, LOW] - HIGH for placeholder tags and critical missing info
         
         Format each gap as:
         GAP_ID: [number]
@@ -665,7 +676,9 @@ For more detailed information on specific aspects of {original_query}, additiona
         SEARCH_QUERY: [search query to find this info]
         PRIORITY: [priority level]
         
-        Identify 3-6 most critical gaps, prioritizing any placeholder tags that need resolution.
+        IMPORTANT: Identify AT LEAST 3-8 gaps. Be critical and thorough.
+        Even well-written sections can benefit from additional evidence, examples, or perspectives.
+        Push for depth, accuracy, and comprehensiveness in the research.
         """
         
         try:
@@ -701,6 +714,8 @@ For more detailed information on specific aspects of {original_query}, additiona
                     current_gap['specific_need'] = line.split(':', 1)[1].strip()
                 elif line.startswith('SEARCH_QUERY:'):
                     current_gap['search_query'] = line.split(':', 1)[1].strip()
+                elif line.startswith('PRIORITY:'):
+                    current_gap['priority'] = line.split(':', 1)[1].strip()
             
             if current_gap:
                 gaps.append(current_gap)
@@ -960,6 +975,7 @@ For more detailed information on specific aspects of {original_query}, additiona
         8. Group related citations together when appropriate [1,2,3]
         9. Ensure the Executive Summary captures the essence of the entire report
         10. Make recommendations specific and actionable
+        11. DO NOT create a References section - it will be added automatically
         """
         
         try:
@@ -977,6 +993,12 @@ For more detailed information on specific aspects of {original_query}, additiona
             # Clean reasoning tags from final report response
             report_content = clean_reasoning_tags(report_content)
             self.total_tokens += response.usage.completion_tokens
+            
+            # Remove any References section the LLM might have created
+            # This prevents duplicate reference sections
+            report_content = re.sub(r'##\s*References.*?(?=##|\Z)', '', report_content, flags=re.DOTALL)
+            report_content = re.sub(r'(?m)^References\s*\n\s*(?:\[\d+\]\s*\n)+', '', report_content)
+            report_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', report_content)  # Clean up extra newlines
             
             # Add references section with proper formatting
             references = "\n\n## References\n\n"
@@ -1132,6 +1154,7 @@ For more detailed information on specific aspects of {original_query}, additiona
         - If sections are incomplete, either complete them with available information or remove them entirely
         - Ensure all statements are backed by available evidence or are clearly marked as preliminary findings
         - The report must be publication-ready with no incomplete elements
+        - DO NOT create a References section - it will be added automatically
         
         Return the final polished research report.
         """
@@ -1168,6 +1191,11 @@ For more detailed information on specific aspects of {original_query}, additiona
             
             self.total_tokens += response.usage.completion_tokens
             
+            # Remove any References section the LLM might have created
+            polished_report = re.sub(r'##\s*References.*?(?=##|\Z)', '', polished_report, flags=re.DOTALL)
+            polished_report = re.sub(r'(?m)^References\s*\n\s*(?:\[\d+\]\s*\n)+', '', polished_report)
+            polished_report = re.sub(r'\n\s*\n\s*\n+', '\n\n', polished_report)  # Clean up extra newlines
+            
             # Add references section
             references = "\n\n## References\n\n"
             for num, source in sorted(self.citations.items()):
@@ -1179,7 +1207,7 @@ For more detailed information on specific aspects of {original_query}, additiona
             # Add TTD-DR metadata
             metadata = "\n---\n\n**TTD-DR Research Metadata:**\n"
             metadata += f"- Algorithm: Test-Time Diffusion Deep Researcher\n"
-            metadata += f"- Denoising iterations: {len(self.draft_history)}\n"
+            metadata += f"- Denoising iterations: {len(self.draft_history) - 1}\n"
             metadata += f"- Total gaps addressed: {sum(len(gaps) for gaps in self.gap_analysis_history)}\n"
             metadata += f"- Component fitness: {self.component_fitness}\n"
             metadata += f"- Total sources consulted: {len(self.citations)}\n"

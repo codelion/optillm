@@ -43,8 +43,11 @@ class BrowserSessionManager:
     
     def get_or_create_searcher(self) -> 'GoogleSearcher':
         """Get existing searcher or create a new one"""
-        if self._searcher is None:
-            print("🌐 Creating new browser session for research...")
+        if self._searcher is None or self._searcher.driver is None:
+            if self._searcher is None:
+                print("🌐 Creating new browser session for research...")
+            else:
+                print("🔄 Recreating browser session (previous session invalidated)...")
             self._searcher = GoogleSearcher(
                 headless=self.headless,
                 timeout=self.timeout
@@ -52,12 +55,38 @@ class BrowserSessionManager:
         return self._searcher
     
     def search(self, query: str, num_results: int = 10, delay_seconds: Optional[int] = None) -> List[Dict[str, str]]:
-        """Perform a search using the managed browser session"""
-        searcher = self.get_or_create_searcher()
-        self._search_count += 1
-        session_duration = time.time() - self._session_start_time if self._session_start_time else 0
-        print(f"🔍 Search #{self._search_count} in current session (instance: {id(self)}, duration: {session_duration:.1f}s): {query[:50]}...")
-        return searcher.search(query, num_results, delay_seconds)
+        """Perform a search using the managed browser session with automatic recovery"""
+        try:
+            searcher = self.get_or_create_searcher()
+            self._search_count += 1
+            session_duration = time.time() - self._session_start_time if self._session_start_time else 0
+            print(f"🔍 Search #{self._search_count} in current session (instance: {id(self)}, duration: {session_duration:.1f}s): {query[:50]}...")
+            return searcher.search(query, num_results, delay_seconds)
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check for session-related errors
+            if 'invalid session id' in error_msg or 'session deleted' in error_msg:
+                print("⚠️  Browser session invalidated, attempting recovery...")
+                # Invalidate current searcher
+                if self._searcher:
+                    try:
+                        self._searcher.close()
+                    except:
+                        pass  # Ignore errors during cleanup
+                self._searcher = None
+                
+                # Try once more with a fresh session
+                try:
+                    searcher = self.get_or_create_searcher()
+                    print("✅ New browser session created, retrying search...")
+                    return searcher.search(query, num_results, delay_seconds)
+                except Exception as retry_error:
+                    print(f"❌ Session recovery failed: {str(retry_error)}")
+                    return []  # Return empty results instead of crashing
+            else:
+                # For other errors, just log and return empty results
+                print(f"❌ Search error: {str(e)}")
+                return []
     
     def close(self):
         """Close the browser session"""
@@ -436,7 +465,13 @@ class GoogleSearcher:
             print(f"Search timeout for query '{query}': {str(e)}")
             return []
         except WebDriverException as e:
-            print(f"WebDriver error during search: {str(e)}")
+            error_msg = str(e).lower()
+            if 'invalid session id' in error_msg or 'session deleted' in error_msg:
+                print(f"WebDriver session invalid: {str(e)}")
+                # Invalidate the driver so next search creates a new one
+                self.driver = None
+            else:
+                print(f"WebDriver error during search: {str(e)}")
             return []
         except Exception as e:
             print(f"Unexpected error during search: {str(e)}")

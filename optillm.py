@@ -773,7 +773,11 @@ def parse_args():
         if extra and extra[0]:  # Check if there are choices for this argument
             parser.add_argument(arg, type=type_, default=default, help=help_text, choices=extra[0])
         else:
-            parser.add_argument(arg, type=type_, default=default, help=help_text)
+            if type_ == bool:
+                # For boolean flags, use store_true action
+                parser.add_argument(arg, action='store_true', default=default, help=help_text)
+            else:
+                parser.add_argument(arg, type=type_, default=default, help=help_text)
 
     # Special handling for best_of_n to support both formats
     best_of_n_default = int(os.environ.get("OPTILLM_BEST_OF_N", 3))
@@ -855,12 +859,45 @@ def main():
             base_url = f"http://localhost:{port}/v1"
             logger.info(f"Launching Gradio interface connected to {base_url}")
             
-            # Launch Gradio interface
-            demo = gr.load_chat(
-                base_url,
-                model=server_config['model'],
-                token=None
+            # Create custom chat function with extended timeout
+            def chat_with_optillm(message, history):
+                import httpx
+                from openai import OpenAI
+                
+                # Create client with extended timeout and no retries
+                custom_client = OpenAI(
+                    api_key="optillm",
+                    base_url=base_url,
+                    timeout=httpx.Timeout(1800.0, connect=5.0),  # 30 min timeout
+                    max_retries=0  # No retries - prevents duplicate requests
+                )
+                
+                # Convert history to messages format
+                messages = []
+                for h in history:
+                    if h[0]:  # User message
+                        messages.append({"role": "user", "content": h[0]})
+                    if h[1]:  # Assistant message
+                        messages.append({"role": "assistant", "content": h[1]})
+                messages.append({"role": "user", "content": message})
+                
+                # Make request
+                try:
+                    response = custom_client.chat.completions.create(
+                        model=server_config['model'],
+                        messages=messages
+                    )
+                    return response.choices[0].message.content
+                except Exception as e:
+                    return f"Error: {str(e)}"
+            
+            # Create Gradio interface with queue for long operations
+            demo = gr.ChatInterface(
+                chat_with_optillm,
+                title="OptILLM Chat Interface",
+                description=f"Connected to OptILLM proxy at {base_url}"
             )
+            demo.queue()  # Enable queue to handle long operations properly
             demo.launch(server_name="0.0.0.0", share=False)
         except ImportError:
             logger.error("Gradio is required for GUI. Install it with: pip install gradio")
