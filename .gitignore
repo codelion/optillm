@@ -171,3 +171,4 @@ cython_debug/
 scripts/results/
 results/
 test_results.json
+deep_research_reports/

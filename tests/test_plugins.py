@@ -25,7 +25,9 @@ def test_plugin_module_imports():
         'optillm.plugins.readurls_plugin', 
         'optillm.plugins.privacy_plugin',
         'optillm.plugins.genselect_plugin',
-        'optillm.plugins.majority_voting_plugin'
+        'optillm.plugins.majority_voting_plugin',
+        'optillm.plugins.web_search_plugin',
+        'optillm.plugins.deep_research_plugin'
     ]
     
     for module_name in plugin_modules:
@@ -46,7 +48,7 @@ def test_plugin_approach_detection():
     load_plugins()
     
     # Check if known plugins are loaded
-    expected_plugins = ["memory", "readurls", "privacy"]
+    expected_plugins = ["memory", "readurls", "privacy", "web_search", "deep_research"]
     for plugin_name in expected_plugins:
         assert plugin_name in plugin_approaches, f"Plugin {plugin_name} not loaded"
 
@@ -77,6 +79,25 @@ def test_majority_voting_plugin():
     assert hasattr(plugin, 'extract_answer')
     assert hasattr(plugin, 'normalize_answer')
     assert plugin.SLUG == "majority_voting"
+
+
+def test_web_search_plugin():
+    """Test web search plugin module"""
+    import optillm.plugins.web_search_plugin as plugin
+    assert hasattr(plugin, 'run')
+    assert hasattr(plugin, 'SLUG')
+    assert hasattr(plugin, 'GoogleSearcher')
+    assert hasattr(plugin, 'extract_search_queries')
+    assert plugin.SLUG == "web_search"
+
+
+def test_deep_research_plugin():
+    """Test deep research plugin module"""
+    import optillm.plugins.deep_research_plugin as plugin
+    assert hasattr(plugin, 'run')
+    assert hasattr(plugin, 'SLUG')
+    assert hasattr(plugin, 'DeepResearcher')
+    assert plugin.SLUG == "deep_research"
 
 
 if __name__ == "__main__":
@@ -111,5 +132,17 @@ if __name__ == "__main__":
         print("✅ Majority voting plugin test passed")
     except Exception as e:
         print(f"❌ Majority voting plugin test failed: {e}")
+    
+    try:
+        test_web_search_plugin()
+        print("✅ Web search plugin test passed")
+    except Exception as e:
+        print(f"❌ Web search plugin test failed: {e}")
+    
+    try:
+        test_deep_research_plugin()
+        print("✅ Deep research plugin test passed")
+    except Exception as e:
+        print(f"❌ Deep research plugin test failed: {e}")
     
     print("\nDone!")
