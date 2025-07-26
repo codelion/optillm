@@ -379,7 +379,7 @@ Check this log file for connection issues, tool execution errors, and other diag
 | JSON                    | `json`             | Enables structured outputs using the outlines library, supports pydantic types and JSON schema |
 | GenSelect               | `genselect`        | Generative Solution Selection - generates multiple candidates and selects the best based on quality criteria |
 | Web Search              | `web_search`       | Performs Google searches using Chrome automation (Selenium) to gather search results and URLs |
-| Deep Research           | `deep_research`    | Implements Test-Time Diffusion Deep Researcher (TTD-DR) for comprehensive research reports using iterative refinement |
+| [Deep Research](optillm/plugins/deep_research)           | `deep_research`    | Implements Test-Time Diffusion Deep Researcher (TTD-DR) for comprehensive research reports using iterative refinement |
 
 ## Available parameters
 
@@ -631,6 +631,7 @@ See `tests/README.md` for more details on the test structure and how to write ne
 - [Patched MOA: optimizing inference for diverse software development tasks](https://arxiv.org/abs/2407.18521) - [Implementation](optillm/moa.py)
 - [Patched RTC: evaluating LLMs for diverse software development tasks](https://arxiv.org/abs/2407.16557) - [Implementation](ptillm/rto.py)
 - [AIMO-2 Winning Solution: Building State-of-the-Art Mathematical Reasoning Models with OpenMathReasoning dataset](https://arxiv.org/abs/2504.16891) - [Implementation](optillm/plugins/genselect_plugin.py)
+- [Test-Time Diffusion Deep Researcher (TTD-DR): Think More, Research More, Answer Better!](https://arxiv.org/abs/2507.16075v1) - [Implementation](optillm/plugins/deep_research)
 
 ## Citation
 
