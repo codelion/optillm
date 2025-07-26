@@ -1050,6 +1050,45 @@ For more detailed information on specific aspects of {original_query}, additiona
             print("TTD-DR: Generating preliminary draft...")
             self.current_draft = self.generate_preliminary_draft(system_prompt, initial_query)
             self.draft_history.append(self.current_draft)
+            
+            # PHASE 1.5: INITIAL RESEARCH - Ensure we always gather external sources
+            print("TTD-DR: Performing initial research...")
+            initial_queries = self.decompose_query(system_prompt, initial_query)
+            if initial_queries:
+                print(f"  - Searching for {len(initial_queries)} initial topics...")
+                initial_search_results = self.perform_web_search(initial_queries)
+                
+                # Extract and fetch URLs from initial search
+                if initial_search_results and "Web Search Results" in initial_search_results:
+                    print("  - Extracting initial sources...")
+                    initial_content, initial_sources = self.extract_and_fetch_urls(initial_search_results)
+                    
+                    # Register initial sources
+                    for source in initial_sources:
+                        if 'url' in source:
+                            self.citation_counter += 1
+                            self.citations[self.citation_counter] = source
+                    
+                    # Store initial research
+                    self.research_state["content"].append(initial_content)
+                    self.research_state["sources"].extend([s['url'] for s in initial_sources if 'url' in s])
+                    
+                    print(f"  - Found {len(initial_sources)} initial sources")
+                else:
+                    print("  - No sources found in initial search")
+            else:
+                print("  - Warning: Could not decompose query for initial research")
+                # Fallback: Create simple search queries from the original query
+                print("  - Using fallback search strategy...")
+                fallback_queries = [initial_query]  # At minimum, search for the original query
+                fallback_search_results = self.perform_web_search(fallback_queries)
+                if fallback_search_results and "Web Search Results" in fallback_search_results:
+                    fallback_content, fallback_sources = self.extract_and_fetch_urls(fallback_search_results)
+                    for source in fallback_sources:
+                        if 'url' in source:
+                            self.citation_counter += 1
+                            self.citations[self.citation_counter] = source
+                    print(f"  - Fallback search found {len(fallback_sources)} sources")
         
             # PHASE 2: ITERATIVE DENOISING LOOP
             for iteration in range(self.max_iterations):
@@ -1114,6 +1153,14 @@ For more detailed information on specific aspects of {original_query}, additiona
             
             # PHASE 3: FINALIZATION - Polish the final draft
             print("TTD-DR: Finalizing research report...")
+            
+            # Ensure we have gathered some sources
+            if len(self.citations) == 0:
+                print("⚠️  Warning: No external sources found during research!")
+                print("   Deep research should always consult external sources.")
+            else:
+                print(f"✅ Research completed with {len(self.citations)} sources")
+            
             final_report = self.finalize_research_report(system_prompt, initial_query, self.current_draft)
             
             return final_report, self.total_tokens
