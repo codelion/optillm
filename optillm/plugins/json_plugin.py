@@ -1,9 +1,10 @@
 from typing import Tuple, Dict, Any, Optional
 import logging
-from outlines import models, generate
+import outlines
 import json
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from pydantic import BaseModel, create_model
+from transformers import AutoTokenizer
 
 # Plugin identifier
 SLUG = "json"
@@ -26,11 +27,9 @@ class JSONGenerator:
         self.device = self.get_device()
         logger.info(f"Using device: {self.device}")
         try:
-            llm = AutoModelForCausalLM.from_pretrained(model_name)
-            llm.to(self.device)
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = models.Transformers(llm, tokenizer)
-            self.tokenizer = tokenizer
+            # Initialize the model using the new outlines API
+            self.model = outlines.from_transformers(model_name, device=str(self.device))
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             logger.info(f"Successfully loaded model: {model_name}")
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
@@ -45,17 +44,63 @@ class JSONGenerator:
             logger.error(f"Error counting tokens: {str(e)}")
             return 0
 
+    def parse_json_schema_to_pydantic(self, schema_str: str) -> type[BaseModel]:
+        """Convert JSON schema string to Pydantic model."""
+        try:
+            schema_dict = json.loads(schema_str)
+            
+            # Extract properties and required fields
+            properties = schema_dict.get('properties', {})
+            required = schema_dict.get('required', [])
+            
+            # Build field definitions for Pydantic
+            fields = {}
+            for field_name, field_def in properties.items():
+                field_type = str  # Default to string
+                
+                # Map JSON schema types to Python types
+                if field_def.get('type') == 'integer':
+                    field_type = int
+                elif field_def.get('type') == 'number':
+                    field_type = float
+                elif field_def.get('type') == 'boolean':
+                    field_type = bool
+                elif field_def.get('type') == 'array':
+                    field_type = list
+                elif field_def.get('type') == 'object':
+                    field_type = dict
+                
+                # Check if field is required
+                if field_name in required:
+                    fields[field_name] = (field_type, ...)
+                else:
+                    fields[field_name] = (Optional[field_type], None)
+            
+            # Create dynamic Pydantic model
+            return create_model('DynamicModel', **fields)
+            
+        except Exception as e:
+            logger.error(f"Error parsing JSON schema: {str(e)}")
+            raise
+
     def generate_json(self, prompt: str, schema: str) -> Dict[str, Any]:
         """Generate JSON based on the provided schema and prompt."""
         try:
-            # Create JSON generator with the schema
-            generator = generate.json(self.model, schema)
-            logger.info("Created JSON generator with schema")
+            # Parse JSON schema to Pydantic model
+            pydantic_model = self.parse_json_schema_to_pydantic(schema)
+            logger.info("Parsed JSON schema to Pydantic model")
 
-            # Generate JSON response
-            result = generator(prompt)
+            # Generate JSON response using the new API
+            result = self.model(prompt, pydantic_model)
             logger.info("Successfully generated JSON response")
-            return result
+            
+            # Convert Pydantic model instance to dict
+            if hasattr(result, 'model_dump'):
+                return result.model_dump()
+            elif hasattr(result, 'dict'):
+                return result.dict()
+            else:
+                return dict(result)
 
         except Exception as e:
             logger.error(f"Error generating JSON: {str(e)}")
