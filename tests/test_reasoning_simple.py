@@ -85,6 +85,63 @@ class TestReasoningTokensCore(unittest.TestCase):
         
         result = optillm_count(text, tokenizer)
         self.assertGreater(result, 0, "Should fallback to character estimation")
+    
+    def test_count_reasoning_tokens_truncated_response(self):
+        """Test counting tokens when response is truncated (no closing </think> tag)"""
+        # Test truncated think tag
+        truncated_text = "<think>This reasoning was cut off due to max tokens"
+        
+        result1 = optillm_count(truncated_text)
+        result2 = inference_count(truncated_text)
+        
+        self.assertGreater(result1, 0, "Should count tokens from truncated think block")
+        self.assertEqual(result1, result2, "Both functions should return same result")
+    
+    def test_count_reasoning_tokens_mixed_complete_and_truncated(self):
+        """Test with both complete and truncated think blocks"""
+        mixed_text = """
+        <think>First complete reasoning block</think>
+        Some output here
+        <think>This second block was truncated and never closed
+        """
+        
+        result = optillm_count(mixed_text)
+        self.assertGreater(result, 0, "Should count tokens from both complete and truncated blocks")
+        
+        # Should be more than just the first block alone
+        first_block_only = "<think>First complete reasoning block</think>"
+        first_result = optillm_count(first_block_only)
+        self.assertGreater(result, first_result, "Should include truncated content")
+    
+    def test_count_reasoning_tokens_no_false_positives(self):
+        """Test that we don't count think-like content that isn't actually truncated"""
+        # This should NOT be counted as truncated since there's a </think> later
+        text_with_complete_blocks = "<think>First block</think>Output<think>Second complete block</think>"
+        
+        result = optillm_count(text_with_complete_blocks)
+        
+        # Count manually - should only be the content inside the two complete blocks
+        manual_count = optillm_count("<think>First blockSecond complete block</think>")
+        self.assertEqual(result, manual_count, "Should only count complete blocks, not detect false truncation")
+    
+    def test_count_reasoning_tokens_edge_cases_truncated(self):
+        """Test edge cases with truncated responses"""
+        test_cases = [
+            ("<think>", 0),  # Just opening tag, no content
+            ("<think>a", 1),  # Minimal content
+            ("Some output <think>reasoning here", None),  # Truncated at end
+            ("<think>multi\nline\ntruncated", None),  # Multiline truncated
+        ]
+        
+        for text, expected_min in test_cases:
+            result = optillm_count(text)
+            if expected_min is not None:
+                if expected_min == 0:
+                    self.assertEqual(result, expected_min, f"Should return {expected_min} for: {text}")
+                else:
+                    self.assertGreaterEqual(result, expected_min, f"Should be at least {expected_min} for: {text}")
+            else:
+                self.assertGreater(result, 0, f"Should count truncated content for: {text}")
 
 
 class TestInferenceStructures(unittest.TestCase):

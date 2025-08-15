@@ -108,14 +108,24 @@ def count_reasoning_tokens(text: str, tokenizer=None) -> int:
         return 0
     
     # Extract all content within <think>...</think> tags
-    think_pattern = r'<think>(.*?)</think>'
-    matches = re.findall(think_pattern, text, re.DOTALL)
+    # Handle both complete and truncated think blocks
     
-    if not matches:
-        return 0
+    # First, find all complete <think>...</think> blocks
+    complete_pattern = r'<think>(.*?)</think>'
+    complete_matches = re.findall(complete_pattern, text, re.DOTALL)
+    
+    # Then check for unclosed <think> tag (truncated response)
+    # This finds <think> that doesn't have a matching </think> after it
+    truncated_pattern = r'<think>(?!.*</think>)(.*)$'
+    truncated_match = re.search(truncated_pattern, text, re.DOTALL)
     
     # Combine all thinking content
-    thinking_content = ''.join(matches)
+    thinking_content = ''.join(complete_matches)
+    if truncated_match:
+        thinking_content += truncated_match.group(1)
+    
+    if not thinking_content:
+        return 0
     
     if tokenizer and hasattr(tokenizer, 'encode'):
         # Use tokenizer for precise counting
@@ -125,8 +135,9 @@ def count_reasoning_tokens(text: str, tokenizer=None) -> int:
         except Exception as e:
             logger.warning(f"Failed to count tokens with tokenizer: {e}")
     
-    # Fallback: rough estimation (4 chars per token on average)
-    return max(0, len(thinking_content.strip()) // 4)
+    # Fallback: rough estimation (4 chars per token on average, minimum 1 token for non-empty content)
+    content_length = len(thinking_content.strip())
+    return max(1, content_length // 4) if content_length > 0 else 0
 
 # Server configuration
 server_config = {
