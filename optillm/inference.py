@@ -18,6 +18,7 @@ import threading
 import traceback
 import platform
 import sys
+import re
 
 from optillm.cot_decoding import cot_decode
 from optillm.entropy_decoding import entropy_decode
@@ -28,6 +29,41 @@ from optillm.autothink import autothink_decode
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def count_reasoning_tokens(text: str, tokenizer=None) -> int:
+    """
+    Count tokens within <think>...</think> tags in the given text.
+    
+    Args:
+        text: The text to analyze
+        tokenizer: Optional tokenizer instance for precise counting
+        
+    Returns:
+        Number of reasoning tokens (0 if no think tags found)
+    """
+    if not text or not isinstance(text, str):
+        return 0
+    
+    # Extract all content within <think>...</think> tags
+    think_pattern = r'<think>(.*?)</think>'
+    matches = re.findall(think_pattern, text, re.DOTALL)
+    
+    if not matches:
+        return 0
+    
+    # Combine all thinking content
+    thinking_content = ''.join(matches)
+    
+    if tokenizer and hasattr(tokenizer, 'encode'):
+        # Use tokenizer for precise counting
+        try:
+            tokens = tokenizer.encode(thinking_content)
+            return len(tokens)
+        except Exception as e:
+            logger.warning(f"Failed to count tokens with tokenizer: {e}")
+    
+    # Fallback: rough estimation (4 chars per token on average)
+    return max(0, len(thinking_content.strip()) // 4)
 
 # MLX Support for Apple Silicon
 try:
@@ -1502,10 +1538,11 @@ class ChatCompletionChoice:
             self.message.logprobs = logprobs
 
 class ChatCompletionUsage:
-    def __init__(self, prompt_tokens: int, completion_tokens: int, total_tokens: int):
+    def __init__(self, prompt_tokens: int, completion_tokens: int, total_tokens: int, reasoning_tokens: int = 0):
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
         self.total_tokens = total_tokens
+        self.reasoning_tokens = reasoning_tokens
 
 class ChatCompletion:
     def __init__(self, response_dict: Dict):
@@ -1547,7 +1584,10 @@ class ChatCompletion:
             "usage": {
                 "prompt_tokens": self.usage.prompt_tokens,
                 "completion_tokens": self.usage.completion_tokens,
-                "total_tokens": self.usage.total_tokens
+                "total_tokens": self.usage.total_tokens,
+                "completion_tokens_details": {
+                    "reasoning_tokens": getattr(self.usage, 'reasoning_tokens', 0)
+                }
             }
         }
 
@@ -1766,7 +1806,7 @@ class InferenceClient:
                                 
                                 logger.debug(f"ThinkDeeper tokens: user={user_max_tokens}, thinking={max_thinking_tokens}, adjusted={adjusted_max_tokens}")
                                 
-                                result = thinkdeeper_decode_mlx(
+                                result, reasoning_tokens = thinkdeeper_decode_mlx(
                                     pipeline.model,
                                     pipeline.tokenizer,
                                     messages,
@@ -1774,7 +1814,7 @@ class InferenceClient:
                                 )
                             else:
                                 logger.info("Using PyTorch ThinkDeeper implementation")
-                                result = thinkdeeper_decode(
+                                result, reasoning_tokens = thinkdeeper_decode(
                                     pipeline.current_model,
                                     pipeline.tokenizer,
                                     messages,
@@ -1850,6 +1890,11 @@ class InferenceClient:
                         prompt_tokens = len(pipeline.tokenizer.encode(prompt))
                         completion_tokens = sum(token_counts)
 
+                    # Calculate reasoning tokens from all responses
+                    total_reasoning_tokens = 0
+                    for response in responses:
+                        total_reasoning_tokens += count_reasoning_tokens(response, pipeline.tokenizer)
+
                     # Create OpenAI-compatible response format
                     response_dict = {
                         "id": f"chatcmpl-{int(time.time()*1000)}",
@@ -1871,7 +1916,8 @@ class InferenceClient:
                         "usage": {
                             "prompt_tokens": prompt_tokens,
                             "completion_tokens": completion_tokens,
-                            "total_tokens": completion_tokens + prompt_tokens
+                            "total_tokens": completion_tokens + prompt_tokens,
+                            "reasoning_tokens": total_reasoning_tokens
                         }
                     }
                     

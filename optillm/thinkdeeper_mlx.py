@@ -243,7 +243,8 @@ class MLXThinkDeeperProcessor:
         response_content = "".join(response_chunks)
         full_response = f"{self.config['start_think_token']}\n{self.config['prefill']}{response_content}"
         
-        return full_response
+        logger.debug(f"MLX Final response length: {len(full_response)} chars, Thinking tokens: {n_thinking_tokens}")
+        return full_response, n_thinking_tokens
     
     def _generate_chunk(self, prompt: str, max_tokens: int, temperature: float) -> str:
         """Generate a small chunk of text using MLX with proper sampler"""
@@ -319,8 +320,8 @@ def thinkdeeper_decode_mlx(
     
     try:
         processor = MLXThinkDeeperProcessor(config, tokenizer, model)
-        response = processor.reasoning_effort(messages)
-        return response
+        response, reasoning_tokens = processor.reasoning_effort(messages)
+        return response, reasoning_tokens
         
     except Exception as e:
         logger.error(f"Error in MLX ThinkDeeper processing: {str(e)}")
