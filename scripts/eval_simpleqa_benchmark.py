@@ -94,12 +94,18 @@ class SimpleQAEvaluator:
             max_retries=0
         )
         
-        # Setup grader client (assumes OpenAI API key is set)
+        # Setup grader client (use OptILLM for grading)
         try:
-            self.grader_client = OpenAI()
+            self.grader_client = OpenAI(
+                api_key="optillm",
+                base_url=base_url,
+                timeout=httpx.Timeout(timeout, connect=5.0),
+                max_retries=0
+            )
+            logger.info("Using OptILLM for grading responses")
         except Exception as e:
             logger.warning(f"Could not initialize grader client: {e}")
-            logger.warning("Grading will be skipped. Set OPENAI_API_KEY to enable grading.")
+            logger.warning("Grading will be skipped.")
             self.grader_client = None
         
         # Results tracking
