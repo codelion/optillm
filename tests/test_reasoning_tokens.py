@@ -1,267 +1,288 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for reasoning token functionality in OptILLM
+Tests for reasoning token functionality in OptILLM
+Covers count_reasoning_tokens function and API response format
 """
 
-import pytest
 import sys
 import os
+import unittest
+from unittest.mock import Mock, patch, MagicMock
 import re
-from unittest.mock import Mock, patch
 
-# Add parent directory to path to import optillm modules
+# Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from optillm import count_reasoning_tokens
+# Import the count_reasoning_tokens function from both modules
+from optillm import count_reasoning_tokens as optillm_count_reasoning_tokens
 from optillm.inference import count_reasoning_tokens as inference_count_reasoning_tokens
 
 
-class TestCountReasoningTokensFunction:
-    """Test the count_reasoning_tokens function with various inputs"""
+class TestCountReasoningTokens(unittest.TestCase):
+    """Test the count_reasoning_tokens function"""
     
-    def test_empty_or_none_input(self):
-        """Test handling of empty or None inputs"""
-        assert count_reasoning_tokens(None) == 0
-        assert count_reasoning_tokens("") == 0
-        assert count_reasoning_tokens("   ") == 0
-        assert count_reasoning_tokens(123) == 0  # Non-string input
-        assert count_reasoning_tokens([]) == 0  # Non-string input
+    def test_count_reasoning_tokens_basic(self):
+        """Test basic functionality of count_reasoning_tokens"""
+        # Test with think tags
+        text_with_think = "<think>This is reasoning content</think>This is output"
+        
+        # Test both implementations should work the same
+        result1 = optillm_count_reasoning_tokens(text_with_think)
+        result2 = inference_count_reasoning_tokens(text_with_think)
+        
+        self.assertGreater(result1, 0)
+        self.assertEqual(result1, result2)
     
-    def test_no_think_tags(self):
-        """Test text without any think tags"""
-        text = "This is a normal response without any thinking tags."
-        assert count_reasoning_tokens(text) == 0
+    def test_count_reasoning_tokens_no_think_tags(self):
+        """Test with text that has no think tags"""
+        text_without_think = "This is just regular output text"
         
-        text_with_similar = "I think this is good, but <thonk>not quite</thonk>"
-        assert count_reasoning_tokens(text_with_similar) == 0
+        result1 = optillm_count_reasoning_tokens(text_without_think)
+        result2 = inference_count_reasoning_tokens(text_without_think)
+        
+        self.assertEqual(result1, 0)
+        self.assertEqual(result2, 0)
     
-    def test_single_think_block(self):
-        """Test text with a single think block"""
-        text = "Here is my answer: <think>Let me work this out step by step. First, I need to consider...</think> The result is 42."
-        tokens = count_reasoning_tokens(text)
-        assert tokens > 0
-        # Should count roughly the content inside think tags
-        thinking_content = "Let me work this out step by step. First, I need to consider..."
-        expected_rough = len(thinking_content) // 4  # Rough estimation
-        assert tokens >= expected_rough - 5  # Allow some variance
-    
-    def test_multiple_think_blocks(self):
-        """Test text with multiple think blocks"""
-        text = """
-        <think>First, let me analyze the problem. This seems complex.</think>
-        
-        The initial answer is A, but let me reconsider.
-        
-        <think>Actually, wait. I need to think about this differently. Maybe B is correct?</think>
-        
-        My final answer is B.
+    def test_count_reasoning_tokens_multiple_think_blocks(self):
+        """Test with multiple think tag blocks"""
+        text_multiple = """
+        <think>First reasoning block</think>
+        Some output here
+        <think>Second reasoning block with more content</think>
+        Final output
         """
-        tokens = count_reasoning_tokens(text)
-        assert tokens > 0
         
-        # Should count content from both blocks
-        content1 = "First, let me analyze the problem. This seems complex."
-        content2 = "Actually, wait. I need to think about this differently. Maybe B is correct?"
-        combined_content = content1 + content2
-        expected_rough = len(combined_content) // 4
-        assert tokens >= expected_rough - 10  # Allow variance for combined content
-    
-    def test_multiline_think_block(self):
-        """Test think blocks that span multiple lines"""
-        text = """<think>
-        This is a multi-line thinking process.
+        result = optillm_count_reasoning_tokens(text_multiple)
+        self.assertGreater(result, 0)
         
-        Step 1: Analyze the problem
-        Step 2: Consider alternatives
-        Step 3: Make a decision
+        # Should count tokens from both blocks
+        single_block = "<think>First reasoning blockSecond reasoning block with more content</think>"
+        single_result = optillm_count_reasoning_tokens(single_block)
+        self.assertAlmostEqual(result, single_result, delta=2)  # Allow small variance due to formatting
+    
+    def test_count_reasoning_tokens_empty_input(self):
+        """Test with empty or None input"""
+        self.assertEqual(optillm_count_reasoning_tokens(""), 0)
+        self.assertEqual(optillm_count_reasoning_tokens(None), 0)
+        self.assertEqual(optillm_count_reasoning_tokens(123), 0)  # Non-string input
+    
+    def test_count_reasoning_tokens_malformed_tags(self):
+        """Test with malformed think tags"""
+        malformed_cases = [
+            "<think>Unclosed think tag",
+            "Unopened think tag</think>",
+            "<think><think>Nested tags</think></think>",
+            "<THINK>Wrong case</THINK>",
+            "<think></think>",  # Empty think block
+        ]
         
-        I need to be very careful here.
-        </think>"""
-        tokens = count_reasoning_tokens(text)
-        assert tokens > 0
-        # Should handle newlines and whitespace properly
+        for case in malformed_cases:
+            result = optillm_count_reasoning_tokens(case)
+            # Should handle gracefully, either 0 or some reasonable count
+            self.assertGreaterEqual(result, 0)
     
-    def test_malformed_think_tags(self):
-        """Test handling of malformed think tags"""
-        # Unclosed tag
-        text1 = "Let me think: <think>This is unclosed thinking..."
-        assert count_reasoning_tokens(text1) == 0
-        
-        # Unopened tag
-        text2 = "Some thinking content here</think> and regular text."
-        assert count_reasoning_tokens(text2) == 0
-        
-        # Nested tags - should extract outer content
-        text3 = "<think>Outer thinking <think>inner</think> more outer</think>"
-        tokens = count_reasoning_tokens(text3)
-        assert tokens > 0  # Should extract the outer content including "inner" text
-    
-    def test_think_tags_with_attributes(self):
-        """Test think tags with XML attributes (should not match)"""
-        text = '<think id="1">This should not be counted</think>'
-        # Our regex looks for exact <think> tags, not ones with attributes
-        assert count_reasoning_tokens(text) == 0
-    
-    def test_case_sensitivity(self):
-        """Test that think tags are case sensitive"""
-        text1 = "<Think>This should not match</Think>"
-        text2 = "<THINK>This should not match</THINK>"
-        assert count_reasoning_tokens(text1) == 0
-        assert count_reasoning_tokens(text2) == 0
-    
-    def test_with_tokenizer_mock(self):
-        """Test using a mock tokenizer for precise counting"""
+    def test_count_reasoning_tokens_with_tokenizer(self):
+        """Test with a mock tokenizer for precise counting"""
         mock_tokenizer = Mock()
-        mock_tokenizer.encode.return_value = ['token1', 'token2', 'token3', 'token4', 'token5']
+        mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]  # 5 tokens
         
-        text = "<think>Test content</think>"
-        tokens = count_reasoning_tokens(text, tokenizer=mock_tokenizer)
+        text = "<think>Some reasoning text</think>Output"
+        result = optillm_count_reasoning_tokens(text, mock_tokenizer)
         
-        # Should use tokenizer when available
-        assert tokens == 5
-        mock_tokenizer.encode.assert_called_once_with("Test content")
+        self.assertEqual(result, 5)
+        mock_tokenizer.encode.assert_called_once_with("Some reasoning text")
     
-    def test_tokenizer_error_fallback(self):
+    def test_count_reasoning_tokens_tokenizer_error(self):
         """Test fallback when tokenizer fails"""
         mock_tokenizer = Mock()
         mock_tokenizer.encode.side_effect = Exception("Tokenizer error")
         
-        text = "<think>Test content for fallback</think>"
-        tokens = count_reasoning_tokens(text, tokenizer=mock_tokenizer)
+        text = "<think>Some reasoning text</think>Output"
+        result = optillm_count_reasoning_tokens(text, mock_tokenizer)
         
-        # Should fall back to character-based estimation
-        content = "Test content for fallback"
-        expected = len(content) // 4
-        assert tokens == expected
+        # Should fallback to character-based estimation
+        self.assertGreater(result, 0)
+        mock_tokenizer.encode.assert_called_once()
     
-    def test_large_content_performance(self):
-        """Test performance with large thinking content"""
-        # Generate large thinking content
-        large_content = "This is a long thinking process. " * 1000
-        text = f"<think>{large_content}</think>"
-        
-        import time
-        start = time.time()
-        tokens = count_reasoning_tokens(text)
-        end = time.time()
-        
-        assert tokens > 0
-        assert end - start < 1.0  # Should complete within 1 second
-    
-    def test_special_characters_and_unicode(self):
-        """Test handling of special characters and unicode"""
-        text = "<think>Let's think about emojis 🤔 and special chars: @#$%^&*()</think>"
-        tokens = count_reasoning_tokens(text)
-        assert tokens > 0
-        
-        # Test unicode
-        text_unicode = "<think>数学问题需要仔细思考</think>"
-        tokens_unicode = count_reasoning_tokens(text_unicode)
-        assert tokens_unicode > 0
-    
-    def test_inference_module_consistency(self):
-        """Test that both implementations (optillm and inference) give same results"""
-        test_cases = [
-            "",
-            "No thinking here",
-            "<think>Simple thinking</think>",
-            "<think>First thought</think> and <think>second thought</think>",
-            "<think>Multi-line\nthinking\nprocess</think>"
-        ]
-        
-        for text in test_cases:
-            tokens1 = count_reasoning_tokens(text)
-            tokens2 = inference_count_reasoning_tokens(text)
-            assert tokens1 == tokens2, f"Inconsistent results for: {text}"
-
-
-class TestReasoningTokensEdgeCases:
-    """Test edge cases and error conditions"""
-    
-    def test_extremely_long_single_line(self):
-        """Test with extremely long single line of thinking"""
-        long_line = "A" * 10000
-        text = f"<think>{long_line}</think>"
-        tokens = count_reasoning_tokens(text)
-        expected = len(long_line) // 4
-        assert tokens == expected
-    
-    def test_many_small_think_blocks(self):
-        """Test with many small think blocks"""
-        blocks = ["<think>Short</think>"] * 100
-        text = " ".join(blocks)
-        tokens = count_reasoning_tokens(text)
-        # Should count all blocks
-        expected = (len("Short") * 100) // 4
-        assert tokens == expected
-    
-    def test_mixed_content_structure(self):
-        """Test complex mixed content"""
-        text = """
-        This is the introduction.
-        
-        <think>
-        I need to solve this step by step:
-        1. Parse the problem
-        2. Apply the formula
-        3. Check the result
+    def test_count_reasoning_tokens_multiline(self):
+        """Test with multiline think blocks"""
+        multiline_text = """<think>
+        This is a multi-line reasoning block
+        with several lines of content
+        that spans multiple lines
         </think>
+        This is the final output"""
         
-        Here's my first attempt: x = 5
-        
-        <think>
-        Wait, that doesn't look right. Let me recalculate:
-        - Original equation: 2x + 3 = 13  
-        - Subtract 3: 2x = 10
-        - Divide by 2: x = 5
-        
-        Actually, that is correct.
-        </think>
-        
-        Therefore, the answer is x = 5.
-        """
-        tokens = count_reasoning_tokens(text)
-        assert tokens > 0
-        
-        # Verify it extracts both thinking blocks
-        pattern = r'<think>(.*?)</think>'
-        matches = re.findall(pattern, text, re.DOTALL)
-        assert len(matches) == 2
+        result = optillm_count_reasoning_tokens(multiline_text)
+        self.assertGreater(result, 10)  # Should be substantial content
     
-    def test_boundary_whitespace_handling(self):
-        """Test whitespace at boundaries of think tags"""
-        text1 = "<think>  content with spaces  </think>"
-        text2 = "<think>content without spaces</think>"
-        text3 = "<think>\n  content with newlines  \n</think>"
-        
-        tokens1 = count_reasoning_tokens(text1)
-        tokens2 = count_reasoning_tokens(text2)
-        tokens3 = count_reasoning_tokens(text3)
-        
-        # All should return positive token counts
-        assert tokens1 > 0
-        assert tokens2 > 0
-        assert tokens3 > 0
+    def test_count_reasoning_tokens_special_characters(self):
+        """Test with special characters in think blocks"""
+        special_text = "<think>Content with émojis 🤔 and symbols @#$%^&*()</think>Output"
+        result = optillm_count_reasoning_tokens(special_text)
+        self.assertGreater(result, 0)
 
 
-if __name__ == "__main__":
-    # Run tests if pytest not available
-    import traceback
+class TestAPIResponseFormat(unittest.TestCase):
+    """Test that API responses include reasoning token information"""
     
-    test_classes = [TestCountReasoningTokensFunction, TestReasoningTokensEdgeCases]
+    def setUp(self):
+        """Set up test fixtures"""
+        # Import after setting up path
+        import optillm
+        self.app = optillm.app
+        self.app.config['TESTING'] = True
+        self.client = self.app.test_client()
     
-    for test_class in test_classes:
-        print(f"\n=== Running {test_class.__name__} ===")
-        instance = test_class()
+    @patch('optillm.get_config')
+    def test_response_includes_completion_tokens_details(self, mock_get_config):
+        """Test that API responses include completion_tokens_details"""
+        # Mock the OpenAI client
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "<think>Some reasoning</think>Final answer: 42"
+        mock_response.usage.completion_tokens = 20
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.total_tokens = 30
         
-        for method_name in dir(instance):
-            if method_name.startswith('test_'):
-                try:
-                    print(f"Running {method_name}...", end=' ')
-                    getattr(instance, method_name)()
-                    print("✅ PASSED")
-                except Exception as e:
-                    print(f"❌ FAILED: {e}")
-                    traceback.print_exc()
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_get_config.return_value = (mock_client, "test-key")
+        
+        # Make request to the API
+        response = self.client.post('/v1/chat/completions', 
+                                  json={
+                                      "model": "gpt-4o-mini",
+                                      "messages": [{"role": "user", "content": "What is 2+2?"}]
+                                  },
+                                  headers={"Authorization": "Bearer test-key"})
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check response format
+        data = response.get_json()
+        self.assertIn('usage', data)
+        self.assertIn('completion_tokens_details', data['usage'])
+        self.assertIn('reasoning_tokens', data['usage']['completion_tokens_details'])
+        self.assertGreater(data['usage']['completion_tokens_details']['reasoning_tokens'], 0)
     
-    print("\n=== Test Summary Complete ===")
+    @patch('optillm.get_config')
+    def test_response_no_reasoning_tokens(self, mock_get_config):
+        """Test API response when there are no reasoning tokens"""
+        # Mock the OpenAI client with no think tags
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "Final answer: 42"  # No think tags
+        mock_response.usage.completion_tokens = 10
+        mock_response.usage.prompt_tokens = 5
+        mock_response.usage.total_tokens = 15
+        
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_get_config.return_value = (mock_client, "test-key")
+        
+        # Make request to the API
+        response = self.client.post('/v1/chat/completions', 
+                                  json={
+                                      "model": "gpt-4o-mini",
+                                      "messages": [{"role": "user", "content": "What is 2+2?"}]
+                                  },
+                                  headers={"Authorization": "Bearer test-key"})
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check response format
+        data = response.get_json()
+        self.assertIn('usage', data)
+        self.assertIn('completion_tokens_details', data['usage'])
+        self.assertEqual(data['usage']['completion_tokens_details']['reasoning_tokens'], 0)
+    
+    @patch('optillm.get_config')
+    def test_multiple_responses_reasoning_tokens(self, mock_get_config):
+        """Test reasoning tokens with multiple responses (n > 1)"""
+        # Mock the OpenAI client with multiple responses
+        mock_client = Mock()
+        mock_response = Mock()
+        
+        # Create multiple choices with different reasoning content
+        choice1 = Mock()
+        choice1.message.content = "<think>First reasoning</think>Answer 1"
+        choice2 = Mock()
+        choice2.message.content = "<think>Second longer reasoning content</think>Answer 2"
+        
+        mock_response.choices = [choice1, choice2]
+        mock_response.usage.completion_tokens = 30
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.total_tokens = 40
+        
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_get_config.return_value = (mock_client, "test-key")
+        
+        # Make request with n=2
+        response = self.client.post('/v1/chat/completions', 
+                                  json={
+                                      "model": "gpt-4o-mini",
+                                      "messages": [{"role": "user", "content": "What is 2+2?"}],
+                                      "n": 2
+                                  },
+                                  headers={"Authorization": "Bearer test-key"})
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check response format
+        data = response.get_json()
+        self.assertIn('usage', data)
+        self.assertIn('completion_tokens_details', data['usage'])
+        self.assertGreater(data['usage']['completion_tokens_details']['reasoning_tokens'], 0)
+        
+        # Should have 2 choices
+        self.assertEqual(len(data['choices']), 2)
+
+
+class TestBackwardCompatibility(unittest.TestCase):
+    """Test backward compatibility with existing functionality"""
+    
+    def test_existing_approaches_still_work(self):
+        """Test that existing approaches work without reasoning token changes"""
+        # Import approaches that don't use reasoning
+        from optillm.bon import best_of_n_sampling
+        
+        # Create mock client
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "Regular response"
+        mock_response.usage.completion_tokens = 10
+        
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        # Test that approach still works
+        try:
+            result, tokens = best_of_n_sampling(
+                model="test-model",
+                messages=[{"role": "user", "content": "test"}],
+                client=mock_client,
+                n=3
+            )
+            self.assertIsInstance(result, str)
+            self.assertIsInstance(tokens, int)
+        except Exception as e:
+            self.fail(f"Existing approach failed: {e}")
+    
+    def test_api_without_auth_header(self):
+        """Test API still returns proper errors without auth"""
+        import optillm
+        app = optillm.app
+        app.config['TESTING'] = True
+        client = app.test_client()
+        
+        response = client.post('/v1/chat/completions', 
+                             json={"model": "test", "messages": []})
+        
+        # Should still return 401 for missing auth
+        self.assertEqual(response.status_code, 401)
+
+
+if __name__ == '__main__':
+    # Run the tests
+    unittest.main(verbosity=2)

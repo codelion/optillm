@@ -79,8 +79,8 @@ def test_majority_voting_plugin():
     import optillm.plugins.majority_voting_plugin as plugin
     assert hasattr(plugin, 'run')
     assert hasattr(plugin, 'SLUG')
-    assert hasattr(plugin, 'extract_answer')
-    assert hasattr(plugin, 'normalize_answer')
+    assert hasattr(plugin, 'extract_final_answer')
+    assert hasattr(plugin, 'normalize_response')
     assert plugin.SLUG == "majority_voting"
 
 
