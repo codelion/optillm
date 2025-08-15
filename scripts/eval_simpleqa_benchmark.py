@@ -232,7 +232,8 @@ class SimpleQAEvaluator:
                 model=model_name,
                 messages=messages,
                 extra_body=extra_body if extra_body else None,
-                max_tokens=4096
+                max_tokens=4096,
+                temperature=0.6
             )
             
             answer = response.choices[0].message.content
@@ -259,7 +260,7 @@ class SimpleQAEvaluator:
             grader_response = self.grader_client.chat.completions.create(
                 model=self.grader_model,
                 messages=[{"role": "user", "content": grading_prompt}],
-                temperature=0.0,
+                temperature=0.6,
                 max_tokens=4096
             )
             
