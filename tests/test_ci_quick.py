@@ -34,9 +34,25 @@ try:
     import optillm.plugins.privacy_plugin
     import optillm.plugins.genselect_plugin
     import optillm.plugins.majority_voting_plugin
-    print("✅ Plugin modules exist and can be imported")
+    print("✅ Basic plugin modules exist and can be imported")
 except Exception as e:
-    print(f"❌ Plugin import test failed: {e}")
+    print(f"❌ Basic plugin import test failed: {e}")
+
+# Test plugin subdirectory imports (critical for issue #220)
+try:
+    from optillm.plugins.deepthink import SelfDiscover, UncertaintyRoutedCoT
+    from optillm.plugins.deep_research import DeepResearcher
+    from optillm.plugins.longcepo import run_longcepo
+    from optillm.plugins.spl import run_spl
+    print("✅ Plugin submodule imports working - no relative import errors")
+except ImportError as e:
+    if "attempted relative import" in str(e):
+        print(f"❌ Critical: Relative import error detected: {e}")
+        sys.exit(1)
+    else:
+        print(f"❌ Plugin submodule import error: {e}")
+except Exception as e:
+    print(f"❌ Plugin submodule import error: {e}")
 
 # Test approach parsing
 try:
