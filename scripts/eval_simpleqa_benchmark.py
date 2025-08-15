@@ -231,7 +231,8 @@ class SimpleQAEvaluator:
             response = self.optillm_client.chat.completions.create(
                 model=model_name,
                 messages=messages,
-                extra_body=extra_body if extra_body else None
+                extra_body=extra_body if extra_body else None,
+                max_tokens=4096
             )
             
             answer = response.choices[0].message.content
@@ -258,10 +259,14 @@ class SimpleQAEvaluator:
             grader_response = self.grader_client.chat.completions.create(
                 model=self.grader_model,
                 messages=[{"role": "user", "content": grading_prompt}],
-                temperature=0.0
+                temperature=0.0,
+                max_tokens=4096
             )
             
             grade_text = grader_response.choices[0].message.content.strip()
+            
+            # Strip <think> tags if present
+            grade_text = re.sub(r'<think>.*?</think>', '', grade_text, flags=re.DOTALL).strip()
             
             # Extract grade (A/B/C)
             if grade_text.startswith('A'):
