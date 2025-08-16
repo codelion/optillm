@@ -30,8 +30,8 @@ from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# OpenAI API configuration
-API_KEY = os.environ.get("OPENAI_API_KEY")
+# API configuration - default to local inference for testing
+API_KEY = os.environ.get("OPENAI_API_KEY", "optillm")
 
 # Mock OpenAI client for testing purposes
 class MockOpenAIClient:
@@ -150,14 +150,23 @@ def main():
         args.test_cases = os.path.join(script_dir, "test_cases.json")
     
     # If using local inference mode, override model to a local model
-    if os.environ.get("OPTILLM_API_KEY") == "optillm" and args.model == "gpt-4o-mini":
+    if API_KEY == "optillm" and args.model == "gpt-4o-mini":
         args.model = "Qwen/Qwen2.5-0.5B-Instruct"
         logger.info(f"Using local model: {args.model}")
+    
+    # Set environment variable for local inference
+    if API_KEY == "optillm":
+        os.environ["OPTILLM_API_KEY"] = "optillm"
 
     test_cases = load_test_cases(args.test_cases)
 
+    # Use local inference by default for testing
     if args.base_url:
         client = OpenAI(api_key=API_KEY, base_url=args.base_url)
+    elif API_KEY == "optillm":
+        # Use local inference endpoint
+        client = OpenAI(api_key=API_KEY, base_url="http://localhost:8000/v1")
+        logger.info("Using local inference endpoint: http://localhost:8000/v1")
     else:
         client = OpenAI(api_key=API_KEY)
         # client = LiteLLMWrapper()

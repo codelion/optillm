@@ -5,11 +5,9 @@ Combines SELF-DISCOVER framework with uncertainty-routed chain-of-thought
 for enhanced reasoning in large language models.
 """
 
-import os
-import sys
-import importlib.util
 import logging
 from typing import Tuple, Dict, Any
+from optillm.plugins.deepthink import SelfDiscover, UncertaintyRoutedCoT
 
 # Plugin identifier for optillm
 SLUG = "deepthink"
@@ -41,98 +39,72 @@ def run(
     """
     logger.info("Starting Deep Think reasoning process")
     
-    # Get the directory where this plugin is located
-    plugin_dir = os.path.dirname(os.path.abspath(__file__))
-    deepthink_dir = os.path.join(plugin_dir, 'deepthink')
+    # Extract configuration parameters
+    config = _parse_config(request_config or {})
     
-    # Add the deepthink directory to the Python path temporarily
-    if deepthink_dir not in sys.path:
-        sys.path.insert(0, deepthink_dir)
+    # Initialize components
+    self_discover = SelfDiscover(
+        client=client,
+        model=model,
+        max_tokens=config["max_tokens"]
+    )
     
-    try:
-        # Load the modules dynamically
-        self_discover_file = os.path.join(deepthink_dir, 'self_discover.py')
-        uncertainty_cot_file = os.path.join(deepthink_dir, 'uncertainty_cot.py')
+    uncertainty_cot = UncertaintyRoutedCoT(
+        client=client,
+        model=model,
+        max_tokens=config["max_tokens"]
+    )
+    
+    total_tokens = 0
+    
+    # Stage 1: SELF-DISCOVER reasoning structure (if enabled)
+    reasoning_structure = None
+    if config["enable_self_discover"]:
+        logger.info("Discovering task-specific reasoning structure")
         
-        spec1 = importlib.util.spec_from_file_location("self_discover", self_discover_file)
-        self_discover_module = importlib.util.module_from_spec(spec1)
-        spec1.loader.exec_module(self_discover_module)
-        
-        spec2 = importlib.util.spec_from_file_location("uncertainty_cot", uncertainty_cot_file)
-        uncertainty_cot_module = importlib.util.module_from_spec(spec2)
-        spec2.loader.exec_module(uncertainty_cot_module)
-        
-        # Extract configuration parameters
-        config = _parse_config(request_config or {})
-        
-        # Initialize components
-        self_discover = self_discover_module.SelfDiscover(
-            client=client,
-            model=model,
-            max_tokens=config["max_tokens"]
+        discovery_result = self_discover.discover_reasoning_structure(
+            task_description=_extract_task_description(initial_query, system_prompt),
+            task_examples=None  # Could be enhanced to extract examples
         )
         
-        uncertainty_cot = uncertainty_cot_module.UncertaintyRoutedCoT(
-            client=client,
-            model=model,
-            max_tokens=config["max_tokens"]
-        )
+        reasoning_structure = discovery_result["reasoning_structure"]
+        total_tokens += discovery_result["completion_tokens"]
         
-        total_tokens = 0
-        
-        # Stage 1: SELF-DISCOVER reasoning structure (if enabled)
-        reasoning_structure = None
-        if config["enable_self_discover"]:
-            logger.info("Discovering task-specific reasoning structure")
-            
-            discovery_result = self_discover.discover_reasoning_structure(
-                task_description=_extract_task_description(initial_query, system_prompt),
-                task_examples=None  # Could be enhanced to extract examples
-            )
-            
-            reasoning_structure = discovery_result["reasoning_structure"]
-            total_tokens += discovery_result["completion_tokens"]
-            
-            logger.info(f"Discovered reasoning structure with {len(reasoning_structure)} components")
-        
-        # Prepare enhanced prompt
-        enhanced_prompt = _create_enhanced_prompt(
-            system_prompt=system_prompt,
-            initial_query=initial_query,
-            reasoning_structure=reasoning_structure,
-            config=config
-        )
-        
-        # Stage 2: Uncertainty-routed generation
-        logger.info("Generating response with uncertainty routing")
-        
-        generation_result = uncertainty_cot.generate_with_uncertainty_routing(
-            prompt=enhanced_prompt,
-            num_samples=config["deepthink_samples"],
-            confidence_threshold=config["confidence_threshold"],
-            temperature=config["temperature"],
-            top_p=config["top_p"]
-        )
-        
-        total_tokens += generation_result["completion_tokens"]
-        
-        # Log routing decision
-        logger.info(f"Routing decision: {generation_result['routing_decision']} "
-                   f"(confidence: {generation_result['confidence_score']:.3f})")
-        
-        final_response = generation_result["final_response"]
-        
-        # Clean up the response if needed
-        final_response = _clean_response(final_response)
-        
-        logger.info(f"Deep Think completed successfully. Total tokens: {total_tokens}")
-        
-        return final_response, total_tokens
-        
-    finally:
-        # Remove from path after use
-        if deepthink_dir in sys.path:
-            sys.path.remove(deepthink_dir)
+        logger.info(f"Discovered reasoning structure with {len(reasoning_structure)} components")
+    
+    # Prepare enhanced prompt
+    enhanced_prompt = _create_enhanced_prompt(
+        system_prompt=system_prompt,
+        initial_query=initial_query,
+        reasoning_structure=reasoning_structure,
+        config=config
+    )
+    
+    # Stage 2: Uncertainty-routed generation
+    logger.info("Generating response with uncertainty routing")
+    
+    generation_result = uncertainty_cot.generate_with_uncertainty_routing(
+        prompt=enhanced_prompt,
+        num_samples=config["deepthink_samples"],
+        confidence_threshold=config["confidence_threshold"],
+        temperature=config["temperature"],
+        top_p=config["top_p"]
+    )
+    
+    total_tokens += generation_result["completion_tokens"]
+    
+    # Log routing decision
+    logger.info(f"Routing decision: {generation_result['routing_decision']} "
+               f"(confidence: {generation_result['confidence_score']:.3f})")
+    
+    final_response = generation_result["final_response"]
+    
+    # Clean up the response if needed
+    final_response = _clean_response(final_response)
+    
+    logger.info(f"Deep Think completed successfully. Total tokens: {total_tokens}")
+    
+    return final_response, total_tokens
 
 def _parse_config(request_config: Dict[str, Any]) -> Dict[str, Any]:
     """Parse and validate configuration parameters."""

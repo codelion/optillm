@@ -4,7 +4,6 @@ Simplified approach tests for CI/CD
 Tests the basic structure of approaches without requiring actual model inference
 """
 
-import pytest
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
