@@ -63,6 +63,23 @@ Response: {response}
 Grade (A/B/C):"""
 
 
+def remove_thinking_blocks(text: str) -> str:
+    """Remove <think>...</think> blocks from the response."""
+    if not text:
+        return text
+    
+    if '</think>' in text:
+        # Get everything after the last </think> tag
+        parts = text.split('</think>')
+        return parts[-1].strip()
+    elif '<think>' in text and '</think>' not in text:
+        # Handle truncated responses (no closing tag)
+        parts = text.split('<think>')
+        return parts[0].strip() if len(parts) > 1 and parts[0] else ""
+    
+    return text
+
+
 class SimpleQAEvaluator:
     """Main evaluator class for SimpleQA benchmark"""
     
@@ -237,6 +254,7 @@ class SimpleQAEvaluator:
             )
             
             answer = response.choices[0].message.content
+            answer = remove_thinking_blocks(answer)
             logger.debug(f"Response: {answer}")
             
             return answer, True
@@ -360,7 +378,7 @@ class SimpleQAEvaluator:
         """Save evaluation results to files"""
         # Create output directory for this run
         run_dir = self.output_dir / f"simpleqa_{self.model}_{self.approach}"
-        run_dir.mkdir(exist_ok=True)
+        run_dir.mkdir(parents=True, exist_ok=True)
         
         # File paths
         detailed_file = run_dir / f"{timestamp}_detailed.json"
