@@ -1,0 +1,123 @@
+name: Docker Multi-arch Manifests
+on:
+  workflow_run:
+    workflows: 
+      - "Docker Proxy AMD64"
+      - "Docker Proxy ARM64"
+      - "Docker Full AMD64"
+      - "Docker Full ARM64"
+    types: [completed]
+
+jobs:
+  check-builds:
+    name: Check if all builds succeeded
+    runs-on: ubuntu-latest
+    outputs:
+      all-success: ${{ steps.check.outputs.result }}
+      version: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - name: Check workflow results
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflows = [
+              "Docker Proxy AMD64",
+              "Docker Proxy ARM64", 
+              "Docker Full AMD64",
+              "Docker Full ARM64"
+            ];
+            
+            const runId = context.payload.workflow_run.id;
+            const ref = context.payload.workflow_run.head_sha;
+            
+            console.log(`Checking workflows for ref: ${ref}`);
+            
+            // Get all workflow runs for this ref
+            const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: ref,
+              status: 'completed'
+            });
+            
+            const workflowResults = {};
+            
+            for (const run of runs.workflow_runs) {
+              if (workflows.includes(run.name)) {
+                workflowResults[run.name] = run.conclusion;
+                console.log(`${run.name}: ${run.conclusion}`);
+              }
+            }
+            
+            // Check if all workflows succeeded
+            const allSuccess = workflows.every(name => 
+              workflowResults[name] === 'success'
+            );
+            
+            console.log(`All workflows successful: ${allSuccess}`);
+            
+            return allSuccess;
+
+      - name: Extract version from workflow
+        id: version  
+        run: |
+          VERSION=$(echo "${{ github.event.workflow_run.head_branch }}" | sed 's/refs\/tags\///')
+          if [[ $VERSION != v* ]]; then
+            # If not a version tag, use the tag from the triggering release
+            VERSION="${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+  create-manifests:
+    name: Create multi-arch manifests
+    runs-on: ubuntu-latest  
+    needs: check-builds
+    if: needs.check-builds.outputs.all-success == 'true'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create proxy multi-arch manifest
+        run: |
+          VERSION="${{ needs.check-builds.outputs.version }}"
+          
+          # Create versioned proxy manifest
+          docker manifest create ghcr.io/${{ github.repository }}:${VERSION}-proxy \
+            ghcr.io/${{ github.repository }}:${VERSION}-proxy-amd64 \
+            ghcr.io/${{ github.repository }}:${VERSION}-proxy-arm64
+          
+          docker manifest push ghcr.io/${{ github.repository }}:${VERSION}-proxy
+          
+          # Create latest proxy manifest
+          docker manifest create ghcr.io/${{ github.repository }}:latest-proxy \
+            ghcr.io/${{ github.repository }}:latest-proxy-amd64 \
+            ghcr.io/${{ github.repository }}:latest-proxy-arm64
+          
+          docker manifest push ghcr.io/${{ github.repository }}:latest-proxy
+
+      - name: Create full multi-arch manifest
+        run: |
+          VERSION="${{ needs.check-builds.outputs.version }}"
+          
+          # Create versioned full manifest
+          docker manifest create ghcr.io/${{ github.repository }}:${VERSION} \
+            ghcr.io/${{ github.repository }}:${VERSION}-amd64 \
+            ghcr.io/${{ github.repository }}:${VERSION}-arm64
+          
+          docker manifest push ghcr.io/${{ github.repository }}:${VERSION}
+          
+          # Create latest full manifest
+          docker manifest create ghcr.io/${{ github.repository }}:latest \
+            ghcr.io/${{ github.repository }}:latest-amd64 \
+            ghcr.io/${{ github.repository }}:latest-arm64
+          
+          docker manifest push ghcr.io/${{ github.repository }}:latest

@@ -1,0 +1,46 @@
+name: Docker Proxy AMD64
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build proxy Docker image for AMD64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Build and push proxy AMD64 image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.proxy_only
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}-proxy-amd64
+            ghcr.io/${{ github.repository }}:latest-proxy-amd64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=OptiLLM proxy-only image for API routing without model serving capabilities (AMD64)
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha,scope=proxy-amd64
+          cache-to: type=gha,scope=proxy-amd64,mode=max
