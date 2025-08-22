@@ -33,11 +33,11 @@ LABEL org.opencontainers.image.description="OptiLLM proxy-only image for API rou
 LABEL org.opencontainers.image.licenses=Apache-2.0
 
 # Install curl for the healthcheck
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
