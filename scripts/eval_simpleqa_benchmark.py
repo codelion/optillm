@@ -209,8 +209,8 @@ class SimpleQAEvaluator:
             }
         elif self.approach == "deep_research":
             return {
-                "max_iterations": 3,
-                "search_depth": "deep"
+                "max_iterations": 1,
+                "max_sources": 10
             }
         else:
             return {}
