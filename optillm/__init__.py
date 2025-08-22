@@ -2,7 +2,7 @@ from importlib import util
 import os
 
 # Version information
-__version__ = "0.1.22"
+__version__ = "0.1.26"
 
 # Get the path to the root optillm.py
 spec = util.spec_from_file_location(
@@ -27,6 +27,7 @@ parse_conversation = module.parse_conversation
 extract_optillm_approach = module.extract_optillm_approach
 get_config = module.get_config
 load_plugins = module.load_plugins
+count_reasoning_tokens = module.count_reasoning_tokens
 
 # Export execution functions
 execute_single_approach = module.execute_single_approach
@@ -48,6 +49,7 @@ __all__ = [
     'extract_optillm_approach',
     'get_config',
     'load_plugins',
+    'count_reasoning_tokens',
     'execute_single_approach',
     'execute_combined_approaches',
     'execute_parallel_approaches',

@@ -375,7 +375,7 @@ For more detailed information on specific aspects of {original_query}, additiona
             for line in content.split('\n'):
                 line = line.strip()
                 if re.match(r'^\d+\.', line):
-                    query = re.sub(r'^\d+\.\s*', '', line).strip()
+                    query = re.sub(r'^\d+\.\s*\[?(.*?)\]?$', r'\1', line).strip()
                     if query:
                         queries.append(query)
             

@@ -103,6 +103,98 @@ def test_streaming(client):
     assert len(content_chunks) > 0
 
 
+def test_reasoning_tokens_in_response(client):
+    """Test that reasoning tokens are included in API responses"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Think step by step and show your reasoning."},
+            {"role": "user", "content": "What is 15 × 23? Please think through this step by step."}
+        ],
+        max_tokens=100
+    )
+    
+    # Check basic response structure
+    assert hasattr(response, 'choices')
+    assert len(response.choices) > 0
+    assert hasattr(response, 'usage')
+    
+    # Check that completion_tokens_details exists and has reasoning_tokens
+    assert hasattr(response.usage, 'completion_tokens_details')
+    assert hasattr(response.usage.completion_tokens_details, 'reasoning_tokens')
+    
+    # reasoning_tokens should be an integer >= 0
+    reasoning_tokens = response.usage.completion_tokens_details.reasoning_tokens
+    assert isinstance(reasoning_tokens, int)
+    assert reasoning_tokens >= 0
+
+
+def test_reasoning_tokens_with_thinking_prompt(client):
+    """Test reasoning tokens with a prompt designed to trigger thinking"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini", 
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant. Use <think> tags to show your reasoning process."},
+            {"role": "user", "content": "I have 12 apples. I eat 3, give away 4, and buy 7 more. How many apples do I have now?"}
+        ],
+        max_tokens=150
+    )
+    
+    # Basic checks
+    assert hasattr(response, 'usage')
+    assert hasattr(response.usage, 'completion_tokens_details')
+    assert hasattr(response.usage.completion_tokens_details, 'reasoning_tokens')
+    
+    reasoning_tokens = response.usage.completion_tokens_details.reasoning_tokens
+    assert isinstance(reasoning_tokens, int)
+    assert reasoning_tokens >= 0
+    
+    # If the model used thinking tags, reasoning_tokens should be > 0
+    # (This depends on the model's response, so we just check the structure)
+    
+
+def test_reasoning_tokens_with_multiple_responses(client):
+    """Test reasoning tokens with n > 1"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": "Think about this: What's 2+2?"}
+        ],
+        n=2,
+        max_tokens=50
+    )
+    
+    # Should have 2 choices
+    assert len(response.choices) == 2
+    
+    # Should have reasoning token information
+    assert hasattr(response.usage, 'completion_tokens_details')
+    assert hasattr(response.usage.completion_tokens_details, 'reasoning_tokens')
+    
+    reasoning_tokens = response.usage.completion_tokens_details.reasoning_tokens
+    assert isinstance(reasoning_tokens, int)
+    assert reasoning_tokens >= 0
+
+
+def test_reasoning_tokens_backward_compatibility(client):
+    """Test that responses without thinking still work normally"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": "Say hello"}
+        ],
+        max_tokens=10
+    )
+    
+    # Should still have reasoning token structure, but with 0 tokens
+    assert hasattr(response.usage, 'completion_tokens_details')
+    assert hasattr(response.usage.completion_tokens_details, 'reasoning_tokens')
+    
+    reasoning_tokens = response.usage.completion_tokens_details.reasoning_tokens
+    assert isinstance(reasoning_tokens, int)
+    assert reasoning_tokens >= 0  # Usually 0 for simple responses
+
+
 if __name__ == "__main__":
     # Run basic tests if pytest not available
     client = OpenAI(
@@ -110,24 +202,39 @@ if __name__ == "__main__":
         base_url="http://localhost:8000/v1"
     )
     
-    print("Running basic API compatibility tests...")
+    print("Running API compatibility tests...")
     
-    try:
-        test_basic_completion(client)
-        print("✅ Basic completion test passed")
-    except Exception as e:
-        print(f"❌ Basic completion test failed: {e}")
+    tests = [
+        ("Basic completion", test_basic_completion),
+        ("N parameter", test_n_parameter),
+        ("Approach prefix", test_approach_prefix),
+        ("Extra body approach", test_extra_body_approach),
+        ("Streaming", test_streaming),
+        ("Reasoning tokens in response", test_reasoning_tokens_in_response),
+        ("Reasoning tokens with thinking prompt", test_reasoning_tokens_with_thinking_prompt),
+        ("Reasoning tokens with multiple responses", test_reasoning_tokens_with_multiple_responses),
+        ("Reasoning tokens backward compatibility", test_reasoning_tokens_backward_compatibility),
+    ]
     
-    try:
-        test_n_parameter(client)
-        print("✅ N parameter test passed")
-    except Exception as e:
-        print(f"❌ N parameter test failed: {e}")
+    passed = 0
+    failed = 0
     
-    try:
-        test_approach_prefix(client)
-        print("✅ Approach prefix test passed")
-    except Exception as e:
-        print(f"❌ Approach prefix test failed: {e}")
+    for test_name, test_func in tests:
+        try:
+            print(f"Running {test_name}...", end=' ')
+            test_func(client)
+            print("✅ PASSED")
+            passed += 1
+        except Exception as e:
+            print(f"❌ FAILED: {e}")
+            failed += 1
     
-    print("\nDone!")
+    print(f"\n=== Test Summary ===")
+    print(f"Passed: {passed}")
+    print(f"Failed: {failed}")
+    print(f"Total: {passed + failed}")
+    
+    if failed == 0:
+        print("🎉 All tests passed!")
+    else:
+        print(f"⚠️  {failed} test(s) failed.")

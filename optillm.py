@@ -93,6 +93,52 @@ def get_config():
         default_client = LiteLLMWrapper()
     return default_client, API_KEY
 
+def count_reasoning_tokens(text: str, tokenizer=None) -> int:
+    """
+    Count tokens within <think>...</think> tags in the given text.
+    
+    Args:
+        text: The text to analyze
+        tokenizer: Optional tokenizer instance for precise counting
+        
+    Returns:
+        Number of reasoning tokens (0 if no think tags found)
+    """
+    if not text or not isinstance(text, str):
+        return 0
+    
+    # Extract all content within <think>...</think> tags
+    # Handle both complete and truncated think blocks
+    
+    # First, find all complete <think>...</think> blocks
+    complete_pattern = r'<think>(.*?)</think>'
+    complete_matches = re.findall(complete_pattern, text, re.DOTALL)
+    
+    # Then check for unclosed <think> tag (truncated response)
+    # This finds <think> that doesn't have a matching </think> after it
+    truncated_pattern = r'<think>(?!.*</think>)(.*)$'
+    truncated_match = re.search(truncated_pattern, text, re.DOTALL)
+    
+    # Combine all thinking content
+    thinking_content = ''.join(complete_matches)
+    if truncated_match:
+        thinking_content += truncated_match.group(1)
+    
+    if not thinking_content:
+        return 0
+    
+    if tokenizer and hasattr(tokenizer, 'encode'):
+        # Use tokenizer for precise counting
+        try:
+            tokens = tokenizer.encode(thinking_content)
+            return len(tokens)
+        except Exception as e:
+            logger.warning(f"Failed to count tokens with tokenizer: {e}")
+    
+    # Fallback: rough estimation (4 chars per token on average, minimum 1 token for non-empty content)
+    content_length = len(thinking_content.strip())
+    return max(1, content_length // 4) if content_length > 0 else 0
+
 # Server configuration
 server_config = {
     'approach': 'none', 
@@ -678,11 +724,22 @@ def proxy():
     if stream:
         return Response(generate_streaming_response(response, model), content_type='text/event-stream')
     else:
+        # Calculate reasoning tokens from the response
+        reasoning_tokens = 0
+        if isinstance(response, str):
+            reasoning_tokens = count_reasoning_tokens(response)
+        elif isinstance(response, list) and response:
+            # For multiple responses, sum up reasoning tokens from all
+            reasoning_tokens = sum(count_reasoning_tokens(resp) for resp in response if isinstance(resp, str))
+        
         response_data = {
             'model': model,
             'choices': [],
             'usage': {
                 'completion_tokens': completion_tokens,
+                'completion_tokens_details': {
+                    'reasoning_tokens': reasoning_tokens
+                }
             }
         }
 

@@ -168,8 +168,8 @@ class ThinkDeeperProcessor:
         response = "".join(response_chunks)
         full_response = f"{self.config['start_think_token']}\n{self.config['prefill']}{response}"
         
-        logger.debug(f"Final response length: {len(full_response)} chars, Total thoughts: {self.thought_count}")
-        return full_response
+        logger.debug(f"Final response length: {len(full_response)} chars, Total thoughts: {self.thought_count}, Thinking tokens: {n_thinking_tokens}")
+        return full_response, n_thinking_tokens
 
 def thinkdeeper_decode(
     model: PreTrainedModel, 
@@ -192,8 +192,8 @@ def thinkdeeper_decode(
     
     try:
         processor = ThinkDeeperProcessor(config, tokenizer, model)
-        response = processor.reasoning_effort(messages)
-        return response
+        response, reasoning_tokens = processor.reasoning_effort(messages)
+        return response, reasoning_tokens
         
     except Exception as e:
         logger.error(f"Error in ThinkDeeper processing: {str(e)}")

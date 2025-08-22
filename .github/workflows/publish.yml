@@ -79,47 +79,25 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
             
-      # Build and push proxy AMD64
-      - name: Build and push proxy_only Docker image AMD64
+      # Build and push proxy_only multi-arch
+      - name: Build and push proxy_only Docker image (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.proxy_only
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-proxy.outputs.tags }}
           labels: ${{ steps.meta-proxy.outputs.labels }}
-          cache-from: type=gha,scope=proxy-amd64
-          cache-to: type=gha,scope=proxy-amd64,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           outputs: type=registry,compression=zstd,compression-level=5
 
-      # Cleanup after AMD64 build
-      - name: Cleanup after AMD64 build
+      # Cleanup after proxy build
+      - name: Cleanup after proxy build
         run: |
           docker system prune -af
           docker builder prune -af
-          df -h
-
-      # Build proxy ARM64
-      - name: Build and push proxy_only Docker image ARM64
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.proxy_only
-          push: true
-          platforms: linux/arm64
-          tags: ${{ steps.meta-proxy.outputs.tags }}
-          labels: ${{ steps.meta-proxy.outputs.labels }}
-          cache-from: type=gha,scope=proxy-arm64
-          cache-to: type=gha,scope=proxy-arm64,mode=max
-          outputs: type=registry,compression=zstd,compression-level=5
-
-      # Cleanup after proxy builds
-      - name: Cleanup after proxy builds
-        run: |
-          docker system prune -af
-          docker builder prune -af
-          find /tmp -type f -user $(id -u) -exec rm -f {} + 2>/dev/null || true
           df -h
       
       # Extract metadata for full image
@@ -133,35 +111,15 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             latest
 
-      # Build full image AMD64
-      - name: Build and push Docker image AMD64
+      # Build full image multi-arch
+      - name: Build and push Docker image (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=full-amd64
-          cache-to: type=gha,scope=full-amd64,mode=max
-          outputs: type=registry,compression=zstd,compression-level=5
-
-      # Cleanup between architectures
-      - name: Cleanup between architectures
-        run: |
-          docker system prune -af
-          docker builder prune -af
-          df -h
-
-      # Build full image ARM64
-      - name: Build and push Docker image ARM64
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=full-arm64
-          cache-to: type=gha,scope=full-arm64,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           outputs: type=registry,compression=zstd,compression-level=5
