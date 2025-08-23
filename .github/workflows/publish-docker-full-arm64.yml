@@ -37,6 +37,7 @@ jobs:
           file: Dockerfile
           push: true
           platforms: linux/arm64
+          provenance: false
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}-arm64
             ghcr.io/${{ github.repository }}:latest-arm64

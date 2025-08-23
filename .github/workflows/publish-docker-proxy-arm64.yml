@@ -37,6 +37,7 @@ jobs:
           file: Dockerfile.proxy_only
           push: true
           platforms: linux/arm64
+          provenance: false
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}-proxy-arm64
             ghcr.io/${{ github.repository }}:latest-proxy-arm64
