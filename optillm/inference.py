@@ -924,10 +924,13 @@ class ModelManager:
                     logger.info("Flash Attention 2 is not installed - falling back to default attention")
                     
             elif 'mps' in device:
-                # MPS supports FP16
-                model_kwargs["torch_dtype"] = torch.float16
-                # model_kwargs["torch_dtype"] = torch.float32
-                logger.info("Using MPS device with float16 precision")
+                # Special handling for Gemma models which have NaN issues with float16 on MPS
+                if 'gemma' in model_id.lower():
+                    model_kwargs["torch_dtype"] = torch.float32
+                    logger.info("Using MPS device with float32 for Gemma model (float16 causes NaN)")
+                else:
+                    model_kwargs["torch_dtype"] = torch.float16
+                    logger.info("Using MPS device with float16 precision")
             else:
                 # CPU can use FP16 if available
                 if hasattr(torch.cpu, 'has_fp16') and torch.cpu.has_fp16:
