@@ -34,6 +34,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r tests/requirements.txt
+        pip install -e .
     
     - name: Run unit tests (no server required)
       run: |
@@ -77,6 +78,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r tests/requirements.txt
+        pip install -e .
     
     - name: Start optillm server
       run: |
