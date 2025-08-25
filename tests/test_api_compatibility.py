@@ -5,23 +5,28 @@ Test API compatibility with OpenAI format
 
 import pytest
 import os
+import sys
 from openai import OpenAI
 import json
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import test utilities
+from test_utils import setup_test_env, get_test_client, TEST_MODEL
 
 
 @pytest.fixture
 def client():
-    """Create OpenAI client for optillm proxy"""
-    return OpenAI(
-        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-        base_url="http://localhost:8000/v1"
-    )
+    """Create OpenAI client for optillm proxy with local inference"""
+    setup_test_env()
+    return get_test_client()
 
 
 def test_basic_completion(client):
     """Test basic chat completion"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Say hello"}
@@ -39,7 +44,7 @@ def test_n_parameter(client):
     """Test n parameter for multiple completions"""
     n = 3
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "user", "content": "Write a one-line joke"}
         ],
@@ -57,7 +62,7 @@ def test_n_parameter(client):
 def test_approach_prefix(client):
     """Test approach prefix in model name"""
     response = client.chat.completions.create(
-        model="moa-gpt-4o-mini",
+        model=f"moa-{TEST_MODEL}",
         messages=[
             {"role": "user", "content": "What is 2+2?"}
         ],
@@ -71,7 +76,7 @@ def test_approach_prefix(client):
 def test_extra_body_approach(client):
     """Test approach specification via extra_body"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "user", "content": "What is 2+2?"}
         ],
@@ -86,7 +91,7 @@ def test_extra_body_approach(client):
 def test_streaming(client):
     """Test streaming response"""
     stream = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "user", "content": "Count from 1 to 5"}
         ],
@@ -106,7 +111,7 @@ def test_streaming(client):
 def test_reasoning_tokens_in_response(client):
     """Test that reasoning tokens are included in API responses"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "system", "content": "Think step by step and show your reasoning."},
             {"role": "user", "content": "What is 15 × 23? Please think through this step by step."}
@@ -132,7 +137,7 @@ def test_reasoning_tokens_in_response(client):
 def test_reasoning_tokens_with_thinking_prompt(client):
     """Test reasoning tokens with a prompt designed to trigger thinking"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini", 
+        model=TEST_MODEL, 
         messages=[
             {"role": "system", "content": "You are a helpful assistant. Use <think> tags to show your reasoning process."},
             {"role": "user", "content": "I have 12 apples. I eat 3, give away 4, and buy 7 more. How many apples do I have now?"}
@@ -156,7 +161,7 @@ def test_reasoning_tokens_with_thinking_prompt(client):
 def test_reasoning_tokens_with_multiple_responses(client):
     """Test reasoning tokens with n > 1"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "user", "content": "Think about this: What's 2+2?"}
         ],
@@ -179,7 +184,7 @@ def test_reasoning_tokens_with_multiple_responses(client):
 def test_reasoning_tokens_backward_compatibility(client):
     """Test that responses without thinking still work normally"""
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=TEST_MODEL,
         messages=[
             {"role": "user", "content": "Say hello"}
         ],
@@ -197,10 +202,8 @@ def test_reasoning_tokens_backward_compatibility(client):
 
 if __name__ == "__main__":
     # Run basic tests if pytest not available
-    client = OpenAI(
-        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
-        base_url="http://localhost:8000/v1"
-    )
+    setup_test_env()
+    client = get_test_client()
     
     print("Running API compatibility tests...")
     

@@ -121,4 +121,4 @@ Effectively implementing a remote workforce strategy demands a deliberate and st
 [16] Measuring Telework ROI: Metrics Based on the Employee Life .... Available at: http://www.telecommutingadvantage.com/pdfs/news_and_research/Measuring_Telework_ROI___Metrics_Based_on_the_Employee_Life_Cycle[1].pdf [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

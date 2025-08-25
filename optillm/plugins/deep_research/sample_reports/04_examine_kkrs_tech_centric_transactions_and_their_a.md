@@ -154,4 +154,4 @@ KKR has established a well-defined and evolving strategy for investing in and ge
 [20] Tech Growth. Available at: https://www.kkr.com/invest/private-equity/tech-growth [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

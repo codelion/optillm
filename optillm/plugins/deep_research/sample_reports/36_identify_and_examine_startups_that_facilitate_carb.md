@@ -140,4 +140,4 @@ Startups in the carbon accounting space are playing an indispensable role in emp
 [34] SAP Green Ledger | ERP Software for Carbon Accounting. Available at: https://www.sap.com/sea/products/financial-management/green-ledger.html [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

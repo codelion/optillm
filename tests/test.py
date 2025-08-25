@@ -11,6 +11,8 @@ from openai import OpenAI
 # Add parent directory to path to import optillm modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from test_utils import TEST_MODEL
+
 from optillm.litellm_wrapper import LiteLLMWrapper
 from optillm.mcts import chat_with_mcts
 from optillm.bon import best_of_n_sampling
@@ -151,7 +153,7 @@ def main():
     
     # If using local inference mode, override model to a local model
     if API_KEY == "optillm" and args.model == "gpt-4o-mini":
-        args.model = "Qwen/Qwen2.5-0.5B-Instruct"
+        args.model = TEST_MODEL
         logger.info(f"Using local model: {args.model}")
     
     # Set environment variable for local inference

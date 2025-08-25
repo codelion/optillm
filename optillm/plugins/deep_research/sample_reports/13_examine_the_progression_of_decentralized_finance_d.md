@@ -392,4 +392,4 @@ The integration of DeFi into institutional frameworks represents both significan
 [37] MACH: An Introduction to Hybrid Finance (HyFi). Available at: https://www.deltacapita.com/insights/mach-an-introduction-to-hybrid-finance-hyfi [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

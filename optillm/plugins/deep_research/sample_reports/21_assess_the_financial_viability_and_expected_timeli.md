@@ -246,4 +246,4 @@ A definitive assessment of the financial viability and profitability timeline fo
 [63] CATEGORY III & UNLISTED CODES. Available at: https://www.entnet.org/wp-content/uploads/files/uploads/PracticeManagement/Resources/_files/payer_toolkit_expansion-cat_iii_and_unlisted_codes_v2.0_final_072120.pdf [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

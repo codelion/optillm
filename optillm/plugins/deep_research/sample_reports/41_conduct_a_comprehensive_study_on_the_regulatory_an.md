@@ -357,4 +357,4 @@ Looking ahead, several potential reforms and international cooperation mechanism
 [85] Canada Clamps Down on Foreign SOE Investments in Critical .... Available at: https://legalblogs.wolterskluwer.com/competition-blog/canada-clamps-down-on-foreign-soe-investments-in-critical-minerals/#:~:text=Canada%20Clamps%20Down%20on%20Foreign%20SOE%20Investments%20in%20Critical%20Minerals,-Mark%20Katz%20(Davies&text=The%20Canadian%20government%20announced%20a,in%20Canada's%20critical%20minerals%20sector. [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

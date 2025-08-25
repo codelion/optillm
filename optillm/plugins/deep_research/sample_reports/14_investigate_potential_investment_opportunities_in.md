@@ -105,4 +105,4 @@ The fields of Brain-Computer Interfaces and advanced prosthetics represent burge
 [9] Regulatory Overview for Neurological Devices. Available at: https://www.fda.gov/medical-devices/neurological-devices/regulatory-overview-neurological-devices [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

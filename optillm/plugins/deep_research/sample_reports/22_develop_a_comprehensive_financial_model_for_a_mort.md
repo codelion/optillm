@@ -255,4 +255,4 @@ Based on general economic principles and historical patterns, a mortgage lending
 [50] Mortgage Pipeline hedging 101. Available at: https://www.mba.org/docs/default-source/membership/white-paper/mct-whitepaper---mortgage-pipeline-hedging-101.pdf?sfvrsn=d1778b40_1 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

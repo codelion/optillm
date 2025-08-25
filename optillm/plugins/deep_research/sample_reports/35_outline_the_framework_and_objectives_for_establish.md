@@ -166,4 +166,4 @@ Establishing a Corporate Venture Capital division presents a significant strateg
 [22] Unleashing the power of corporate venture capital. Available at: https://www.adlittle.com/en/insights/viewpoints/unleashing-power-corporate-venture-capital [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

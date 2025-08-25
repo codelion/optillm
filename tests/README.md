@@ -1,10 +1,10 @@
-# OptILLM Tests
+# OptiLLM Tests
 
-This directory contains tests for the OptILLM project.
+This directory contains tests for the OptiLLM project.
 
 ## Structure
 
-- `test.py` - Main comprehensive test suite for all OptILLM approaches
+- `test.py` - Main comprehensive test suite for all OptiLLM approaches
 - `test_cases.json` - Test cases for the main test suite
 - `test_plugins.py` - Unit tests for plugin functionality
 - `test_api_compatibility.py` - Tests for OpenAI API compatibility
@@ -23,7 +23,7 @@ This directory contains tests for the OptILLM project.
    pip install -r tests/requirements.txt
    ```
 
-2. Start the OptILLM server:
+2. Start the OptiLLM server:
    ```bash
    python optillm.py
    ```

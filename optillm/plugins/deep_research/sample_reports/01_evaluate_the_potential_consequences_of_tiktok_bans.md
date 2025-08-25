@@ -197,4 +197,4 @@ By embracing these strategies, companies can mitigate investment risks associate
 [50] TikTok vs. Reels vs. Shorts (A Study by Socialinsider). Available at: https://www.socialinsider.io/blog/tiktok-vs-reels-vs-shorts?ref=blog-cms.socialinsider.io [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

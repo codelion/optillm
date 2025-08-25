@@ -548,4 +548,4 @@ The industry's trajectory toward increased sophistication, consumer protection, 
 [52] Global Pet Industry To Grow To $500 Billion By 2030 .... Available at: https://www.bloomberg.com/company/press/global-pet-industry-to-grow-to-500-billion-by-2030-bloomberg-intelligence-finds/ [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

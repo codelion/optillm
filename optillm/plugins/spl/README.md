@@ -26,13 +26,13 @@ This approach mirrors how human experts develop expertise—by accumulating stra
 
 ## Experimental Results
 
-We conducted extensive experiments using the SPL plugin with gemini-2.0-flash-lite on various benchmarks. The learning phase used the OptILLMBench training split (400 instances), while evaluation was performed on the test split (100 instances) and additional popular mathematical benchmarks.
+We conducted extensive experiments using the SPL plugin with gemini-2.0-flash-lite on various benchmarks. The learning phase used the OptiLLMBench training split (400 instances), while evaluation was performed on the test split (100 instances) and additional popular mathematical benchmarks.
 
 The results demonstrate consistent improvements across all benchmarks:
 
 | Benchmark | Baseline | With SPL | Improvement |
 |-----------|----------|----------|-------------|
-| OptILLMBench | 61% | 65% | +4% |
+| OptiLLMBench | 61% | 65% | +4% |
 | MATH-500 | 85% | 85.6% | +0.6% |
 | Arena Auto Hard | 29% | 37.6% | +8.6% |
 | AIME24 | 23.33% | 30% | +6.67% |
@@ -97,7 +97,7 @@ The plugin maintains two separate limits:
 
 ## Learning Metrics
 
-After training on the OptILLMBench dataset, the system developed a rich knowledge base of strategies:
+After training on the OptiLLMBench dataset, the system developed a rich knowledge base of strategies:
 
 - **Total queries processed**: 500
 - **Strategies created**: 129

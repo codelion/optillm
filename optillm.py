@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import secrets
+import time
 from flask import Flask, request, jsonify
 from cerebras.cloud.sdk import Cerebras
 from openai import AzureOpenAI, OpenAI
@@ -30,6 +31,7 @@ from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
 from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
+from optillm.batching import RequestBatcher, BatchingError
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -45,6 +47,9 @@ logging_levels = {
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Global request batcher (initialized in main() if batch mode enabled)
+request_batcher = None
 
 def get_config():
     API_KEY = None
@@ -683,6 +688,31 @@ def proxy():
         client = default_client
 
     try:
+        # Route to batch processing if batch mode is enabled
+        if request_batcher is not None:
+            try:
+                # Create request data for batching
+                batch_request_data = {
+                    'system_prompt': system_prompt,
+                    'initial_query': initial_query,
+                    'client': client,
+                    'model': model,
+                    'request_config': request_config,
+                    'approaches': approaches,
+                    'operation': operation,
+                    'n': n,
+                    'stream': stream,
+                    'optillm_approach': optillm_approach
+                }
+                
+                logger.debug("Routing request to batch processor")
+                result = request_batcher.add_request(batch_request_data)
+                return jsonify(result), 200
+                
+            except BatchingError as e:
+                logger.error(f"Batch processing failed: {e}")
+                return jsonify({"error": str(e)}), 500
+        
         # Check if any of the approaches is 'none'
         contains_none = any(approach == 'none' for approach in approaches)
 
@@ -849,6 +879,18 @@ def parse_args():
     # Use the function to get the default path
     default_config_path = get_config_path()
 
+    # Batch mode arguments
+    batch_mode_default = os.environ.get("OPTILLM_BATCH_MODE", "false").lower() == "true"
+    batch_size_default = int(os.environ.get("OPTILLM_BATCH_SIZE", 4))
+    batch_wait_ms_default = int(os.environ.get("OPTILLM_BATCH_WAIT_MS", 50))
+    
+    parser.add_argument("--batch-mode", action="store_true", default=batch_mode_default,
+                        help="Enable automatic request batching (fail-fast, no fallback)")
+    parser.add_argument("--batch-size", type=int, default=batch_size_default,
+                        help="Maximum batch size for request batching")
+    parser.add_argument("--batch-wait-ms", dest="batch_wait_ms", type=int, default=batch_wait_ms_default,
+                        help="Maximum wait time in milliseconds for batch formation")
+
     # Special handling of all the CePO Configurations
     for field in fields(CepoConfig):
         parser.add_argument(f"--cepo_{field.name}", 
@@ -877,6 +919,7 @@ def parse_args():
 def main():
     global server_config
     global cepo_config
+    global request_batcher
     # Call this function at the start of main()
     args = parse_args()
     # Update server_config with all argument values
@@ -885,6 +928,147 @@ def main():
     load_plugins()
 
     port = server_config['port']
+    
+    # Initialize request batcher if batch mode is enabled
+    if server_config.get('batch_mode', False):
+        logger.info(f"Batch mode enabled: size={server_config['batch_size']}, "
+                   f"wait={server_config['batch_wait_ms']}ms")
+        request_batcher = RequestBatcher(
+            max_batch_size=server_config['batch_size'],
+            max_wait_ms=server_config['batch_wait_ms'],
+            enable_logging=True
+        )
+        
+        # Set up the batch processor function
+        def process_batch_requests(batch_requests):
+            """
+            Process a batch of requests using true batching when possible
+            
+            Args:
+                batch_requests: List of request data dictionaries
+                
+            Returns:
+                List of response dictionaries
+            """
+            import time
+            from optillm.batching import BatchingError
+            
+            if not batch_requests:
+                return []
+                
+            logger.info(f"Processing batch of {len(batch_requests)} requests")
+            
+            # Check if we can use true batching (all requests compatible and using 'none' approach)
+            can_use_true_batching = True
+            first_req = batch_requests[0]
+            
+            # Check compatibility across all requests
+            for req_data in batch_requests:
+                if (req_data['stream'] or 
+                    req_data['approaches'] != first_req['approaches'] or
+                    req_data['operation'] != first_req['operation'] or
+                    req_data['model'] != first_req['model']):
+                    can_use_true_batching = False
+                    break
+            
+            # For now, implement sequential processing but with proper infrastructure
+            # TODO: Implement true PyTorch/MLX batching in next phase
+            responses = []
+            
+            for i, req_data in enumerate(batch_requests):
+                try:
+                    logger.debug(f"Processing batch request {i+1}/{len(batch_requests)}")
+                    
+                    # Extract request parameters
+                    system_prompt = req_data['system_prompt']
+                    initial_query = req_data['initial_query']
+                    client = req_data['client']
+                    model = req_data['model']
+                    request_config = req_data['request_config']
+                    approaches = req_data['approaches']
+                    operation = req_data['operation']
+                    n = req_data['n']
+                    stream = req_data['stream']
+                    
+                    # Validate request
+                    if stream:
+                        raise BatchingError("Streaming requests cannot be batched")
+                    
+                    # Check if any of the approaches is 'none'
+                    contains_none = any(approach == 'none' for approach in approaches)
+                    
+                    if operation == 'SINGLE' and approaches[0] == 'none':
+                        # Pass through the request including the n parameter
+                        result, completion_tokens = execute_single_approach(
+                            approaches[0], system_prompt, initial_query, client, model, request_config)
+                    elif operation == 'AND' or operation == 'OR':
+                        if contains_none:
+                            raise ValueError("'none' approach cannot be combined with other approaches")
+                        # Handle non-none approaches with n attempts
+                        result, completion_tokens = execute_n_times(
+                            n, approaches, operation, system_prompt, initial_query, client, model, request_config)
+                    else:
+                        # Handle non-none approaches with n attempts
+                        result, completion_tokens = execute_n_times(
+                            n, approaches, operation, system_prompt, initial_query, client, model, request_config)
+                    
+                    # Convert tagged conversation to messages format if needed
+                    if isinstance(result, list):
+                        processed_response = tagged_conversation_to_messages(result)
+                        if processed_response != result:  # Only process if format changed
+                            result = [msg[-1]['content'] if isinstance(msg, list) and msg else msg 
+                                    for msg in processed_response]
+                    else:
+                        messages = tagged_conversation_to_messages(result)
+                        if isinstance(messages, list) and messages:  # Only process if format changed
+                            result = messages[-1]['content']
+                    
+                    # Generate the response in OpenAI format
+                    if isinstance(result, list):
+                        choices = []
+                        for j, res in enumerate(result):
+                            choices.append({
+                                "index": j,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": res
+                                },
+                                "finish_reason": "stop"
+                            })
+                    else:
+                        choices = [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant", 
+                                "content": result
+                            },
+                            "finish_reason": "stop"
+                        }]
+                    
+                    response_dict = {
+                        "id": f"chatcmpl-{int(time.time()*1000)}-{i}",
+                        "object": "chat.completion",
+                        "created": int(time.time()),
+                        "model": model,
+                        "choices": choices,
+                        "usage": {
+                            "prompt_tokens": 0,  # Will be calculated properly later
+                            "completion_tokens": completion_tokens if isinstance(completion_tokens, int) else 0,
+                            "total_tokens": completion_tokens if isinstance(completion_tokens, int) else 0
+                        }
+                    }
+                    
+                    responses.append(response_dict)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing batch request {i+1}: {e}")
+                    raise BatchingError(f"Failed to process request {i+1}: {str(e)}")
+            
+            logger.info(f"Completed batch processing of {len(responses)} requests")
+            return responses
+        
+        # Set the processor function on the batcher
+        request_batcher.set_processor(process_batch_requests)
 
     # Set logging level from user request
     logging_level = server_config['log']

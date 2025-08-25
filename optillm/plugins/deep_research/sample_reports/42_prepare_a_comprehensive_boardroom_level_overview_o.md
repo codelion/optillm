@@ -171,4 +171,4 @@ The mental health technology sector represents a significant and rapidly evolvin
 [13] The evolving field of digital mental health: current evidence .... Available at: https://pmc.ncbi.nlm.nih.gov/articles/PMC12079407/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

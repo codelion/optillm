@@ -229,4 +229,4 @@ To navigate these complexities and realize the immense potential of BCIs, a mult
 [78] Consumer neuro devices within EU product safety law. Available at: https://www.sciencedirect.com/science/article/pii/S0267364924000128 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

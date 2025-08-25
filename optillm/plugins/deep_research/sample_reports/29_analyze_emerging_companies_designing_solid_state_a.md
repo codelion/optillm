@@ -111,4 +111,4 @@ The emerging companies developing solid-state and lithium-sulfur battery technol
 [6] Solid-state batteries, their future in the energy storage and .... Available at: https://www.sciencedirect.com/science/article/pii/S2772569324000902 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

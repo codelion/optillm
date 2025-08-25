@@ -156,4 +156,4 @@ The biofuels sector stands at a critical juncture, poised to contribute signific
 [9] A review of major trends, opportunities, and technical .... Available at: https://www.sciencedirect.com/science/article/pii/S2590174524001533 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

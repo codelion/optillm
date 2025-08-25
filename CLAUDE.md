@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OptILLM is an OpenAI API compatible optimizing inference proxy that implements state-of-the-art techniques to improve accuracy and performance of LLMs. It focuses on reasoning improvements for coding, logical, and mathematical queries through inference-time compute optimization.
+OptiLLM is an OpenAI API compatible optimizing inference proxy that implements state-of-the-art techniques to improve accuracy and performance of LLMs. It focuses on reasoning improvements for coding, logical, and mathematical queries through inference-time compute optimization.
 
 ## Core Architecture
 
@@ -95,7 +95,7 @@ python scripts/eval_arena_hard_auto_rtc.py
 # FRAMES benchmark
 python scripts/eval_frames_benchmark.py
 
-# OptILLM benchmark generation/evaluation
+# OptiLLM benchmark generation/evaluation
 python scripts/gen_optillmbench.py
 python scripts/eval_optillmbench.py
 ```
@@ -120,6 +120,7 @@ python scripts/eval_optillmbench.py
 - MCP: `~/.optillm/mcp_config.json` for Model Context Protocol servers
 - SPL: Built-in system prompt learning for solving strategies
 - Memory: Automatic unbounded context via chunking and retrieval
+- GenSelect: Quality-based selection from multiple generated candidates
 
 ## Key Concepts
 

@@ -330,4 +330,4 @@ The reusable rocket systems industry is at the forefront of a space launch revol
 [91] Overview of the Space Supply Chain. Available at: https://newspaceeconomy.ca/2025/02/02/comprehensive-guide-to-the-space-supply-chain/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

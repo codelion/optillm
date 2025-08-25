@@ -230,4 +230,4 @@ The Digital Identity Solutions sector presents a compelling landscape of opportu
 [35] How To Maximize The ROI Of Your Identity Projects?. Available at: https://www.loginradius.com/blog/growth/maximize-roi-of-your-identity-projects [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

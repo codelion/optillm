@@ -319,4 +319,4 @@ The AI chip market is poised for exceptional growth over the next decade, driven
 [93] Advances in AI-assisted biochip technology for biomedicine. Available at: https://www.sciencedirect.com/science/article/pii/S0753332224008813 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
