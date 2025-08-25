@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {
     "max_tokens_per_trace": 4096,  # Maximum tokens per individual trace
     "temperature": 0.7,          # Generation temperature
     "confidence_metric": "average_confidence",  # Metric for threshold calculation
+    "include_stats": False,      # Include debugging statistics in response
 }
 
 class TraceResult:
