@@ -1277,8 +1277,7 @@ class InferencePipeline:
             "eos_token_id": self.tokenizer.eos_token_id,
             "return_dict_in_generate": True,
             "output_scores": generation_params.get("logprobs", False),
-            "use_cache": True,
-            "return_legacy_cache": True,  # To avoid warning
+            "use_cache": True
         }
         return config
     
