@@ -1,7 +1,7 @@
 # OptiLLM
 
 <p align="center">
-  <img src="optillm-logo.png" alt="OptiLLM Logo" width="200" />
+  <img src="optillm-logo.png" alt="OptiLLM Logo" width="400" />
 </p>
 
 <p align="center">

@@ -82,10 +82,18 @@ class TestJSONPlugin(unittest.TestCase):
         self.assertIsNotNone(generator.model)
         self.assertIsNotNone(generator.tokenizer)
     
-    def test_parse_json_schema_to_pydantic(self):
+    @patch('optillm.plugins.json_plugin.outlines.from_transformers')
+    @patch('optillm.plugins.json_plugin.AutoModelForCausalLM.from_pretrained')
+    @patch('optillm.plugins.json_plugin.AutoTokenizer.from_pretrained')
+    def test_parse_json_schema_to_pydantic(self, mock_tokenizer, mock_model, mock_from_transformers):
         """Test JSON schema to Pydantic model conversion."""
         if not PLUGIN_AVAILABLE:
             self.skipTest("JSON plugin not available")
+            
+        # Mock the dependencies
+        mock_model.return_value = Mock()
+        mock_tokenizer.return_value = Mock()
+        mock_from_transformers.return_value = Mock()
             
         # Create JSONGenerator instance  
         generator = JSONGenerator()
