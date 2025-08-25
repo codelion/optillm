@@ -25,6 +25,7 @@ from optillm.entropy_decoding import entropy_decode
 from optillm.thinkdeeper import thinkdeeper_decode
 from optillm.thinkdeeper_mlx import thinkdeeper_decode_mlx
 from optillm.autothink import autothink_decode
+from optillm.deepconf import deepconf_decode
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -1055,10 +1056,13 @@ class ModelManager:
                     logger.info("Flash Attention 2 is not installed - falling back to default attention")
                     
             elif 'mps' in device:
-                # MPS supports FP16
-                model_kwargs["torch_dtype"] = torch.float16
-                # model_kwargs["torch_dtype"] = torch.float32
-                logger.info("Using MPS device with float16 precision")
+                # Special handling for Gemma models which have NaN issues with float16 on MPS
+                if 'gemma' in model_id.lower():
+                    model_kwargs["torch_dtype"] = torch.float32
+                    logger.info("Using MPS device with float32 for Gemma model (float16 causes NaN)")
+                else:
+                    model_kwargs["torch_dtype"] = torch.float16
+                    logger.info("Using MPS device with float16 precision")
             else:
                 # CPU can use FP16 if available
                 if hasattr(torch.cpu, 'has_fp16') and torch.cpu.has_fp16:
@@ -1838,7 +1842,7 @@ class InferenceClient:
                         logger.info(f"Using specialized decoding approach: {decoding}")
 
                         # Check if this decoding approach is supported for MLX
-                        mlx_unsupported_decodings = ["cot_decoding", "entropy_decoding", "autothink"]
+                        mlx_unsupported_decodings = ["cot_decoding", "entropy_decoding", "autothink", "deepconf"]
                         if isinstance(pipeline, MLXInferencePipeline) and decoding in mlx_unsupported_decodings:
                             logger.warning(f"{decoding} is not supported for MLX models. Falling back to standard generation.")
                             decoding = None
@@ -1994,6 +1998,32 @@ class InferenceClient:
                                 responses = [result]
                                 logprobs_results = [None]
                                 completion_tokens = len(pipeline.tokenizer.encode(result))
+                        elif decoding == "deepconf":
+                            # Prepare DeepConf configuration
+                            deepconf_config = {
+                                "variant": kwargs.get("variant", "low"),  # "low" or "high"
+                                "warmup_samples": kwargs.get("warmup_samples", 16),
+                                "consensus_threshold": kwargs.get("consensus_threshold", 0.95),
+                                "max_traces": kwargs.get("max_traces", 128),
+                                "window_size": kwargs.get("window_size", 2048),
+                                "top_k": kwargs.get("top_k", 5),
+                                "min_trace_length": kwargs.get("min_trace_length", 100),
+                                "max_tokens_per_trace": kwargs.get("max_tokens_per_trace", 4096),
+                                "temperature": temperature,
+                                "confidence_metric": kwargs.get("confidence_metric", "average_confidence"),
+                                "include_stats": kwargs.get("include_stats", False)
+                            }
+                            
+                            # Process with DeepConf
+                            result, tokens_used = deepconf_decode(
+                                pipeline.current_model,
+                                pipeline.tokenizer,
+                                messages,
+                                deepconf_config
+                            )
+                            responses = [result]
+                            logprobs_results = [None]
+                            completion_tokens = tokens_used
                         else:
                             raise ValueError(f"Unknown specialized decoding approach: {decoding}")
                         
