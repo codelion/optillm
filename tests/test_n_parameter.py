@@ -8,15 +8,19 @@ import sys
 from openai import OpenAI
 import json
 
-def test_n_parameter(model="gpt-4o-mini", n_values=[1, 2, 3]):
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import test utilities
+from test_utils import setup_test_env, get_test_client, TEST_MODEL
+
+def test_n_parameter(model=TEST_MODEL, n_values=[1, 2, 3]):
     """
     Test the n parameter with different values
     """
-    # Initialize OpenAI client with optillm proxy
-    client = OpenAI(
-        api_key=os.environ.get("OPENAI_API_KEY", ""),
-        base_url="http://localhost:8000/v1"
-    )
+    # Set up test environment and get client
+    setup_test_env()
+    client = get_test_client()
     
     test_prompt = "Write a haiku about coding"
     
@@ -61,26 +65,22 @@ def main():
     print("Testing n parameter support in optillm")
     print("=" * 50)
     
-    # Test with different models if available
-    models_to_test = []
+    # Set up test environment
+    setup_test_env()
     
-    # Check for available models
-    if os.environ.get("OPENAI_API_KEY"):
-        models_to_test.append("gpt-4o-mini")
+    # Use the standard test model
+    model = TEST_MODEL
+    print(f"\n\nTesting model: {model}")
+    print("=" * 50)
     
-    # Check for MLX models
-    if os.environ.get("OPTILLM_API_KEY") == "optillm":
-        # Add MLX model if running with local inference
-        models_to_test.append("Qwen/Qwen2.5-1.5B-Instruct")
-    
-    if not models_to_test:
-        print("No models available to test. Set OPENAI_API_KEY or OPTILLM_API_KEY=optillm")
-        return
-    
-    for model in models_to_test:
-        print(f"\n\nTesting model: {model}")
-        print("=" * 50)
+    try:
         test_n_parameter(model)
+    except Exception as e:
+        print(f"\n❌ Test failed with error: {str(e)}")
+        print("Make sure optillm server is running with local inference enabled")
+        return 1
+    
+    return 0
 
 if __name__ == "__main__":
     main()

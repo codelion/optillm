@@ -4,7 +4,7 @@ import outlines
 import json
 import torch
 from pydantic import BaseModel, create_model
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Plugin identifier
 SLUG = "json"
@@ -27,9 +27,16 @@ class JSONGenerator:
         self.device = self.get_device()
         logger.info(f"Using device: {self.device}")
         try:
-            # Initialize the model using the new outlines API
-            self.model = outlines.from_transformers(model_name, device=str(self.device))
+            # Initialize the model and tokenizer using the new outlines API
+            hf_model = AutoModelForCausalLM.from_pretrained(
+                model_name, 
+                device_map="auto" if str(self.device) != "cpu" else None,
+                torch_dtype=torch.float16 if str(self.device) != "cpu" else torch.float32
+            )
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            
+            # Create outlines model
+            self.model = outlines.from_transformers(hf_model, self.tokenizer)
             logger.info(f"Successfully loaded model: {model_name}")
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")

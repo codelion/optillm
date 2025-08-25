@@ -28,6 +28,7 @@ extract_optillm_approach = module.extract_optillm_approach
 get_config = module.get_config
 load_plugins = module.load_plugins
 count_reasoning_tokens = module.count_reasoning_tokens
+parse_args = module.parse_args
 
 # Export execution functions
 execute_single_approach = module.execute_single_approach
@@ -50,6 +51,7 @@ __all__ = [
     'get_config',
     'load_plugins',
     'count_reasoning_tokens',
+    'parse_args',
     'execute_single_approach',
     'execute_combined_approaches',
     'execute_parallel_approaches',

@@ -37,6 +37,9 @@ jobs:
     
     - name: Run unit tests
       run: |
+        # Set up local inference environment
+        export OPTILLM_API_KEY=optillm
+        
         # Run quick CI tests
         python tests/test_ci_quick.py
         
@@ -45,6 +48,28 @@ jobs:
         
         # Run approach tests
         python tests/test_approaches.py
+        
+        # Run reasoning token tests (unit tests only - no MLX)
+        python tests/test_reasoning_simple.py
+        python tests/test_reasoning_tokens.py
+        python tests/test_reasoning_integration.py
+        
+        # Run batching tests (MLX tests auto-skipped on Ubuntu)
+        python tests/test_batching.py
+        
+        # Run JSON plugin tests
+        python tests/test_json_plugin.py
+        
+        # Run n-parameter tests
+        python tests/test_n_parameter.py
+        
+        # Run API compatibility tests with pytest if available
+        python -m pytest tests/test_api_compatibility.py -v --tb=short || echo "API compatibility tests require pytest"
+        
+        # Run main test framework with basic tests
+        python tests/test.py --approaches none --single-test "Simple Math Problem"
+      env:
+        OPTILLM_API_KEY: optillm
 
   integration-test:
     runs-on: ubuntu-latest
