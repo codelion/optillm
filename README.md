@@ -78,7 +78,7 @@ OptiLLM delivers measurable improvements across diverse benchmarks:
 | **MOA** | GPT-4o-mini | **Matches GPT-4** | Arena-Hard-Auto |
 | **PlanSearch** | GPT-4o-mini | **+20% pass@5** | LiveCodeBench |
 
-*Full benchmark results below* ⬇️
+*Full benchmark results [below](#sota-results-on-benchmarks-with-optillm)* ⬇️
 
 ## 🏗️ Installation
 
