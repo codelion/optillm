@@ -63,7 +63,7 @@ response = client.chat.completions.create(
 )
 ```
 
-**Before OptiLLM**: "x = 2" ❌  
+**Before OptiLLM**: "x = 1" ❌  
 **After OptiLLM**: "Let me work through this step by step: 2x + 3 = 7, so 2x = 4, therefore x = 2" ✅
 
 ## 📊 Proven Results
