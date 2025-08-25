@@ -348,14 +348,6 @@ class TestIntegration(unittest.TestCase):
             self.assertTrue(args.batch_mode)
             self.assertEqual(args.batch_size, 8)
             self.assertEqual(args.batch_wait_ms, 25)
-    
-    @unittest.skipIf(not os.path.exists("/Users/asankhaya/Documents/GitHub/optillm/test_models"), 
-                     "Test models not available")
-    def test_end_to_end_batching(self):
-        """Test complete batching workflow"""
-        # This would test the full pipeline with actual models
-        # For now, we'll skip unless test models are available
-        pass
 
 
 class TestErrorHandling(unittest.TestCase):
