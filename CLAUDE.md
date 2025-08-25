@@ -120,6 +120,7 @@ python scripts/eval_optillmbench.py
 - MCP: `~/.optillm/mcp_config.json` for Model Context Protocol servers
 - SPL: Built-in system prompt learning for solving strategies
 - Memory: Automatic unbounded context via chunking and retrieval
+- GenSelect: Quality-based selection from multiple generated candidates
 
 ## Key Concepts
 
