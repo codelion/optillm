@@ -229,4 +229,4 @@ Obtaining B Corp certification presents a compelling strategic opportunity for c
 [68] Social Enterprise and B Corp: Are They Any Different?. Available at: https://singaporelegaladvice.com/law-articles/social-enterprise-b-corp-different/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

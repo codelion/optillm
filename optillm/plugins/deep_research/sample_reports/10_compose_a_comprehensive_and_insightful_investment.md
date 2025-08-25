@@ -399,4 +399,4 @@ The future of manufacturing competitiveness will increasingly depend on organiza
 [59] 1 The Impact of Lead Time Variability on Supply Chain .... Available at: https://iprjb.org/journals/index.php/IJSCM/article/download/3075/4204/9713?srsltid=AfmBOoqNU6e-vPwp3vc9wgY2r3cTzVWOyizF9iaa6PaN9mcb-e0vsF-k [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

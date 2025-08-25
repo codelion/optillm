@@ -133,4 +133,4 @@ Circle has established itself as a significant player in the stablecoin market, 
 [26] Circle: A Pillar Of The Burgeoning Stablecoin Market Faces .... Available at: https://seekingalpha.com/article/4797360-circle-a-pillar-of-the-burgeoning-stablecoin-market-faces-some-key-tests [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

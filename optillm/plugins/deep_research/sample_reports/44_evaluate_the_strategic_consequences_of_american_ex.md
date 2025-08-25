@@ -137,4 +137,4 @@ The US export restrictions on Chinese semiconductor firms represent a significan
 [32] How Innovative Is China in Semiconductors?. Available at: https://itif.org/publications/2024/08/19/how-innovative-is-china-in-semiconductors/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

@@ -209,4 +209,4 @@ The microbial protein production industry represents a dynamic and rapidly evolv
 [37] Dynamic Trends Shaping the Future of Microbial .... Available at: https://www.agcbio.com/biopharma-blog/dynamic-trends-shaping-the-future-of-microbial-fermentation [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

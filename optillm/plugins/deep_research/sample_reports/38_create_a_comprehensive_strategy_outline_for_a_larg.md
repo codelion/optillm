@@ -103,4 +103,4 @@ The separation and launch of [SaaS Unit Name] as an independent entity represent
 [28] Legal Implications of Corporate Spin-Offs, Divestitures, and .... Available at: https://www.researchgate.net/publication/388659649_Legal_Implications_of_Corporate_Spin-Offs_Divestitures_and_Corporate_Restructuring_Key_Considerations_for_Business_Leaders_and_Legal_Counsel [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

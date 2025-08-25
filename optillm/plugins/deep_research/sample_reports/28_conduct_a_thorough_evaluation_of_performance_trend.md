@@ -239,4 +239,4 @@ The mid-market private equity buyout sector is characterized by a robust and evo
 [59] Middle-market company. Available at: https://en.wikipedia.org/wiki/Middle-market_company [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

@@ -276,4 +276,4 @@ Understanding these dynamics is essential for comprehending the strategic landsc
 [32] Poison Pill: A Defense Strategy and Shareholder Rights Plan. Available at: https://www.investopedia.com/terms/p/poisonpill.asp [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

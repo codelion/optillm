@@ -189,4 +189,4 @@ Revolut's revenue is generated from a diversified set of streams, including:
 [22] What is Competitive Landscape of Revolut Company?. Available at: https://canvasbusinessmodel.com/blogs/competitors/revolut-competitive-landscape?srsltid=AfmBOoqZthYX7NBePO74g16HmF05JSzkcsC-LmG0bbXkvQc7sbOOLqZ6 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

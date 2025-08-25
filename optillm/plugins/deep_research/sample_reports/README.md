@@ -1,6 +1,6 @@
 # Deep Research Sample Reports
 
-This directory contains sample research reports generated using the [OptILLM Deep Research plugin](https://github.com/codelion/optillm) implementing the TTD-DR (Test-Time Diffusion Deep Researcher) algorithm from the paper ["Test-Time Diffusion Deep Researcher (TTD-DR): Think More, Research More, Answer Better!"](https://arxiv.org/abs/2507.16075v1).
+This directory contains sample research reports generated using the [OptiLLM Deep Research plugin](https://github.com/codelion/optillm) implementing the TTD-DR (Test-Time Diffusion Deep Researcher) algorithm from the paper ["Test-Time Diffusion Deep Researcher (TTD-DR): Think More, Research More, Answer Better!"](https://arxiv.org/abs/2507.16075v1).
 
 ## About TTD-DR
 
@@ -78,7 +78,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="your-api-key",
-    base_url="http://localhost:8000/v1"  # OptILLM proxy
+    base_url="http://localhost:8000/v1"  # OptiLLM proxy
 )
 
 response = client.chat.completions.create(

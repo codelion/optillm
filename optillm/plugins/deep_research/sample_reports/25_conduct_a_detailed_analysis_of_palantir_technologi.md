@@ -229,4 +229,4 @@ While the commercial segment is growing, Palantir should continue to strategical
 [51] Warp Speed. Available at: https://www.palantir.com/warpspeed/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

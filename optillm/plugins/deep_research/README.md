@@ -22,7 +22,7 @@ deep_research/
 ├── research_engine.py       # Core TTD-DR implementation
 └── README.md               # This documentation
 
-../deep_research_plugin.py  # OptILLM plugin interface
+../deep_research_plugin.py  # OptiLLM plugin interface
 ```
 
 ### Key Components
@@ -41,7 +41,7 @@ The core implementation of the TTD-DR algorithm with the following key methods:
 
 #### 2. Plugin Interface (`deep_research_plugin.py`)
 
-Minimal interface that integrates with OptILLM's plugin system:
+Minimal interface that integrates with OptiLLM's plugin system:
 
 ```python
 def run(system_prompt: str, initial_query: str, client, model: str, request_config: Optional[Dict] = None) -> Tuple[str, int]
@@ -101,7 +101,7 @@ request_config = {
 
 ## Dependencies
 
-The Deep Research plugin requires these OptILLM plugins:
+The Deep Research plugin requires these OptiLLM plugins:
 
 - **`web_search`** - Chrome-based Google search automation
 - **`readurls`** - Content extraction from URLs
@@ -137,7 +137,7 @@ result, tokens = run(
 )
 ```
 
-### With OptILLM Server
+### With OptiLLM Server
 
 ```python
 from openai import OpenAI

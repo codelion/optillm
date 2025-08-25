@@ -163,4 +163,4 @@ The global lithium landscape is characterized by robust demand growth, driven by
 [56] Essential Insights: Lithium Costs & Margins. Available at: https://pages.marketintelligence.spglobal.com/Lithium-brine-vs-hard-rock-demo-confirmation-MJ-ad.html#:~:text=In%202019%2C%20the%20average%20total,LCE%20across%20nine%20brine%20operations. [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

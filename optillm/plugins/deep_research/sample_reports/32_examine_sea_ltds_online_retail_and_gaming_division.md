@@ -139,4 +139,4 @@ Sea Ltd. has successfully established formidable platforms in Shopee and Garena,
 [33] Vietnam introduces two major e-commerce regulations. Available at: https://rouse.com/insights/news/2025/vietnam-introduces-two-major-e-commerce-regulations [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

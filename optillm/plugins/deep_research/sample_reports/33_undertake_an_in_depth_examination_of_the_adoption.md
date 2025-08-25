@@ -170,4 +170,4 @@ Addressing barriers such as upfront cost, range anxiety, and charging infrastruc
 [17] Navigating the complex realities of electric vehicle adoption. Available at: https://www.sciencedirect.com/science/article/pii/S2211467X24000865 [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

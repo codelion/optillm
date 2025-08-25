@@ -237,4 +237,4 @@ Accel demonstrates a well-defined and globally-oriented approach to initial-stag
 [72] Comprehensive Analysis Report: Accel Partners. Available at: https://www.mool.ai/information/comprehensive-analysis-report-accel-partners [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

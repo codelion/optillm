@@ -14,7 +14,7 @@ Based on the paper "Deep Think with Confidence" by Fu et al. (2024), DeepConf im
 
 ## Features
 
-- ✅ **Local models only** - Works with OptILLM's local inference engine
+- ✅ **Local models only** - Works with OptiLLM's local inference engine
 - ✅ **Two variants**: `low` (aggressive, top 10%) and `high` (conservative, top 90%)
 - ✅ **Configurable parameters** for different use cases
 - ✅ **Early termination** to reduce token usage by 50-70%
@@ -24,7 +24,7 @@ Based on the paper "Deep Think with Confidence" by Fu et al. (2024), DeepConf im
 
 ### Basic Usage
 
-Set up OptILLM for local inference:
+Set up OptiLLM for local inference:
 
 ```bash
 export OPTILLM_API_KEY=optillm
@@ -120,7 +120,7 @@ DeepConf typically achieves:
 ## Requirements
 
 - Local model inference (PyTorch)
-- OptILLM with `OPTILLM_API_KEY=optillm`
+- OptiLLM with `OPTILLM_API_KEY=optillm`
 - Compatible with transformer models that provide logits access
 
 ## Limitations

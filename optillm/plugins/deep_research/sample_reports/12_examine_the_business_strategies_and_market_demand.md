@@ -597,4 +597,4 @@ The sector's trajectory toward increased sophistication, global accessibility, a
 [29] Exploring the Legal Frontier of Space and Satellite Innovation. Available at: https://www.morganlewis.com/pubs/2025/05/exploring-the-legal-frontier-of-space-and-satellite-innovation [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

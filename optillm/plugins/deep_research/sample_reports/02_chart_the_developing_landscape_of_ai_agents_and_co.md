@@ -119,4 +119,4 @@ The landscape of AI agents and their supporting technologies is exceptionally dy
 [12] Reinforcement Learning: Applications in Gaming, Robotics .... Available at: https://www.researchgate.net/publication/390582934_Reinforcement_Learning_Applications_in_Gaming_Robotics_and_Real-World_Decision-Making#:~:text=Applications%20include%20robotic%20manipulation%2C%20autonomous,%2Dworld%20decision%2Dmaking%20processes. [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

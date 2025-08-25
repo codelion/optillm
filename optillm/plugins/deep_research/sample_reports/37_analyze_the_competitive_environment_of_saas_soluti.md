@@ -205,4 +205,4 @@ The SaaS solutions market for e-commerce businesses is dynamic and intensely com
 [28] Best CRM Software for Retail | 2025 Platform Comparison. Available at: https://voyado.com/resources/blog/best-crm-software-for-retail/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

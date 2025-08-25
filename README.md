@@ -641,7 +641,7 @@ called patchflows. We saw huge performance gains across all the supported patchf
 
 ## Testing
 
-OptILLM includes a comprehensive test suite to ensure reliability and compatibility.
+OptiLLM includes a comprehensive test suite to ensure reliability and compatibility.
 
 ### Running Tests
 

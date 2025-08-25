@@ -61,4 +61,4 @@ The field of AI-enhanced drug discovery presents a compelling and rapidly evolvi
 [4] The Role of AI in Drug Discovery: Challenges .... Available at: https://pmc.ncbi.nlm.nih.gov/articles/PMC10302890/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

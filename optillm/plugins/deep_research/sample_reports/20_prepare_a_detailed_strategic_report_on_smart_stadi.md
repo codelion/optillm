@@ -251,4 +251,4 @@ The primary motivations behind these M&A activities include:
 [21] The application of big data analytics in sports as a tool for .... Available at: https://www.researchgate.net/publication/388383788_The_application_of_big_data_analytics_in_sports_as_a_tool_for_personalized_fan_experience_operations_efficiency_and_fan_engagement_strategy [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

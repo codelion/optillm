@@ -157,4 +157,4 @@ A thorough understanding of these dynamics, supported by robust data and analysi
 [10] Health Care Costs and Affordability. Available at: https://www.kff.org/health-policy-101-health-care-costs-and-affordability/ [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

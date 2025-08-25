@@ -147,4 +147,4 @@ The "Unbanked Market Access" represents a complex yet highly promising domain. S
 [25] The Role of Regulatory Sandboxes in FinTech Innovation. Available at: https://www.mdpi.com/2674-1032/4/2/26 [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

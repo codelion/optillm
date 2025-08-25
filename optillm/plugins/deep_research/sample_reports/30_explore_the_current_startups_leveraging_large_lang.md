@@ -243,4 +243,4 @@ Startups are actively and rapidly innovating by leveraging Large Language Models
 [52] AI Search Optimization: 8 Steps to Rank in AI Results. Available at: https://surferseo.com/blog/ai-search-optimization/ [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

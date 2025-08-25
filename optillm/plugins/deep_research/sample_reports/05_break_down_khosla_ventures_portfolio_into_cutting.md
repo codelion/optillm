@@ -123,4 +123,4 @@ Khosla Ventures has firmly established itself as a significant force in the vent
 [16] Portfolio. Available at: https://www.khoslaventures.com/portfolio/ [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

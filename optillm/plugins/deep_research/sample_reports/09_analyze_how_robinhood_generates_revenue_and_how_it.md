@@ -364,4 +364,4 @@ Robinhood's ability to continue adapting its offerings and business model while 
 [61] Investor Relations | Robinhood Markets, Inc.. Available at: https://investors.robinhood.com/ [Accessed: 2025-07-25]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*

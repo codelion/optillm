@@ -215,4 +215,4 @@ Emerging technologies are unequivocally revolutionizing workforce reskilling pla
 [36] Gig Economy: Adapting To Work Through Skill Development. Available at: https://elearningindustry.com/skills-for-gig-economy-adapting-to-flexible-work-environments-through-skill-development [Accessed: 2025-07-26]
 
 ---
-*Generated using [OptILLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
+*Generated using [OptiLLM Deep Research](https://github.com/codelion/optillm) with TTD-DR (Test-Time Diffusion Deep Researcher)*
