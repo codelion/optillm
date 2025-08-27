@@ -696,7 +696,6 @@ def proxy():
     default_client, api_key = get_config()
 
     operation, approaches, model = parse_combined_approach(model, known_approaches, plugin_approaches)
-    logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}')
 
     # Start conversation logging if enabled
     request_id = None
@@ -712,6 +711,12 @@ def proxy():
             approach=approaches[0] if len(approaches) == 1 else f"{operation}({','.join(approaches)})",
             model=model
         )
+
+    # Log approach and request start with ID for terminal monitoring
+    request_id_str = f' [Request: {request_id}]' if request_id else ''
+    logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}{request_id_str}')
+    if request_id:
+        logger.info(f'Request {request_id}: Starting processing')
 
     if bearer_token != "" and bearer_token.startswith("sk-"):
         api_key = bearer_token
@@ -763,8 +768,12 @@ def proxy():
                 conversation_logger.finalize_conversation(request_id)
 
             if stream:
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed (streaming response)')
                 return Response(generate_streaming_response(extract_contents(result), model), content_type='text/event-stream') 
             else :
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed')
                 return jsonify(result), 200
             
         elif operation == 'AND' or operation == 'OR':
@@ -780,7 +789,8 @@ def proxy():
             conversation_logger.log_error(request_id, str(e))
             conversation_logger.finalize_conversation(request_id)
         
-        logger.error(f"Error processing request: {str(e)}")
+        request_id_str = f' {request_id}' if request_id else ''
+        logger.error(f"Error processing request{request_id_str}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
     # Convert tagged conversation to messages format if needed
@@ -844,6 +854,8 @@ def proxy():
             conversation_logger.finalize_conversation(request_id)
 
         logger.debug(f'API response: {response_data}')
+        if request_id:
+            logger.info(f'Request {request_id}: Completed')
         return jsonify(response_data), 200
 
 @app.route('/v1/models', methods=['GET'])
