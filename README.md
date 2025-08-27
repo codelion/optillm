@@ -287,7 +287,7 @@ and then use the same in your OpenAI client. You can pass any HuggingFace model 
 with your HuggingFace key. We also support adding any number of LoRAs on top of the model by using the `+` separator.
 
 E.g. The following code loads the base model `meta-llama/Llama-3.2-1B-Instruct` and then adds two LoRAs on top - `patched-codes/Llama-3.2-1B-FixVulns` and `patched-codes/Llama-3.2-1B-FastApply`.
-You can specify which LoRA to use using the `active_adapter` param in `extra_args` field of OpenAI SDK client. By default we will load the last specified adapter.
+You can specify which LoRA to use using the `active_adapter` param in `extra_body` field of OpenAI SDK client. By default we will load the last specified adapter.
 
 ```python
 OPENAI_BASE_URL = "http://localhost:8000/v1"
