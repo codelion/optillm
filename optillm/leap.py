@@ -2,16 +2,18 @@ import logging
 import re
 from typing import List, Tuple
 import json
+import optillm
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class LEAP:
-    def __init__(self, system_prompt: str, client, model: str):
+    def __init__(self, system_prompt: str, client, model: str, request_id: str = None):
         self.system_prompt = system_prompt
         self.client = client
         self.model = model
+        self.request_id = request_id
         self.low_level_principles = []
         self.high_level_principles = []
         self.leap_completion_tokens = 0
@@ -22,10 +24,12 @@ class LEAP:
 
     def extract_examples_from_query(self, initial_query: str) -> List[Tuple[str, str]]:
         logger.info("Extracting examples from initial query")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"""
                 Analyze the following query and determine if it contains few-shot examples.
@@ -46,7 +50,15 @@ class LEAP:
                 Query: {initial_query}
                 """}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+            
         self.leap_completion_tokens += response.usage.completion_tokens
         examples_str = self.extract_output(response.choices[0].message.content)
         logger.debug(f"Extracted examples: {examples_str}")
@@ -67,10 +79,11 @@ class LEAP:
         logger.info("Generating mistakes for given examples")
         mistakes = []
         for question, correct_answer in examples:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[
+            # Prepare request for logging
+            provider_request = {
+                "model": self.model,
+                "max_tokens": 4096,
+                "messages": [
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": f"""
                     Instruction: Answer the following question step by step. To induce a mistake, 
@@ -80,8 +93,15 @@ class LEAP:
                     Think step by step, but make sure to include a mistake.
                     """}
                 ],
-                temperature=0.7,
-            )
+                "temperature": 0.7,
+            }
+            
+            response = self.client.chat.completions.create(**provider_request)
+            
+            # Log provider call if conversation logging is enabled
+            if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
             self.leap_completion_tokens += response.usage.completion_tokens
             generated_reasoning = response.choices[0].message.content
             generated_answer = self.extract_output(generated_reasoning)
@@ -92,10 +112,11 @@ class LEAP:
     def generate_low_level_principles(self, mistakes: List[Tuple[str, str, str, str]]) -> List[str]:
         logger.info("Generating low-level principles from mistakes")
         for question, generated_reasoning, generated_answer, correct_answer in mistakes:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[
+            # Prepare request for logging
+            provider_request = {
+                "model": self.model,
+                "max_tokens": 4096,
+                "messages": [
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": f"""
                     Question: {question}
@@ -112,7 +133,14 @@ class LEAP:
                     Insights: Enclose ONLY the principles or insights within <output></output> tags.
                     """}
                 ]
-            )
+            }
+            
+            response = self.client.chat.completions.create(**provider_request)
+            
+            # Log provider call if conversation logging is enabled
+            if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
             self.leap_completion_tokens += response.usage.completion_tokens
             self.low_level_principles.append(self.extract_output(response.choices[0].message.content))
         return self.low_level_principles
@@ -120,10 +148,11 @@ class LEAP:
     def generate_high_level_principles(self) -> List[str]:
         logger.info("Generating high-level principles from low-level principles")
         principles_text = "\n".join(self.low_level_principles)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"""
                 Low-level principles: {principles_text}
@@ -137,7 +166,14 @@ class LEAP:
                 Enclose your list of principles within <output></output> tags.
                 """}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.leap_completion_tokens += response.usage.completion_tokens
         self.high_level_principles = self.extract_output(response.choices[0].message.content).split("\n")
         return self.high_level_principles
@@ -145,10 +181,11 @@ class LEAP:
     def apply_principles(self, query: str) -> str:
         logger.info("Applying learned principles to query")
         principles_text = "\n".join(self.high_level_principles)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"""
                 Please answer the following query. Keep in mind these principles:
@@ -158,7 +195,14 @@ class LEAP:
                 Query: {query}
                 """}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.leap_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content
 
@@ -175,6 +219,6 @@ class LEAP:
         
         return self.apply_principles(initial_query)
 
-def leap(system_prompt: str, initial_query: str, client, model: str) -> str:
-    leap_solver = LEAP(system_prompt, client, model)
+def leap(system_prompt: str, initial_query: str, client, model: str, request_id: str = None) -> str:
+    leap_solver = LEAP(system_prompt, client, model, request_id)
     return leap_solver.solve(initial_query), leap_solver.leap_completion_tokens

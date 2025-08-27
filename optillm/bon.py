@@ -1,8 +1,9 @@
 import logging
+import optillm
 
 logger = logging.getLogger(__name__)
 
-def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: str, n: int = 3) -> str:
+def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: str, n: int = 3, request_id: str = None) -> str:
     bon_completion_tokens = 0
 
     messages = [{"role": "system", "content": system_prompt},
@@ -12,13 +13,20 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
     
     try:
         # Try to generate n completions in a single API call using n parameter
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=4096,
-            n=n,
-            temperature=1
-        )
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 4096,
+            "n": n,
+            "temperature": 1
+        }
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        
         completions = [choice.message.content for choice in response.choices]
         logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
         bon_completion_tokens += response.usage.completion_tokens
@@ -30,12 +38,19 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         # Fallback: Generate completions one by one in a loop
         for i in range(n):
             try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=4096,
-                    temperature=1
-                )
+                provider_request = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 4096,
+                    "temperature": 1
+                }
+                response = client.chat.completions.create(**provider_request)
+                
+                # Log provider call
+                if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+                    response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                    optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+                
                 completions.append(response.choices[0].message.content)
                 bon_completion_tokens += response.usage.completion_tokens
                 logger.debug(f"Generated completion {i+1}/{n}")
@@ -59,13 +74,20 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         rating_messages.append({"role": "assistant", "content": completion})
         rating_messages.append({"role": "user", "content": "Rate the above response:"})
         
-        rating_response = client.chat.completions.create(
-            model=model,
-            messages=rating_messages,
-            max_tokens=256,
-            n=1,
-            temperature=0.1
-        )
+        provider_request = {
+            "model": model,
+            "messages": rating_messages,
+            "max_tokens": 256,
+            "n": 1,
+            "temperature": 0.1
+        }
+        rating_response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = rating_response.model_dump() if hasattr(rating_response, 'model_dump') else rating_response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        
         bon_completion_tokens += rating_response.usage.completion_tokens
         try:
             rating = float(rating_response.choices[0].message.content.strip())

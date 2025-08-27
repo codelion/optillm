@@ -1,6 +1,7 @@
 import re
 import yaml
 import json
+import optillm
 
 from dataclasses import dataclass
 from typing import Literal, Any, Optional
@@ -58,7 +59,7 @@ def extract_question_only(task: str) -> str:
     return question_only
 
 
-def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig, approach: Optional[str] = None) -> str:
+def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig, approach: Optional[str] = None, request_id: str = None) -> str:
     """
     Generates a completion based on the provided system prompt and task.
 
@@ -94,13 +95,22 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
                       f"to execute it correctly. Here is the question:\n{question_only}\nRead the question again:\n\n{question_only}" 
 
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": content}]
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=cepo_config.planning_max_tokens_step1,
-            temperature=cepo_config.planning_temperature_step1,
-            stream=False,
-        )
+        
+        # Prepare request for logging
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": cepo_config.planning_max_tokens_step1,
+            "temperature": cepo_config.planning_temperature_step1,
+            "stream": False,
+        }
+        
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         completion_tokens += response.usage.completion_tokens
 
         if response.choices[0].finish_reason == "length":
@@ -111,13 +121,22 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         content = f"Can you execute the above plan step-by-step to produce the final answer. "\
                   f"Be extra careful when executing steps where your confidence is lower."
         messages.extend([{"role": "assistant", "content": response.choices[0].message.content}, {"role": "user", "content": content}])
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=cepo_config.planning_max_tokens_step2,
-            temperature=cepo_config.planning_temperature_step2,
-            stream=False,
-        )
+        
+        # Prepare request for logging
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": cepo_config.planning_max_tokens_step2,
+            "temperature": cepo_config.planning_temperature_step2,
+            "stream": False,
+        }
+        
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         completion_tokens += response.usage.completion_tokens
 
         if response.choices[0].finish_reason == "length":
@@ -154,13 +173,21 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
                   f"it and present a final step-by-step solution to the problem? Here is the question:\n{question_only}"
         messages = [{"role": "assistant", "content": plans_message}, {"role": "user", "content": content}]
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=cepo_config.planning_max_tokens_step3,
-            temperature=cepo_config.planning_temperature_step3,
-            stream=False,
-        )
+        # Prepare request for logging
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": cepo_config.planning_max_tokens_step3,
+            "temperature": cepo_config.planning_temperature_step3,
+            "stream": False,
+        }
+        
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         final_solution = response.choices[0].message.content
         completion_tokens += response.usage.completion_tokens
     except (CerebrasBadRequestError, OpenAIBadRequestError) as e:
@@ -172,13 +199,21 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     content = f"Use your final solution from above to correctly answer the question. Here is the question:\n{task}"
     messages = [{"role": "assistant", "content": final_solution}, {"role": "user", "content": content}]
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=cepo_config.planning_max_tokens_step4,
-        temperature=cepo_config.planning_temperature_step4,
-        stream=False,
-    )
+    # Prepare request for logging
+    provider_request = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": cepo_config.planning_max_tokens_step4,
+        "temperature": cepo_config.planning_temperature_step4,
+        "stream": False,
+    }
+    
+    response = client.chat.completions.create(**provider_request)
+    
+    # Log provider call if conversation logging is enabled
+    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
     completion_tokens += response.usage.completion_tokens
 
     cb_log["messages"] = messages
@@ -187,7 +222,7 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     return response.choices[0].message.content, completion_tokens, cb_log
 
 
-def generate_approaches(system_prompt: str, initial_query: str, num_approach: int, client: Any, model: str, cepo_config: CepoConfig, max_retry: int = 2) -> tuple[list[str], int]:
+def generate_approaches(system_prompt: str, initial_query: str, num_approach: int, client: Any, model: str, cepo_config: CepoConfig, max_retry: int = 2, request_id: str = None) -> tuple[list[str], int]:
     completion_tokens = 0
     question_only = extract_question_only(initial_query)
     approaches = []
@@ -205,13 +240,21 @@ def generate_approaches(system_prompt: str, initial_query: str, num_approach: in
     retries = 0
     while retries < max_retry:
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=cepo_config.planning_max_tokens_step0,
-                temperature=cepo_config.planning_temperature_step0,
-                stream=False,
-            )
+            # Prepare request for logging
+            provider_request = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": cepo_config.planning_max_tokens_step0,
+                "temperature": cepo_config.planning_temperature_step0,
+                "stream": False,
+            }
+            
+            response = client.chat.completions.create(**provider_request)
+            
+            # Log provider call if conversation logging is enabled
+            if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
             completion_tokens += response.usage.completion_tokens
             completion = response.choices[0].message.content 
 
@@ -265,6 +308,7 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
             client=client,
             model=model,
             cepo_config=cepo_config,
+            request_id=request_id
         )
         cb_log["approaches"] = approaches
         completion_tokens += approach_completion_tokens
@@ -275,7 +319,7 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
         if cepo_config.print_output:
             print(f"\nCePO: Generating completion {i + 1} out of {cepo_config.bestofn_n} \n")
         approach = approaches[i] if approaches else None
-        response_i, completion_tokens_i, cb_log_i = generate_completion(system_prompt, initial_query, client, model, cepo_config, approach)
+        response_i, completion_tokens_i, cb_log_i = generate_completion(system_prompt, initial_query, client, model, cepo_config, approach, request_id)
         completions.append(response_i)
         completion_tokens += completion_tokens_i
         cb_log[f"completion_{i}_response"] = response_i
@@ -285,7 +329,7 @@ def generate_n_completions(system_prompt: str, initial_query: str, client: Any, 
     return completions, completion_tokens, cb_log
 
 
-def rate_completions_absolute(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+def rate_completions_absolute(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict, request_id: str = None) -> tuple[str, int, dict]:
     """
     Rates completions for the Best of N step of CePO. Each completion is rated on a scale of 1 to 10 individually.
 
@@ -327,12 +371,20 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
                   "by strictly following this format: \"Explanation: <reason for your rating>\n\nRating: [[rating]]\"."
         rating_messages.append({"role": "user", "content": content})
 
-        rating_response = client.chat.completions.create(
-            model=model,
-            messages=rating_messages,
-            max_tokens=cepo_config.bestofn_max_tokens,
-            temperature=cepo_config.bestofn_temperature
-        )
+        # Prepare request for logging
+        provider_request = {
+            "model": model,
+            "messages": rating_messages,
+            "max_tokens": cepo_config.bestofn_max_tokens,
+            "temperature": cepo_config.bestofn_temperature
+        }
+        
+        rating_response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = rating_response.model_dump() if hasattr(rating_response, 'model_dump') else rating_response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         completion_tokens += rating_response.usage.completion_tokens
         
         rating_response = rating_response.choices[0].message.content.strip()
@@ -359,7 +411,7 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
     return completions[best_index], completion_tokens, cb_log
 
 
-def rate_completions_pairwise(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict) -> tuple[str, int, dict]:
+def rate_completions_pairwise(system_prompt: str, initial_query: str, client: Any, model: str, completions: list[str], cepo_config: CepoConfig, cb_log: dict, request_id: str = None) -> tuple[str, int, dict]:
     """
     Rates completions for the Best of N step of CePO. Completions are rated pairwise against each other in both orders (A vs B and B vs A).
 
@@ -405,12 +457,20 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
                    "If the second response is better, reply with \"Better Response: [[1]]\"."
         rating_messages.append({"role": "system", "content": content})
 
-        rating_response = client.chat.completions.create(
-            model=model,
-            messages=rating_messages,
-            max_tokens=cepo_config.bestofn_max_tokens,
-            temperature=cepo_config.bestofn_temperature
-        )
+        # Prepare request for logging
+        provider_request = {
+            "model": model,
+            "messages": rating_messages,
+            "max_tokens": cepo_config.bestofn_max_tokens,
+            "temperature": cepo_config.bestofn_temperature
+        }
+        
+        rating_response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = rating_response.model_dump() if hasattr(rating_response, 'model_dump') else rating_response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         completion_tokens += rating_response.usage.completion_tokens
         
         rating_response = rating_response.choices[0].message.content.strip()
@@ -440,7 +500,7 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
     return completions[best_index], completion_tokens, cb_log
 
 
-def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig) -> tuple[str, int]:
+def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig, request_id: str = None) -> tuple[str, int]:
     """
     Applies CePO reasoning flow for the given task. First, it generates multiple completions, and then rates them to select the best one.
     Each completion is generated as follows:
@@ -477,6 +537,6 @@ def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_c
         raise ValueError("Invalid rating type in cepo_config")
     rating_model = cepo_config.rating_model if cepo_config.rating_model else model
     
-    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log)
+    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
     
     return best_completion, completion_tokens_planning + completion_tokens_rating
