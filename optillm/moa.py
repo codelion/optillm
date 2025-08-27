@@ -1,5 +1,6 @@
 import logging
 import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
         
         # Log provider call if conversation logging is enabled
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        if request_id:
+            conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         
         completions = [choice.message.content for choice in response.choices]
         moa_completion_tokens += response.usage.completion_tokens
@@ -60,8 +61,8 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
                 response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
                 
                 # Log provider call if conversation logging is enabled
-                if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-                    optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+                if request_id:
+                    conversation_logger.log_provider_call(request_id, provider_request, response_dict)
                 
                 completions.append(response.choices[0].message.content)
                 moa_completion_tokens += response.usage.completion_tokens
@@ -122,8 +123,8 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
     response_dict = critique_response.model_dump() if hasattr(critique_response, 'model_dump') else critique_response
     
     # Log provider call if conversation logging is enabled
-    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+    if request_id:
+        conversation_logger.log_provider_call(request_id, provider_request, response_dict)
     
     critiques = critique_response.choices[0].message.content
     moa_completion_tokens += critique_response.usage.completion_tokens
@@ -169,8 +170,8 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
     response_dict = final_response.model_dump() if hasattr(final_response, 'model_dump') else final_response
     
     # Log provider call if conversation logging is enabled
-    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+    if request_id:
+        conversation_logger.log_provider_call(request_id, provider_request, response_dict)
     
     moa_completion_tokens += final_response.usage.completion_tokens
     logger.info(f"Generated final response. Tokens used: {final_response.usage.completion_tokens}")

@@ -10,6 +10,7 @@ import math
 import multiprocessing
 import traceback
 import optillm
+from optillm import conversation_logger
 
 class TimeoutException(Exception):
     pass

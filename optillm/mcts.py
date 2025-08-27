@@ -4,6 +4,7 @@ import numpy as np
 import networkx as nx
 from typing import List, Dict
 import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +124,9 @@ class MCTS:
         response = self.client.chat.completions.create(**provider_request)
         
         # Log provider call
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+        if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         
         completions = [choice.message.content.strip() for choice in response.choices]
         self.completion_tokens += response.usage.completion_tokens
@@ -152,9 +153,9 @@ class MCTS:
         response = self.client.chat.completions.create(**provider_request)
         
         # Log provider call
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+        if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         
         next_query = response.choices[0].message.content
         self.completion_tokens += response.usage.completion_tokens
@@ -182,9 +183,9 @@ class MCTS:
         response = self.client.chat.completions.create(**provider_request)
         
         # Log provider call
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+        if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         
         self.completion_tokens += response.usage.completion_tokens
         try:

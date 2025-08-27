@@ -34,6 +34,7 @@ from optillm.reread import re2_approach
 from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 from optillm.batching import RequestBatcher, BatchingError
 from optillm.conversation_logger import ConversationLogger
+import optillm.conversation_logger
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1133,6 +1134,8 @@ def main():
         log_dir=Path(server_config['conversation_log_dir']),
         enabled=server_config['log_conversations']
     )
+    # Set the global logger instance for access from approach modules
+    optillm.conversation_logger.set_global_logger(conversation_logger)
     if server_config['log_conversations']:
         logger.info(f"Conversation logging enabled. Logs will be saved to: {server_config['conversation_log_dir']}")
     

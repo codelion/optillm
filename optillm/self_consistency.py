@@ -2,6 +2,7 @@ import logging
 from typing import List, Dict
 from difflib import SequenceMatcher
 import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 

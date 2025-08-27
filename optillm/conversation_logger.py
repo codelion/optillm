@@ -10,6 +10,9 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Global logger instance - will be set by optillm.py
+_global_logger: Optional['ConversationLogger'] = None
+
 @dataclass
 class ConversationEntry:
     """Represents a single conversation entry being logged"""
@@ -241,3 +244,22 @@ class ConversationLogger:
             })
         
         return stats
+
+
+# Module-level functions for easy access from approach modules
+def set_global_logger(logger_instance: 'ConversationLogger') -> None:
+    """Set the global logger instance (called by optillm.py)"""
+    global _global_logger
+    _global_logger = logger_instance
+
+
+def log_provider_call(request_id: str, provider_request: Dict[str, Any], provider_response: Dict[str, Any]) -> None:
+    """Log a provider call using the global logger instance"""
+    if _global_logger and _global_logger.enabled:
+        _global_logger.log_provider_call(request_id, provider_request, provider_response)
+
+
+def log_error(request_id: str, error_message: str) -> None:
+    """Log an error using the global logger instance"""
+    if _global_logger and _global_logger.enabled:
+        _global_logger.log_error(request_id, error_message)

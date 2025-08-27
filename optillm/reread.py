@@ -1,5 +1,6 @@
 import logging
 import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 

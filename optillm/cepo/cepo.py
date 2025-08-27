@@ -2,6 +2,7 @@ import re
 import yaml
 import json
 import optillm
+from optillm import conversation_logger
 
 from dataclasses import dataclass
 from typing import Literal, Any, Optional

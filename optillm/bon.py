@@ -1,5 +1,6 @@
 import logging
 import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         response = client.chat.completions.create(**provider_request)
         
         # Log provider call
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+        if request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+            conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         
         completions = [choice.message.content for choice in response.choices]
         logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
@@ -47,9 +48,9 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
                 response = client.chat.completions.create(**provider_request)
                 
                 # Log provider call
-                if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+                if request_id:
                     response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-                    optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+                    conversation_logger.log_provider_call(request_id, provider_request, response_dict)
                 
                 completions.append(response.choices[0].message.content)
                 bon_completion_tokens += response.usage.completion_tokens
@@ -84,9 +85,9 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         rating_response = client.chat.completions.create(**provider_request)
         
         # Log provider call
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+        if request_id:
             response_dict = rating_response.model_dump() if hasattr(rating_response, 'model_dump') else rating_response
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+            conversation_logger.log_provider_call(request_id, provider_request, response_dict)
         
         bon_completion_tokens += rating_response.usage.completion_tokens
         try:

@@ -7,6 +7,7 @@ import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
 import optillm
+from optillm import conversation_logger
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
