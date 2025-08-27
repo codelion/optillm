@@ -368,14 +368,20 @@ def parse_combined_approach(model: str, known_approaches: list, plugin_approache
 def execute_single_approach(approach, system_prompt, initial_query, client, model, request_config: dict = None, request_id: str = None):
     if approach in known_approaches:
         if approach == 'none':
-            # Extract kwargs from the request data
-            kwargs = {}
-            if hasattr(request, 'json'):
-                data = request.get_json()
-                messages = data.get('messages', [])
-                # Copy all parameters except 'stream', 'model' and 'messages'
-                kwargs = {k: v for k, v in data.items() 
-                         if k not in ['model', 'messages', 'stream', 'optillm_approach']}
+            # Use the request_config that was already prepared and passed to this function
+            kwargs = request_config.copy() if request_config else {}
+            
+            # Remove items that are handled separately by the framework
+            kwargs.pop('n', None)  # n is handled by execute_n_times
+            kwargs.pop('stream', None)  # stream is handled by proxy()
+            
+            # Reconstruct original messages from system_prompt and initial_query
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            if initial_query:
+                messages.append({"role": "user", "content": initial_query})
+            
             response = none_approach(original_messages=messages, client=client, model=model, request_id=request_id, **kwargs)
             # For none approach, we return the response and a token count of 0
             # since the full token count is already in the response
