@@ -6,6 +6,8 @@ import re
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+import optillm
+from optillm import conversation_logger
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,7 +23,7 @@ class Node:
         self.value = 0.0
 
 class RStar:
-    def __init__(self, system: str, client, model: str, max_depth: int = 3, num_rollouts: int = 5, c: float = 1.4):
+    def __init__(self, system: str, client, model: str, max_depth: int = 3, num_rollouts: int = 5, c: float = 1.4, request_id: str = None):
         self.client = client
         self.model_name = model
         self.max_depth = max_depth
@@ -31,6 +33,7 @@ class RStar:
         self.original_question = None 
         self.system = system
         self.rstar_completion_tokens = 0
+        self.request_id = request_id
         logger.debug(f"Initialized RStar with model: {model}, max_depth: {max_depth}, num_rollouts: {num_rollouts}")
 
     async def generate_response_async(self, prompt: str) -> str:
@@ -93,15 +96,22 @@ class RStar:
 
     def generate_response(self, prompt: str) -> str:
         logger.debug(f"Generating response for prompt: {prompt[:100]}...")
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
+        provider_request = {
+            "model": self.model_name,
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant focused on solving mathematical problems. Stick to the given question and avoid introducing new scenarios."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=4096,
-            temperature=0.2
-        )
+            "max_tokens": 4096,
+            "temperature": 0.2
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         self.rstar_completion_tokens += response.usage.completion_tokens
         generated_response = response.choices[0].message.content.strip()
         logger.debug(f"Generated response: {generated_response}")

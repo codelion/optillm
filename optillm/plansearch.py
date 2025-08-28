@@ -1,13 +1,16 @@
 import logging
 from typing import List, Tuple
+import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
 class PlanSearch:
-    def __init__(self, system_prompt: str, client, model: str):
+    def __init__(self, system_prompt: str, client, model: str, request_id: str = None):
         self.system_prompt = system_prompt
         self.client = client
         self.model = model
+        self.request_id = request_id
         self.plansearch_completion_tokens = 0
 
     def generate_observations(self, problem: str, num_observations: int = 3) -> List[str]:
@@ -21,14 +24,22 @@ Here is the competitive programming problem:
 
 Please provide {num_observations} observations."""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
         observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in observations if obs.strip()]
@@ -48,14 +59,22 @@ Here are the existing observations:
 
 Please provide {num_new_observations} new observations derived from the existing ones."""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
         new_observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in new_observations if obs.strip()]
@@ -73,14 +92,22 @@ go beyond what you would usually come up with and exceeds your narrow intuition.
 Quote relevant parts of the observations EXACTLY before each step of the solution. QUOTING
 IS CRUCIAL."""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content.strip()
 
@@ -98,14 +125,22 @@ Solution:
 
 Please implement the solution in Python."""
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
+        # Prepare request for logging
+        provider_request = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
             ]
-        )
+        }
+        
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
         return response.choices[0].message.content.strip()
 
@@ -133,6 +168,6 @@ Please implement the solution in Python."""
             solutions.append(python_implementation)
         return solutions
 
-def plansearch(system_prompt: str, initial_query: str, client, model: str, n: int = 1) -> List[str]:
-    planner = PlanSearch(system_prompt, client, model)
+def plansearch(system_prompt: str, initial_query: str, client, model: str, n: int = 1, request_id: str = None) -> List[str]:
+    planner = PlanSearch(system_prompt, client, model, request_id)
     return planner.solve_multiple(initial_query, n), planner.plansearch_completion_tokens

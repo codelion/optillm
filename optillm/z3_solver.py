@@ -9,6 +9,8 @@ import ast
 import math
 import multiprocessing
 import traceback
+import optillm
+from optillm import conversation_logger
 
 class TimeoutException(Exception):
     pass
@@ -131,12 +133,13 @@ def execute_code_in_process(code: str):
     return ("success", output_buffer.getvalue())
 
 class Z3SymPySolverSystem:
-    def __init__(self, system_prompt: str, client, model: str, timeout: int = 30):
+    def __init__(self, system_prompt: str, client, model: str, timeout: int = 30, request_id: str = None):
         self.system_prompt = system_prompt
         self.model = model
         self.client = client
         self.timeout = timeout
         self.solver_completion_tokens = 0
+        self.request_id = request_id
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def process_query(self, query: str) -> str:
@@ -177,16 +180,23 @@ Analysis:
 [Your step-by-step analysis]
 """
         
-        analysis_response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        provider_request = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": analysis_prompt}
             ],
-            max_tokens=1024,
-            n=1,
-            temperature=0.1
-        )
+            "max_tokens": 1024,
+            "n": 1,
+            "temperature": 0.1
+        }
+        analysis_response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = analysis_response.model_dump() if hasattr(analysis_response, 'model_dump') else analysis_response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         self.solver_completion_tokens = analysis_response.usage.completion_tokens
         return analysis_response.choices[0].message.content
 
@@ -205,30 +215,44 @@ Solver Result: {solver_result.get("output")}
 Response:
 """
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        provider_request = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": response_prompt}
             ],
-            max_tokens=4096,
-            n=1,
-            temperature=0.1
-        )
+            "max_tokens": 4096,
+            "n": 1,
+            "temperature": 0.1
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         self.solver_completion_tokens = response.usage.completion_tokens
         return response.choices[0].message.content
 
     def standard_llm_inference(self, query: str) -> str:
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        provider_request = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": query}
             ],
-            max_tokens=4096,
-            n=1,
-            temperature=0.1
-        )
+            "max_tokens": 4096,
+            "n": 1,
+            "temperature": 0.1
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         self.solver_completion_tokens = response.usage.completion_tokens
         return response.choices[0].message.content
 
@@ -265,16 +289,23 @@ Response:
     # Corrected code here
     ```
     """
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            provider_request = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": error_prompt}
                 ],
-                max_tokens=1024,
-                n=1,
-                temperature=0.1
-            )
+                "max_tokens": 1024,
+                "n": 1,
+                "temperature": 0.1
+            }
+            response = self.client.chat.completions.create(**provider_request)
+            
+            # Log provider call
+            if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
+                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+            
             self.solver_completion_tokens = response.usage.completion_tokens
             formulation = self.extract_and_validate_expressions(response.choices[0].message.content)
 

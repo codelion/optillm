@@ -1,9 +1,11 @@
 import re
 import logging
+import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
-def cot_reflection(system_prompt, initial_query, client, model: str, return_full_response: bool=False, request_config: dict = None):
+def cot_reflection(system_prompt, initial_query, client, model: str, return_full_response: bool=False, request_config: dict = None, request_id: str = None):
     cot_completion_tokens = 0
     
     # Extract temperature and max_tokens from request_config with defaults
@@ -41,15 +43,21 @@ def cot_reflection(system_prompt, initial_query, client, model: str, return_full
         """
 
     # Make the API call using user-provided or default parameters
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    provider_request = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": cot_prompt},
             {"role": "user", "content": initial_query}
         ],
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    response = client.chat.completions.create(**provider_request)
+    
+    # Log provider call
+    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
 
     # Extract the full response
     full_response = response.choices[0].message.content

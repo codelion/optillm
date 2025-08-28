@@ -3,6 +3,7 @@ import logging
 import os
 import secrets
 import time
+from pathlib import Path
 from flask import Flask, request, jsonify
 from cerebras.cloud.sdk import Cerebras
 from openai import AzureOpenAI, OpenAI
@@ -32,6 +33,8 @@ from optillm.leap import leap
 from optillm.reread import re2_approach
 from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 from optillm.batching import RequestBatcher, BatchingError
+from optillm.conversation_logger import ConversationLogger
+import optillm.conversation_logger
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -50,6 +53,9 @@ app = Flask(__name__)
 
 # Global request batcher (initialized in main() if batch mode enabled)
 request_batcher = None
+
+# Global conversation logger (initialized in main() if logging enabled)
+conversation_logger = None
 
 def get_config():
     API_KEY = None
@@ -196,17 +202,17 @@ def none_approach(
     client: Any, 
     model: str,
     original_messages: List[Dict[str, str]],
+    request_id: str = None,
     **kwargs
 ) -> Dict[str, Any]:
     """
     Direct proxy approach that passes through all parameters to the underlying endpoint.
     
     Args:
-        system_prompt: System prompt text (unused)
-        initial_query: Initial query/conversation (unused)
         client: OpenAI client instance
         model: Model identifier
         original_messages: Original messages from the request
+        request_id: Optional request ID for conversation logging
         **kwargs: Additional parameters to pass through
     
     Returns:
@@ -220,6 +226,13 @@ def none_approach(
         # Normalize message content to ensure it's always string
         normalized_messages = normalize_message_content(original_messages)
         
+        # Prepare request data for logging
+        provider_request = {
+            "model": model,
+            "messages": normalized_messages,
+            **kwargs
+        }
+        
         # Make the direct completion call with normalized messages and parameters
         response = client.chat.completions.create(
             model=model,
@@ -228,11 +241,18 @@ def none_approach(
         )
         
         # Convert to dict if it's not already
-        if hasattr(response, 'model_dump'):
-            return response.model_dump()
-        return response
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        
+        # Log the provider call if conversation logging is enabled
+        if conversation_logger and request_id:
+            conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        
+        return response_dict
         
     except Exception as e:
+        # Log error if conversation logging is enabled
+        if conversation_logger and request_id:
+            conversation_logger.log_error(request_id, f"Error in none approach: {str(e)}")
         logger.error(f"Error in none approach: {str(e)}")
         raise
 
@@ -345,52 +365,58 @@ def parse_combined_approach(model: str, known_approaches: list, plugin_approache
 
     return operation, approaches, actual_model
     
-def execute_single_approach(approach, system_prompt, initial_query, client, model, request_config: dict = None):
+def execute_single_approach(approach, system_prompt, initial_query, client, model, request_config: dict = None, request_id: str = None):
     if approach in known_approaches:
         if approach == 'none':
-            # Extract kwargs from the request data
-            kwargs = {}
-            if hasattr(request, 'json'):
-                data = request.get_json()
-                messages = data.get('messages', [])
-                # Copy all parameters except 'stream', 'model' and 'messages'
-                kwargs = {k: v for k, v in data.items() 
-                         if k not in ['model', 'messages', 'stream', 'optillm_approach']}
-            response = none_approach(original_messages=messages, client=client, model=model, **kwargs)
+            # Use the request_config that was already prepared and passed to this function
+            kwargs = request_config.copy() if request_config else {}
+            
+            # Remove items that are handled separately by the framework
+            kwargs.pop('n', None)  # n is handled by execute_n_times
+            kwargs.pop('stream', None)  # stream is handled by proxy()
+            
+            # Reconstruct original messages from system_prompt and initial_query
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            if initial_query:
+                messages.append({"role": "user", "content": initial_query})
+            
+            response = none_approach(original_messages=messages, client=client, model=model, request_id=request_id, **kwargs)
             # For none approach, we return the response and a token count of 0
             # since the full token count is already in the response
             return response, 0
         elif approach == 'mcts':
             return chat_with_mcts(system_prompt, initial_query, client, model, server_config['mcts_simulations'],
-                                            server_config['mcts_exploration'], server_config['mcts_depth'])
+                                            server_config['mcts_exploration'], server_config['mcts_depth'], request_id)
         elif approach == 'bon':
-            return  best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'])
+            return  best_of_n_sampling(system_prompt, initial_query, client, model, server_config['best_of_n'], request_id)
         elif approach == 'moa':
-            return mixture_of_agents(system_prompt, initial_query, client, model)
+            return mixture_of_agents(system_prompt, initial_query, client, model, request_id)
         elif approach == 'rto':
-            return round_trip_optimization(system_prompt, initial_query, client, model)
+            return round_trip_optimization(system_prompt, initial_query, client, model, request_id)
         elif approach == 'z3':
-            z3_solver = Z3SymPySolverSystem(system_prompt, client, model)
+            z3_solver = Z3SymPySolverSystem(system_prompt, client, model, request_id=request_id)
             return z3_solver.process_query(initial_query)
         elif approach == "self_consistency":
-            return advanced_self_consistency_approach(system_prompt, initial_query, client, model)
+            return advanced_self_consistency_approach(system_prompt, initial_query, client, model, request_id)
         elif approach == "pvg":
-            return inference_time_pv_game(system_prompt, initial_query, client, model)
+            return inference_time_pv_game(system_prompt, initial_query, client, model, request_id)
         elif approach == "rstar":
             rstar = RStar(system_prompt, client, model,
                           max_depth=server_config['rstar_max_depth'], num_rollouts=server_config['rstar_num_rollouts'],
-                          c=server_config['rstar_c'])
+                          c=server_config['rstar_c'], request_id=request_id)
             return rstar.solve(initial_query)
         elif approach == "cot_reflection":
-            return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'], request_config=request_config)
+            return cot_reflection(system_prompt, initial_query, client, model, return_full_response=server_config['return_full_response'], request_config=request_config, request_id=request_id)
         elif approach == 'plansearch':
-            return plansearch(system_prompt, initial_query, client, model, n=server_config['n'])
+            return plansearch(system_prompt, initial_query, client, model, n=server_config['n'], request_id=request_id)
         elif approach == 'leap':
-            return leap(system_prompt, initial_query, client, model)
+            return leap(system_prompt, initial_query, client, model, request_id)
         elif approach == 're2':
-            return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'])
+            return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'], request_id=request_id)
         elif approach == 'cepo':
-            return cepo(system_prompt, initial_query, client, model, cepo_config)            
+            return cepo(system_prompt, initial_query, client, model, cepo_config, request_id)            
     elif approach in plugin_approaches:
         # Check if the plugin accepts request_config
         plugin_func = plugin_approaches[approach]
@@ -445,7 +471,7 @@ async def execute_parallel_approaches(approaches, system_prompt, initial_query, 
     return list(responses), sum(tokens)
 
 def execute_n_times(n: int, approaches, operation: str, system_prompt: str, initial_query: str, client: Any, model: str,
-                     request_config: dict = None) -> Tuple[Union[str, List[str]], int]:
+                     request_config: dict = None, request_id: str = None) -> Tuple[Union[str, List[str]], int]:
     """
     Execute the pipeline n times and return n responses.
     
@@ -466,7 +492,7 @@ def execute_n_times(n: int, approaches, operation: str, system_prompt: str, init
     
     for _ in range(n):
         if operation == 'SINGLE':
-            response, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
+            response, tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config, request_id)
         elif operation == 'AND':
             response, tokens = execute_combined_approaches(approaches, system_prompt, initial_query, client, model, request_config)
         elif operation == 'OR':
@@ -676,7 +702,27 @@ def proxy():
     default_client, api_key = get_config()
 
     operation, approaches, model = parse_combined_approach(model, known_approaches, plugin_approaches)
-    logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}')
+
+    # Start conversation logging if enabled
+    request_id = None
+    if conversation_logger and conversation_logger.enabled:
+        request_id = conversation_logger.start_conversation(
+            client_request={
+                'messages': messages,
+                'model': data.get('model', server_config['model']),
+                'stream': stream,
+                'n': n,
+                **{k: v for k, v in data.items() if k not in {'messages', 'model', 'stream', 'n'}}
+            },
+            approach=approaches[0] if len(approaches) == 1 else f"{operation}({','.join(approaches)})",
+            model=model
+        )
+
+    # Log approach and request start with ID for terminal monitoring
+    request_id_str = f' [Request: {request_id}]' if request_id else ''
+    logger.info(f'Using approach(es) {approaches}, operation {operation}, with model {model}{request_id_str}')
+    if request_id:
+        logger.info(f'Request {request_id}: Starting processing')
 
     if bearer_token != "" and bearer_token.startswith("sk-"):
         api_key = bearer_token
@@ -718,13 +764,22 @@ def proxy():
 
         if operation == 'SINGLE' and approaches[0] == 'none':
             # Pass through the request including the n parameter
-            result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config)
+            result, completion_tokens = execute_single_approach(approaches[0], system_prompt, initial_query, client, model, request_config, request_id)
             
             logger.debug(f'Direct proxy response: {result}')
 
+            # Log the final response and finalize conversation logging
+            if conversation_logger and request_id:
+                conversation_logger.log_final_response(request_id, result)
+                conversation_logger.finalize_conversation(request_id)
+
             if stream:
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed (streaming response)')
                 return Response(generate_streaming_response(extract_contents(result), model), content_type='text/event-stream') 
             else :
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed')
                 return jsonify(result), 200
             
         elif operation == 'AND' or operation == 'OR':
@@ -732,10 +787,16 @@ def proxy():
                 raise ValueError("'none' approach cannot be combined with other approaches")
 
         # Handle non-none approaches with n attempts
-        response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model, request_config)
+        response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model, request_config, request_id)
 
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
+        # Log error to conversation logger if enabled
+        if conversation_logger and request_id:
+            conversation_logger.log_error(request_id, str(e))
+            conversation_logger.finalize_conversation(request_id)
+        
+        request_id_str = f' {request_id}' if request_id else ''
+        logger.error(f"Error processing request{request_id_str}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
     # Convert tagged conversation to messages format if needed
@@ -793,7 +854,14 @@ def proxy():
                 'finish_reason': 'stop'
             })
 
+        # Log the final response and finalize conversation logging
+        if conversation_logger and request_id:
+            conversation_logger.log_final_response(request_id, response_data)
+            conversation_logger.finalize_conversation(request_id)
+
         logger.debug(f'API response: {response_data}')
+        if request_id:
+            logger.info(f'Request {request_id}: Completed')
         return jsonify(response_data), 200
 
 @app.route('/v1/models', methods=['GET'])
@@ -848,6 +916,8 @@ def parse_args():
         ("--log", "OPTILLM_LOG", str, "info", "Specify the logging level", list(logging_levels.keys())),
         ("--launch-gui", "OPTILLM_LAUNCH_GUI", bool, False, "Launch a Gradio chat interface"),
         ("--plugins-dir", "OPTILLM_PLUGINS_DIR", str, "", "Path to the plugins directory"),
+        ("--log-conversations", "OPTILLM_LOG_CONVERSATIONS", bool, False, "Enable conversation logging with full metadata"),
+        ("--conversation-log-dir", "OPTILLM_CONVERSATION_LOG_DIR", str, str(Path.home() / ".optillm" / "conversations"), "Directory to save conversation logs"),
     ]
 
     for arg, env, type_, default, help_text, *extra in args_env:
@@ -920,6 +990,7 @@ def main():
     global server_config
     global cepo_config
     global request_batcher
+    global conversation_logger
     # Call this function at the start of main()
     args = parse_args()
     # Update server_config with all argument values
@@ -1074,6 +1145,17 @@ def main():
     logging_level = server_config['log']
     if logging_level in logging_levels.keys():
         logger.setLevel(logging_levels[logging_level])
+    
+    # Initialize conversation logger if enabled
+    global conversation_logger
+    conversation_logger = ConversationLogger(
+        log_dir=Path(server_config['conversation_log_dir']),
+        enabled=server_config['log_conversations']
+    )
+    # Set the global logger instance for access from approach modules
+    optillm.conversation_logger.set_global_logger(conversation_logger)
+    if server_config['log_conversations']:
+        logger.info(f"Conversation logging enabled. Logs will be saved to: {server_config['conversation_log_dir']}")
     
     # set and log the cepo configs
     cepo_config = init_cepo_config(server_config)

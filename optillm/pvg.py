@@ -1,12 +1,14 @@
 import logging
 import re
 from typing import List, Tuple
+import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
 pvg_completion_tokens = 0
 
-def generate_solutions(client, system_prompt: str, query: str, model: str, num_solutions: int, is_sneaky: bool = False, temperature: float = 0.7) -> List[str]:
+def generate_solutions(client, system_prompt: str, query: str, model: str, num_solutions: int, is_sneaky: bool = False, temperature: float = 0.7, request_id: str = None) -> List[str]:
     global pvg_completion_tokens
     role = "sneaky" if is_sneaky else "helpful"
     logger.info(f"Generating {num_solutions} {role} solutions")
@@ -30,19 +32,26 @@ def generate_solutions(client, system_prompt: str, query: str, model: str, num_s
         {"role": "system", "content": f"{system_prompt}\n{role_instruction}\nYou are in {role} mode."},
         {"role": "user", "content": query}
     ]
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        n=num_solutions,
-        max_tokens=4096,
-        temperature=temperature,
-    )
+    provider_request = {
+        "model": model,
+        "messages": messages,
+        "n": num_solutions,
+        "max_tokens": 4096,
+        "temperature": temperature,
+    }
+    response = client.chat.completions.create(**provider_request)
+    
+    # Log provider call
+    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+    
     pvg_completion_tokens += response.usage.completion_tokens
     solutions = [choice.message.content for choice in response.choices]
     logger.debug(f"Generated {role} solutions: {solutions}")
     return solutions
 
-def verify_solutions(client, system_prompt: str, initial_query: str, solutions: List[str], model: str) -> List[float]:
+def verify_solutions(client, system_prompt: str, initial_query: str, solutions: List[str], model: str, request_id: str = None) -> List[float]:
     global pvg_completion_tokens
     logger.info(f"Verifying {len(solutions)} solutions")
     verify_prompt = f"""{system_prompt}
@@ -74,12 +83,19 @@ Ensure that the Score is a single number between 0 and 10, and the Explanation i
             {"role": "system", "content": verify_prompt},
             {"role": "user", "content": f"Problem: {initial_query}\n\nSolution: {solution}"}
         ]
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=1024,
-            temperature=0.2,
-        )
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": 1024,
+            "temperature": 0.2,
+        }
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        
         pvg_completion_tokens += response.usage.completion_tokens
         rating = response.choices[0].message.content
         logger.debug(f"Raw rating for solution {i+1}: {rating}")
@@ -135,7 +151,7 @@ def extract_answer(final_state: str) -> Tuple[str, float]:
     logger.warning("No answer found in the state.")
     return "", 0.0
 
-def inference_time_pv_game(system_prompt: str, initial_query: str, client, model: str, num_rounds: int = 2, num_solutions: int = 3) -> str:
+def inference_time_pv_game(system_prompt: str, initial_query: str, client, model: str, num_rounds: int = 2, num_solutions: int = 3, request_id: str = None) -> str:
     global pvg_completion_tokens
     logger.info(f"Starting inference-time PV game with {num_rounds} rounds and {num_solutions} solutions per round")
    
@@ -147,11 +163,11 @@ def inference_time_pv_game(system_prompt: str, initial_query: str, client, model
         
         temperature = max(0.2, 0.7 - (round * 0.1))
         
-        helpful_solutions = generate_solutions(client, system_prompt, initial_query, model, num_solutions, temperature=temperature)
-        sneaky_solutions = generate_solutions(client, system_prompt, initial_query, model, num_solutions, is_sneaky=True, temperature=temperature)
+        helpful_solutions = generate_solutions(client, system_prompt, initial_query, model, num_solutions, temperature=temperature, request_id=request_id)
+        sneaky_solutions = generate_solutions(client, system_prompt, initial_query, model, num_solutions, is_sneaky=True, temperature=temperature, request_id=request_id)
         all_solutions = helpful_solutions + sneaky_solutions
 
-        scores = verify_solutions(client, system_prompt, initial_query, all_solutions, model)
+        scores = verify_solutions(client, system_prompt, initial_query, all_solutions, model, request_id=request_id)
 
         round_best_solution = max(zip(all_solutions, scores), key=lambda x: x[1])
         
@@ -179,12 +195,19 @@ def inference_time_pv_game(system_prompt: str, initial_query: str, client, model
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": refine_prompt}
             ]
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=1024,
-                temperature=0.5,
-            )
+            provider_request = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": 1024,
+                "temperature": 0.5,
+            }
+            response = client.chat.completions.create(**provider_request)
+            
+            # Log provider call
+            if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+                response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+                optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+            
             pvg_completion_tokens += response.usage.completion_tokens
             initial_query = response.choices[0].message.content
             logger.debug(f"Refined query: {initial_query}")

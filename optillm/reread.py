@@ -1,8 +1,10 @@
 import logging
+import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
-def re2_approach(system_prompt, initial_query, client, model, n=1):
+def re2_approach(system_prompt, initial_query, client, model, n=1, request_id: str = None):
     """
     Implement the RE2 (Re-Reading) approach for improved reasoning in LLMs.
     
@@ -28,11 +30,18 @@ def re2_approach(system_prompt, initial_query, client, model, n=1):
     ]
     
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            n=n
-        )
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "n": n
+        }
+        response = client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
+        
         re2_completion_tokens += response.usage.completion_tokens
         if n == 1:
             return response.choices[0].message.content.strip(), re2_completion_tokens

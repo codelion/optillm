@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import networkx as nx
 from typing import List, Dict
+import optillm
+from optillm import conversation_logger
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class MCTSNode:
         self.value = 0
 
 class MCTS:
-    def __init__(self, simulation_depth, exploration_weight, client, model):
+    def __init__(self, simulation_depth, exploration_weight, client, model, request_id=None):
         self.simulation_depth = simulation_depth
         self.exploration_weight = exploration_weight
         self.root = None
@@ -33,6 +35,7 @@ class MCTS:
         self.client = client
         self.model = model
         self.completion_tokens = 0
+        self.request_id = request_id
 
     def select(self, node: MCTSNode) -> MCTSNode:
         logger.debug(f"Selecting node. Current node visits: {node.visits}, value: {node.value}")
@@ -111,13 +114,20 @@ class MCTS:
         n = 3
 
         logger.info(f"Requesting {n} completions from the model")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=4096,
-            n=n,
-            temperature=1
-        )
+        provider_request = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 4096,
+            "n": n,
+            "temperature": 1
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         completions = [choice.message.content.strip() for choice in response.choices]
         self.completion_tokens += response.usage.completion_tokens
         logger.info(f"Received {len(completions)} completions from the model")
@@ -133,13 +143,19 @@ class MCTS:
         messages.append({"role": "user", "content": "Based on this conversation, what might the user ask or say next? Provide a likely user query."})
         
         logger.info("Requesting next user query from the model")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=1024,
-            n=1,
-            temperature=1
-        )
+        provider_request = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 1024,
+            "n": 1,
+            "temperature": 1
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         
         next_query = response.choices[0].message.content
         self.completion_tokens += response.usage.completion_tokens
@@ -157,13 +173,20 @@ class MCTS:
         messages.extend(state.conversation_history)
         messages.append({"role": "user", "content": "Evaluate the quality of this conversation on a scale from 0 to 1, where 0 is poor and 1 is excellent. Consider factors such as coherence, relevance, and engagement. Respond with only a number."})
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            max_tokens=256,
-            n=1,
-            temperature=0.1
-        )
+        provider_request = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": 256,
+            "n": 1,
+            "temperature": 0.1
+        }
+        response = self.client.chat.completions.create(**provider_request)
+        
+        # Log provider call
+        if self.request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
+        
         self.completion_tokens += response.usage.completion_tokens
         try:
             score = float(response.choices[0].message.content.strip())
@@ -175,10 +198,10 @@ class MCTS:
             return 0.5  # Default to a neutral score if parsing fails
 
 def chat_with_mcts(system_prompt: str, initial_query: str, client, model: str, num_simulations: int = 2, exploration_weight: float = 0.2, 
-                   simulation_depth: int = 1) -> str:
+                   simulation_depth: int = 1, request_id: str = None) -> str:
     logger.info("Starting chat with MCTS")
     logger.info(f"Parameters: num_simulations={num_simulations}, exploration_weight={exploration_weight}, simulation_depth={simulation_depth}")
-    mcts = MCTS(simulation_depth=simulation_depth, exploration_weight=exploration_weight, client=client, model=model)
+    mcts = MCTS(simulation_depth=simulation_depth, exploration_weight=exploration_weight, client=client, model=model, request_id=request_id)
     initial_state = DialogueState(system_prompt, [], initial_query)
     logger.info(f"Initial query: {initial_query}")
     final_state = mcts.search(initial_state, num_simulations)
