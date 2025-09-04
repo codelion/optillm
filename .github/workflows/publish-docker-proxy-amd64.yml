@@ -25,7 +25,12 @@ jobs:
       
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
+            VERSION="latest"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
       
       - name: Build and push proxy AMD64 image
         uses: docker/build-push-action@v5
