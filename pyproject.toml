@@ -82,6 +82,3 @@ optillm = [
     "cepo/*.py",
     "cepo/configs/*.yaml",
 ]
-
-[tool.setuptools.data-files]
-"" = ["optillm.py"]
