@@ -1,3 +1,4 @@
+include optillm.py
 include optillm/plugins/*.py
 include optillm/cepo/*.py
 include optillm/cepo/configs/*.yaml

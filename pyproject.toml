@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optillm"
-version = "0.2.0"
+version = "0.2.1"
 description = "An optimizing inference proxy for LLMs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -82,3 +82,6 @@ optillm = [
     "cepo/*.py",
     "cepo/configs/*.yaml",
 ]
+
+[tool.setuptools.data-files]
+"" = ["optillm.py"]
