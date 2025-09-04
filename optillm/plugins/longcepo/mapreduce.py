@@ -221,7 +221,7 @@ def collapse_chunks(
     num_tokens = get_prompt_length(format_chunk_list(context_chunks), tokenizer)
     token_budget = (
         longcepo_config.max_context_window
-        - get_prompt_length(longcepo_config.collapse_prompt, tokenizer)
+        - get_prompt_length(longcepo_config.reduce_prompt, tokenizer)
         - longcepo_config.max_output_tokens
     )
     logger.info(f"Pre-collapse length of chunks {num_tokens}, allowed {token_budget}")
