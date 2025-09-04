@@ -158,8 +158,8 @@ def mapreduce(
         tokenizer,
         cb_log,
         longcepo_config,
+        irrelevance_tags,
     )
-    result = remove_chunks(result, irrelevance_tags)
     if not result:
         return "No information", cb_log
 
@@ -200,6 +200,7 @@ def collapse_chunks(
     tokenizer,
     cb_log: CBLog,
     longcepo_config: LongCepoConfig,
+    irrelevance_tags: Tuple[str] = ("[NO INFORMATION]",),
 ) -> Tuple[List[str], CBLog]:
     """
     Collapses context chunk pairs in sliding window until the total token count fits within the context window.
@@ -269,6 +270,7 @@ def collapse_chunks(
             system_prompt,
             cb_log,
         )
+        context_chunks = remove_chunks(context_chunks, irrelevance_tags)
         merge_pair_idx = (merge_pair_idx + 1) % max(len(context_chunks) - 1, 1)
         num_tokens = get_prompt_length(format_chunk_list(context_chunks), tokenizer)
         collapse_step += 1
