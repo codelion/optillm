@@ -123,22 +123,8 @@ DeepConf typically achieves:
 - OptiLLM with `OPTILLM_API_KEY=optillm`
 - Compatible with transformer models that provide logits access
 
-## Limitations
-
-- **Local models only** - Cannot work with external API providers (OpenAI, Anthropic, etc.)
-- **Requires logits access** - Model must provide token-level probability distributions
-- **Not compatible with MLX** - Currently only supports PyTorch-based models
-
-## Testing
-
-Run the test suite to verify the implementation:
-
-```bash
-python test_deepconf.py
-```
-
 ## References
 
-- **Paper**: "Deep Think with Confidence" by Fu et al. (2024)
+- **Paper**: "Deep Think with Confidence" by Fu et al. (2025)
 - **arXiv**: https://arxiv.org/abs/2508.15260
 - **Authors**: Yichao Fu (UCSD), Xuewei Wang (Meta AI), Yuandong Tian (Meta AI), Jiawei Zhao (Meta AI)
