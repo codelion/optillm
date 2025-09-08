@@ -137,6 +137,7 @@ pip install -r requirements.txt
 | Mixture of Agents                    | `moa`              | Combines responses from multiple critiques                                                     |
 | Monte Carlo Tree Search              | `mcts`             | Uses MCTS for decision-making in chat responses                                                |
 | PV Game                              | `pvg`              | Applies a prover-verifier game approach at inference time                                      |
+| [Deep Confidence](optillm/deepconf) | N/A for proxy | Implements confidence-guided reasoning with multiple intensity levels for enhanced accuracy |
 | CoT Decoding                         |  N/A for proxy     | Implements chain-of-thought decoding to elicit reasoning without explicit prompting            |
 | Entropy Decoding                     |  N/A for proxy     | Implements adaptive sampling based on the uncertainty of tokens during generation              |
 | Thinkdeeper                          |  N/A for proxy     | Implements the `reasoning_effort` param from OpenAI for reasoning models like DeepSeek R1      |
@@ -161,6 +162,7 @@ pip install -r requirements.txt
 | GenSelect               | `genselect`        | Generative Solution Selection - generates multiple candidates and selects the best based on quality criteria |
 | Web Search              | `web_search`       | Performs Google searches using Chrome automation (Selenium) to gather search results and URLs |
 | [Deep Research](optillm/plugins/deep_research)           | `deep_research`    | Implements Test-Time Diffusion Deep Researcher (TTD-DR) for comprehensive research reports using iterative refinement |
+| [Proxy](optillm/plugins/proxy)      | `proxy`            | Load balancing and failover across multiple LLM providers with health monitoring and round-robin routing |
 
 We support all major LLM providers and models for inference. You need to set the correct environment variable and the proxy will pick the corresponding client.
 
@@ -703,6 +705,7 @@ python -m pytest tests/
 ## References
 - [Eliciting Fine-Tuned Transformer Capabilities via Inference-Time Techniques](https://arxiv.org/abs/2506.08060)
 - [AutoThink: efficient inference for reasoning LLMs](https://dx.doi.org/10.2139/ssrn.5253327) - [Implementation](optillm/autothink)
+- [Deep Think with Confidence: Confidence-guided reasoning and inference-time scaling](https://arxiv.org/abs/2508.15260) - [Implementation](optillm/deepconf)
 - [Self-Discover: Large Language Models Self-Compose Reasoning Structures
 ](https://arxiv.org/abs/2402.03620) - [Implementation](optillm/plugings/deepthink)
 - [CePO: Empowering Llama with Reasoning using Test-Time Compute](https://cerebras.ai/blog/cepo) - [Implementation](optillm/cepo)
