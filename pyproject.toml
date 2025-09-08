@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optillm"
-version = "0.2.2"
+version = "0.2.3"
 description = "An optimizing inference proxy for LLMs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -49,6 +49,7 @@ dependencies = [
     "mcp",
     "adaptive-classifier",
     "datasets",
+    "PyYAML",
     "selenium",
     "webdriver-manager",
     # MLX support for Apple Silicon optimization
@@ -79,6 +80,9 @@ include = ["optillm*"]
 [tool.setuptools.package-data]
 optillm = [
     "plugins/*.py",
+    "plugins/proxy/*.py",
+    "plugins/proxy/*.yaml",
+    "plugins/proxy/*.md",
     "cepo/*.py",
     "cepo/configs/*.yaml",
 ]

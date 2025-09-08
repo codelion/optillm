@@ -1,0 +1,81 @@
+# OptiLLM Proxy Plugin - Example Configuration
+# 
+# Copy this file to ~/.optillm/proxy_config.yaml and customize for your setup
+# Environment variables are supported using ${VAR} or ${VAR:-default} syntax
+
+# List of LLM providers to load balance across
+providers:
+  # Primary OpenAI endpoint
+  - name: openai_primary
+    base_url: https://api.openai.com/v1
+    api_key: ${OPENAI_API_KEY}
+    weight: 3  # Higher weight = more traffic
+    
+  # Secondary OpenAI with different API key
+  - name: openai_secondary
+    base_url: https://api.openai.com/v1
+    api_key: ${OPENAI_API_KEY_2:-${OPENAI_API_KEY}}  # Fallback to primary key
+    weight: 2
+    
+  # Azure OpenAI endpoint
+  - name: azure_gpt4
+    base_url: ${AZURE_ENDPOINT:-https://your-resource.openai.azure.com}
+    api_key: ${AZURE_API_KEY}
+    weight: 2
+    # Map model names for Azure deployments
+    model_map:
+      gpt-4: gpt-4-deployment
+      gpt-4-turbo: gpt-4-turbo-deployment
+      gpt-3.5-turbo: gpt-35-turbo-deployment
+    
+  # Local LLM server (Ollama, LM Studio, llama.cpp, etc.)
+  - name: local_llm
+    base_url: http://localhost:8080/v1
+    api_key: dummy  # Some servers require a dummy key
+    weight: 1
+    fallback_only: true  # Only use when primary providers fail
+    
+  # Together AI
+  - name: together_ai
+    base_url: https://api.together.xyz/v1
+    api_key: ${TOGETHER_API_KEY}
+    weight: 1
+    
+  # Anyscale Endpoints
+  - name: anyscale
+    base_url: https://api.endpoints.anyscale.com/v1
+    api_key: ${ANYSCALE_API_KEY}
+    weight: 1
+
+# Routing configuration
+routing:
+  # Strategy for selecting providers
+  # Options: weighted, round_robin, failover
+  strategy: weighted
+  
+  # Health check configuration
+  health_check:
+    enabled: true
+    interval: 30  # Check every 30 seconds
+    timeout: 5    # Timeout for health checks
+
+# Monitoring and logging
+monitoring:
+  log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+  track_latency: true  # Track request latencies
+  track_errors: true   # Track and log errors
+
+# Example usage:
+# 
+# Direct proxy routing:
+#   model: "proxy-gpt-4"
+#
+# Proxy with approaches (using extra_body):
+#   model: "gpt-4"
+#   extra_body: {
+#     "optillm_approach": "proxy",
+#     "proxy_wrap": "moa"
+#   }
+#
+# Combined approaches:
+#   model: "bon&proxy-gpt-4"
