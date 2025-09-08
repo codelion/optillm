@@ -788,6 +788,22 @@ def proxy():
 
         # Handle non-none approaches with n attempts
         response, completion_tokens = execute_n_times(n, approaches, operation, system_prompt, initial_query, client, model, request_config, request_id)
+        
+        # Check if the response is a full dict (like from proxy plugin or none approach)
+        if operation == 'SINGLE' and isinstance(response, dict) and 'choices' in response and 'usage' in response:
+            # This is a full response dict, return it directly
+            if conversation_logger and request_id:
+                conversation_logger.log_final_response(request_id, response)
+                conversation_logger.finalize_conversation(request_id)
+            
+            if stream:
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed (streaming response)')
+                return Response(generate_streaming_response(extract_contents(response), model), content_type='text/event-stream')
+            else:
+                if request_id:
+                    logger.info(f'Request {request_id}: Completed')
+                return jsonify(response), 200
 
     except Exception as e:
         # Log error to conversation logger if enabled
