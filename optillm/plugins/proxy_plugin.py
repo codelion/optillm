@@ -6,9 +6,9 @@ with health monitoring, failover, and support for wrapping other approaches.
 """
 import logging
 from typing import Tuple, Optional
-from .proxy.config import ProxyConfig
-from .proxy.client import ProxyClient
-from .proxy.approach_handler import ApproachHandler
+from optillm.plugins.proxy.config import ProxyConfig
+from optillm.plugins.proxy.client import ProxyClient
+from optillm.plugins.proxy.approach_handler import ApproachHandler
 
 SLUG = "proxy"
 logger = logging.getLogger(__name__)
@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 import os
 log_level = os.environ.get('OPTILLM_LOG_LEVEL', 'INFO')
 logging.basicConfig(level=getattr(logging, log_level))
+
+# Global proxy client cache to maintain state between requests
+_proxy_client_cache = {}
 
 def run(system_prompt: str, initial_query: str, client, model: str, 
         request_config: dict = None) -> Tuple[str, int]:
@@ -53,11 +56,18 @@ def run(system_prompt: str, initial_query: str, client, model: str,
             )
             return response.choices[0].message.content, response.usage.completion_tokens
         
-        # Create proxy client
-        proxy_client = ProxyClient(
-            config=config,
-            fallback_client=client
-        )
+        # Create or reuse proxy client to maintain state (important for round-robin)
+        config_key = str(config)  # Simple config-based cache key
+        if config_key not in _proxy_client_cache:
+            logger.debug("Creating new proxy client instance")
+            _proxy_client_cache[config_key] = ProxyClient(
+                config=config,
+                fallback_client=client
+            )
+        else:
+            logger.debug("Reusing existing proxy client instance")
+        
+        proxy_client = _proxy_client_cache[config_key]
         
         # Check for wrapped approach in extra_body (recommended method)
         wrapped_approach = None

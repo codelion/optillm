@@ -6,8 +6,8 @@ import logging
 import random
 from typing import Dict, List, Any, Optional
 from openai import OpenAI, AzureOpenAI
-from .routing import RouterFactory
-from .health import HealthChecker
+from optillm.plugins.proxy.routing import RouterFactory
+from optillm.plugins.proxy.health import HealthChecker
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,7 @@ class ProxyClient:
                     break
                     
                 provider = self.proxy_client.router.select(available_providers)
+                logger.info(f"Router selected provider: {provider.name if provider else 'None'}")
                 
                 if not provider:
                     break

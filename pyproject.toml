@@ -49,6 +49,7 @@ dependencies = [
     "mcp",
     "adaptive-classifier",
     "datasets",
+    "PyYAML",
     "selenium",
     "webdriver-manager",
     # MLX support for Apple Silicon optimization
