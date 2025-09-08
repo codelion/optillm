@@ -48,18 +48,33 @@ routing:
 ### 2. Start OptiLLM Server
 
 ```bash
-# Start server normally 
+# Option A: Use proxy as default for ALL requests (recommended)
+optillm --approach proxy
+
+# Option B: Start server normally (use model prefix or extra_body per request)
 optillm
 
 # With custom port
-optillm --port 8000
+optillm --approach proxy --port 8000
 ```
-
-> **Note**: The `--approach proxy` flag is not currently supported in the command-line interface.
 
 ### 3. Usage Examples
 
-#### Method 1: Using Model Prefix
+#### Method 1: Using --approach proxy (Recommended)
+```bash
+# Start server with proxy as default approach
+optillm --approach proxy
+
+# Then make normal requests - proxy handles all routing automatically!
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+#### Method 2: Using Model Prefix (when server started without --approach proxy)
 ```bash
 # Use "proxy-" prefix to activate the proxy plugin
 curl -X POST http://localhost:8000/v1/chat/completions \
@@ -70,7 +85,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-#### Method 2: Using extra_body (Recommended for SDK usage)
+#### Method 3: Using extra_body (when server started without --approach proxy)
 ```bash
 # Use extra_body parameter  
 curl -X POST http://localhost:8000/v1/chat/completions \
@@ -337,13 +352,20 @@ client = OpenAI(
     api_key="dummy"  # Can be any string when using proxy
 )
 
-# Method 1: Use proxy with model prefix
+# Method 1: Server started with --approach proxy (recommended)
+# Just make normal requests - proxy handles everything!
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Method 2: Use proxy with model prefix
 response = client.chat.completions.create(
     model="proxy-gpt-4",  # Use "proxy-" prefix
     messages=[{"role": "user", "content": "Hello"}]
 )
 
-# Method 2: Use extra_body (recommended)
+# Method 3: Use extra_body
 response = client.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": "Hello"}],
@@ -352,7 +374,7 @@ response = client.chat.completions.create(
     }
 )
 
-# Method 3: Proxy wrapping another approach
+# Method 4: Proxy wrapping another approach
 response = client.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": "Hello"}],
@@ -367,7 +389,13 @@ response = client.chat.completions.create(
 ```python
 from langchain.llms import OpenAI
 
-# Use proxy with model prefix
+# If server started with --approach proxy (recommended)
+llm = OpenAI(
+    openai_api_base="http://localhost:8000/v1",
+    model_name="gpt-4"  # Proxy handles routing automatically
+)
+
+# Or use proxy with model prefix
 llm = OpenAI(
     openai_api_base="http://localhost:8000/v1",
     model_name="proxy-gpt-4"  # Use "proxy-" prefix
