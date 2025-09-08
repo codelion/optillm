@@ -51,7 +51,7 @@ routing:
 # Option A: Use proxy as default for ALL requests (recommended)
 optillm --approach proxy
 
-# Option B: Start server normally (requires model prefix or extra_body)
+# Option B: Start server normally (use model prefix or extra_body per request)
 optillm
 
 # With custom port
@@ -60,33 +60,34 @@ optillm --approach proxy --port 8000
 
 ### 3. Usage Examples
 
-#### When using `--approach proxy` (Recommended)
+#### Method 1: Using --approach proxy (Recommended)
 ```bash
-# No need for "proxy-" prefix! The proxy handles all requests automatically
+# Start server with proxy as default approach
+optillm --approach proxy
+
+# Then make normal requests - proxy handles all routing automatically!
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
-
-# The proxy will:
-# 1. Route to one of your configured providers
-# 2. Apply model mapping if configured
-# 3. Handle failover automatically
 ```
 
-#### Without `--approach proxy` flag
+#### Method 2: Using Model Prefix (when server started without --approach proxy)
 ```bash
-# Method 1: Use model prefix
+# Use "proxy-" prefix to activate the proxy plugin
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "proxy-gpt-4",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
+```
 
-# Method 2: Use extra_body
+#### Method 3: Using extra_body (when server started without --approach proxy)
+```bash
+# Use extra_body parameter  
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -98,32 +99,10 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-#### Proxy with Approach/Plugin
-```bash
-# Use MOA approach with proxy load balancing
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Solve this problem"}],
-    "extra_body": {
-      "optillm_approach": "proxy",
-      "proxy_wrap": "moa"
-    }
-  }'
-
-# Use memory plugin with proxy
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Remember this"}],
-    "extra_body": {
-      "optillm_approach": "proxy",
-      "proxy_wrap": "memory"
-    }
-  }'
-```
+Both methods will:
+- Route to one of your configured providers
+- Apply model mapping if configured  
+- Handle failover automatically
 
 #### Combined Approaches
 ```bash
@@ -133,6 +112,21 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   -d '{
     "model": "bon&proxy-gpt-4",
     "messages": [{"role": "user", "content": "Generate ideas"}]
+  }'
+```
+
+#### Proxy Wrapping Other Approaches
+```bash
+# Use proxy to wrap MOA approach
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Solve this problem"}],
+    "extra_body": {
+      "optillm_approach": "proxy",
+      "proxy_wrap": "moa"
+    }
   }'
 ```
 
@@ -203,7 +197,7 @@ providers:
 
 ### Model-Specific Routing
 
-When using `--approach proxy`, the proxy automatically maps model names to provider-specific deployments:
+The proxy automatically maps model names to provider-specific deployments:
 
 ```yaml
 providers:
@@ -222,9 +216,9 @@ providers:
     # No model_map needed - uses model names as-is
 ```
 
-With this configuration and `optillm --approach proxy`:
-- Request for "gpt-4" → Azure uses "gpt-4-deployment-001", OpenAI uses "gpt-4"
-- Request for "gpt-3.5-turbo" → Azure uses "gpt-35-turbo-deployment", OpenAI uses "gpt-3.5-turbo"
+With this configuration and `proxy-gpt-4` model requests:
+- Request for "proxy-gpt-4" → Azure uses "gpt-4-deployment-001", OpenAI uses "gpt-4"
+- Request for "proxy-gpt-3.5-turbo" → Azure uses "gpt-35-turbo-deployment", OpenAI uses "gpt-3.5-turbo"
 
 ### Failover Configuration
 
@@ -358,19 +352,35 @@ client = OpenAI(
     api_key="dummy"  # Can be any string when using proxy
 )
 
-# If server started with --approach proxy:
+# Method 1: Server started with --approach proxy (recommended)
+# Just make normal requests - proxy handles everything!
 response = client.chat.completions.create(
-    model="gpt-4",  # No "proxy-" prefix needed!
+    model="gpt-4",
     messages=[{"role": "user", "content": "Hello"}]
 )
 
-# Or explicitly use proxy with another approach:
+# Method 2: Use proxy with model prefix
+response = client.chat.completions.create(
+    model="proxy-gpt-4",  # Use "proxy-" prefix
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Method 3: Use extra_body
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}],
+    extra_body={
+        "optillm_approach": "proxy"
+    }
+)
+
+# Method 4: Proxy wrapping another approach
 response = client.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": "Hello"}],
     extra_body={
         "optillm_approach": "proxy",
-        "proxy_wrap": "moa"  # Proxy will route MOA's requests
+        "proxy_wrap": "moa"
     }
 )
 ```
@@ -379,10 +389,16 @@ response = client.chat.completions.create(
 ```python
 from langchain.llms import OpenAI
 
-# If server started with --approach proxy:
+# If server started with --approach proxy (recommended)
 llm = OpenAI(
     openai_api_base="http://localhost:8000/v1",
     model_name="gpt-4"  # Proxy handles routing automatically
+)
+
+# Or use proxy with model prefix
+llm = OpenAI(
+    openai_api_base="http://localhost:8000/v1",
+    model_name="proxy-gpt-4"  # Use "proxy-" prefix
 )
 
 response = llm("What is the meaning of life?")
