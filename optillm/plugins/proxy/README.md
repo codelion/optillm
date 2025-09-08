@@ -55,11 +55,11 @@ optillm
 optillm --port 8000
 ```
 
-> **Note**: The `--approach proxy` flag is not currently supported. Use the model prefix method below.
+> **Note**: The `--approach proxy` flag is not currently supported in the command-line interface.
 
 ### 3. Usage Examples
 
-#### Using Model Prefix (Currently the only working method)
+#### Method 1: Using Model Prefix
 ```bash
 # Use "proxy-" prefix to activate the proxy plugin
 curl -X POST http://localhost:8000/v1/chat/completions \
@@ -68,16 +68,26 @@ curl -X POST http://localhost:8000/v1/chat/completions \
     "model": "proxy-gpt-4",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
-
-# The proxy will:
-# 1. Route to one of your configured providers
-# 2. Apply model mapping if configured  
-# 3. Handle failover automatically
 ```
 
-> **Known Issues**: 
-> - `--approach proxy` flag: Not supported in command-line interface
-> - `extra_body` method: Currently broken due to parsing bug in server code
+#### Method 2: Using extra_body (Recommended for SDK usage)
+```bash
+# Use extra_body parameter  
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "extra_body": {
+      "optillm_approach": "proxy"
+    }
+  }'
+```
+
+Both methods will:
+- Route to one of your configured providers
+- Apply model mapping if configured  
+- Handle failover automatically
 
 #### Combined Approaches
 ```bash
@@ -90,7 +100,20 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
-> **Note**: The proxy wrapping functionality (`proxy_wrap`) is currently not accessible via the working model prefix method. This would require the `extra_body` approach which is currently broken.
+#### Proxy Wrapping Other Approaches
+```bash
+# Use proxy to wrap MOA approach
+curl -X POST http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Solve this problem"}],
+    "extra_body": {
+      "optillm_approach": "proxy",
+      "proxy_wrap": "moa"
+    }
+  }'
+```
 
 ## Configuration Reference
 
@@ -314,10 +337,29 @@ client = OpenAI(
     api_key="dummy"  # Can be any string when using proxy
 )
 
-# Use proxy with model prefix (currently the only working method)
+# Method 1: Use proxy with model prefix
 response = client.chat.completions.create(
     model="proxy-gpt-4",  # Use "proxy-" prefix
     messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Method 2: Use extra_body (recommended)
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}],
+    extra_body={
+        "optillm_approach": "proxy"
+    }
+)
+
+# Method 3: Proxy wrapping another approach
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Hello"}],
+    extra_body={
+        "optillm_approach": "proxy",
+        "proxy_wrap": "moa"
+    }
 )
 ```
 

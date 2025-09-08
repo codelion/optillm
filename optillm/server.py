@@ -992,11 +992,13 @@ def main():
     global request_batcher
     global conversation_logger
     # Call this function at the start of main()
+    
+    # Load plugins first so they're available in argument parser
+    load_plugins()
+    
     args = parse_args()
     # Update server_config with all argument values
     server_config.update(vars(args))
-
-    load_plugins()
 
     port = server_config['port']
     

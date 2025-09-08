@@ -114,6 +114,15 @@ class ProxyClient:
         def __init__(self, proxy_client):
             self.proxy_client = proxy_client
         
+        def _filter_kwargs(self, kwargs: dict) -> dict:
+            """Filter out OptiLLM-specific parameters that shouldn't be sent to providers"""
+            optillm_params = {
+                'optillm_approach', 'proxy_wrap', 'wrapped_approach', 'wrap',
+                'mcts_simulations', 'mcts_exploration', 'mcts_depth',
+                'best_of_n', 'rstar_max_depth', 'rstar_num_rollouts', 'rstar_c'
+            }
+            return {k: v for k, v in kwargs.items() if k not in optillm_params}
+        
         def create(self, **kwargs):
             """Create completion with load balancing and failover"""
             model = kwargs.get('model', 'unknown')
@@ -145,8 +154,8 @@ class ProxyClient:
                 attempted_providers.add(provider)
                 
                 try:
-                    # Map model name if needed
-                    request_kwargs = kwargs.copy()
+                    # Map model name if needed and filter out OptiLLM-specific parameters
+                    request_kwargs = self._filter_kwargs(kwargs.copy())
                     request_kwargs['model'] = provider.map_model(model)
                     
                     # Track timing
@@ -177,7 +186,7 @@ class ProxyClient:
             if self.proxy_client.fallback_client:
                 logger.warning("All proxy providers failed, using fallback client")
                 try:
-                    return self.proxy_client.fallback_client.chat.completions.create(**kwargs)
+                    return self.proxy_client.fallback_client.chat.completions.create(**self._filter_kwargs(kwargs))
                 except Exception as e:
                     errors.append(("fallback_client", str(e)))
             
