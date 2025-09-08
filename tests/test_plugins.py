@@ -30,7 +30,8 @@ def test_plugin_module_imports():
         'optillm.plugins.deep_research_plugin',
         'optillm.plugins.deepthink_plugin',
         'optillm.plugins.longcepo_plugin',
-        'optillm.plugins.spl_plugin'
+        'optillm.plugins.spl_plugin',
+        'optillm.plugins.proxy_plugin'
     ]
     
     for module_name in plugin_modules:
@@ -51,7 +52,7 @@ def test_plugin_approach_detection():
     load_plugins()
     
     # Check if known plugins are loaded
-    expected_plugins = ["memory", "readurls", "privacy", "web_search", "deep_research", "deepthink", "longcepo", "spl"]
+    expected_plugins = ["memory", "readurls", "privacy", "web_search", "deep_research", "deepthink", "longcepo", "spl", "proxy"]
     for plugin_name in expected_plugins:
         assert plugin_name in plugin_approaches, f"Plugin {plugin_name} not loaded"
 
@@ -141,6 +142,63 @@ def test_spl_plugin():
     assert run_spl is not None
 
 
+def test_proxy_plugin():
+    """Test proxy plugin module"""
+    import optillm.plugins.proxy_plugin as plugin
+    assert hasattr(plugin, 'run')
+    assert hasattr(plugin, 'SLUG')
+    assert plugin.SLUG == "proxy"
+    
+    # Test proxy submodules can be imported
+    from optillm.plugins.proxy import client, config, approach_handler
+    assert client is not None
+    assert config is not None
+    assert approach_handler is not None
+
+
+def test_proxy_plugin_token_counts():
+    """Test that proxy plugin returns complete token usage information"""
+    import optillm.plugins.proxy_plugin as plugin
+    from unittest.mock import Mock, MagicMock
+    
+    # Create a mock client with a mock response that has all token counts
+    mock_client = Mock()
+    mock_response = MagicMock()
+    mock_response.choices = [Mock(message=Mock(content="Test response"))]
+    mock_response.usage = Mock(
+        prompt_tokens=10,
+        completion_tokens=5,
+        total_tokens=15
+    )
+    mock_response.model_dump.return_value = {
+        'choices': [{'message': {'content': 'Test response'}}],
+        'usage': {
+            'prompt_tokens': 10,
+            'completion_tokens': 5,
+            'total_tokens': 15
+        }
+    }
+    mock_client.chat.completions.create.return_value = mock_response
+    
+    # Run the proxy plugin
+    result, _ = plugin.run(
+        system_prompt="Test system",
+        initial_query="Test query",
+        client=mock_client,
+        model="test-model"
+    )
+    
+    # Verify the result contains all token counts
+    assert isinstance(result, dict), "Result should be a dictionary"
+    assert 'usage' in result, "Result should contain usage information"
+    assert 'prompt_tokens' in result['usage'], "Usage should contain prompt_tokens"
+    assert 'completion_tokens' in result['usage'], "Usage should contain completion_tokens"
+    assert 'total_tokens' in result['usage'], "Usage should contain total_tokens"
+    assert result['usage']['prompt_tokens'] == 10
+    assert result['usage']['completion_tokens'] == 5
+    assert result['usage']['total_tokens'] == 15
+
+
 def test_plugin_subdirectory_imports():
     """Test all plugins with subdirectories can import their submodules"""
     # Test deep_research
@@ -159,6 +217,12 @@ def test_plugin_subdirectory_imports():
     # Test spl
     from optillm.plugins.spl import run_spl
     assert run_spl is not None
+    
+    # Test proxy
+    from optillm.plugins.proxy import client, config, approach_handler
+    assert client is not None
+    assert config is not None
+    assert approach_handler is not None
 
 
 def test_no_relative_import_errors():
@@ -170,7 +234,8 @@ def test_no_relative_import_errors():
         'optillm.plugins.deepthink_plugin',
         'optillm.plugins.deep_research_plugin',
         'optillm.plugins.longcepo_plugin',
-        'optillm.plugins.spl_plugin'
+        'optillm.plugins.spl_plugin',
+        'optillm.plugins.proxy_plugin'
     ]
     
     for plugin_name in plugins_with_subdirs:
@@ -255,6 +320,18 @@ if __name__ == "__main__":
         print("✅ SPL plugin test passed")
     except Exception as e:
         print(f"❌ SPL plugin test failed: {e}")
+    
+    try:
+        test_proxy_plugin()
+        print("✅ Proxy plugin test passed")
+    except Exception as e:
+        print(f"❌ Proxy plugin test failed: {e}")
+    
+    try:
+        test_proxy_plugin_token_counts()
+        print("✅ Proxy plugin token counts test passed")
+    except Exception as e:
+        print(f"❌ Proxy plugin token counts test failed: {e}")
     
     try:
         test_plugin_subdirectory_imports()

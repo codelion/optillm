@@ -44,6 +44,7 @@ try:
     from optillm.plugins.deep_research import DeepResearcher
     from optillm.plugins.longcepo import run_longcepo
     from optillm.plugins.spl import run_spl
+    from optillm.plugins.proxy import client, config, approach_handler
     print("✅ Plugin submodule imports working - no relative import errors")
 except ImportError as e:
     if "attempted relative import" in str(e):

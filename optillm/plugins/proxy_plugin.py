@@ -54,7 +54,9 @@ def run(system_prompt: str, initial_query: str, client, model: str,
                     {"role": "user", "content": initial_query}
                 ]
             )
-            return response.choices[0].message.content, response.usage.completion_tokens
+            # Return full response dict to preserve all usage information
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            return response_dict, 0
         
         # Create or reuse proxy client to maintain state (important for round-robin)
         config_key = str(config)  # Simple config-based cache key
@@ -128,7 +130,9 @@ def run(system_prompt: str, initial_query: str, client, model: str,
             **(request_config or {})
         )
         
-        return response.choices[0].message.content, response.usage.completion_tokens
+        # Return full response dict to preserve all usage information
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        return response_dict, 0
         
     except Exception as e:
         logger.error(f"Proxy plugin error: {e}", exc_info=True)
@@ -141,4 +145,6 @@ def run(system_prompt: str, initial_query: str, client, model: str,
                 {"role": "user", "content": initial_query}
             ]
         )
-        return response.choices[0].message.content, response.usage.completion_tokens
+        # Return full response dict to preserve all usage information
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+        return response_dict, 0
