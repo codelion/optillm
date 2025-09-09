@@ -47,6 +47,13 @@ class Provider:
                     api_version="2024-02-01",
                     max_retries=0  # Disable client retries - we handle them
                 )
+            elif 'generativelanguage.googleapis.com' in self.base_url:
+                # Google AI client - create custom client to avoid "models/" prefix
+                from optillm.plugins.proxy.google_client import GoogleAIClient
+                self._client = GoogleAIClient(
+                    api_key=self.api_key,
+                    base_url=self.base_url
+                )
             else:
                 # Standard OpenAI-compatible client
                 self._client = OpenAI(
@@ -215,8 +222,8 @@ class ProxyClient:
                         
                     attempted_providers.add(provider)
                     
-                    # Try to acquire a slot for this provider (with short timeout to try next provider quickly)
-                    slot_timeout = 0.5  # Don't wait too long for a single provider
+                    # Try to acquire a slot for this provider (with reasonable timeout for queueing)
+                    slot_timeout = 10.0  # Wait up to 10 seconds for provider to become available
                     if not provider.acquire_slot(timeout=slot_timeout):
                         logger.debug(f"Provider {provider.name} at max capacity, trying next provider")
                         errors.append((provider.name, "At max concurrent requests"))
