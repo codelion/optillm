@@ -48,11 +48,11 @@ class Provider:
                     max_retries=0  # Disable client retries - we handle them
                 )
             elif 'generativelanguage.googleapis.com' in self.base_url:
-                # Google AI client - create custom client to avoid "models/" prefix
-                from optillm.plugins.proxy.google_client import GoogleAIClient
-                self._client = GoogleAIClient(
+                # Google AI with standard OpenAI-compatible client
+                self._client = OpenAI(
                     api_key=self.api_key,
-                    base_url=self.base_url
+                    base_url=self.base_url,
+                    max_retries=0  # Disable client retries - we handle them
                 )
             else:
                 # Standard OpenAI-compatible client
