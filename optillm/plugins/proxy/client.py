@@ -27,6 +27,14 @@ class Provider:
         self.last_error = None
         self.latencies = []  # Track recent latencies
         
+        # Per-provider concurrency control
+        self.max_concurrent = config.get('max_concurrent', None)  # None means no limit
+        if self.max_concurrent is not None:
+            self._semaphore = threading.Semaphore(self.max_concurrent)
+            logger.info(f"Provider {self.name} limited to {self.max_concurrent} concurrent requests")
+        else:
+            self._semaphore = None
+        
     @property
     def client(self):
         """Lazy initialization of OpenAI client"""
@@ -63,6 +71,28 @@ class Provider:
         if not self.latencies:
             return 0
         return sum(self.latencies) / len(self.latencies)
+    
+    def acquire_slot(self, timeout: Optional[float] = None) -> bool:
+        """
+        Try to acquire a slot for this provider.
+        Returns True if acquired, False if timeout or no limit.
+        """
+        if self._semaphore is None:
+            return True  # No limit, always available
+        
+        return self._semaphore.acquire(blocking=True, timeout=timeout)
+    
+    def release_slot(self):
+        """Release a slot for this provider."""
+        if self._semaphore is not None:
+            self._semaphore.release()
+    
+    def available_slots(self) -> Optional[int]:
+        """Get number of available slots, None if unlimited."""
+        if self._semaphore is None:
+            return None
+        # Note: _value is internal but there's no public method to check availability
+        return self._semaphore._value
 
 class ProxyClient:
     """OpenAI-compatible client that proxies to multiple providers"""
