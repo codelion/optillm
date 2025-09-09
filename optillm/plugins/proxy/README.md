@@ -43,6 +43,14 @@ providers:
 
 routing:
   strategy: weighted  # Options: weighted, round_robin, failover
+
+timeouts:
+  request: 30  # Maximum seconds to wait for a provider response
+  connect: 5   # Maximum seconds to wait for connection
+
+queue:
+  max_concurrent: 100  # Maximum concurrent requests to prevent overload
+  timeout: 60         # Maximum seconds a request can wait in queue
 ```
 
 ### 2. Start OptiLLM Server
@@ -160,6 +168,26 @@ routing:
     interval: 30      # Seconds between checks
     timeout: 5        # Timeout for health check requests
 ```
+
+### Timeout and Queue Management
+
+Prevent request queue backup and handle slow/unresponsive backends:
+
+```yaml
+timeouts:
+  request: 30  # Maximum seconds to wait for provider response (default: 30)
+  connect: 5   # Maximum seconds for initial connection (default: 5)
+
+queue:
+  max_concurrent: 100  # Maximum concurrent requests (default: 100)
+  timeout: 60         # Maximum seconds in queue before rejection (default: 60)
+```
+
+**How it works:**
+- **Request Timeout**: Each request to a provider has a maximum time limit. If exceeded, the request is cancelled and the next provider is tried.
+- **Queue Management**: Limits concurrent requests to prevent memory exhaustion. New requests wait up to `queue.timeout` seconds before being rejected.
+- **Automatic Failover**: When a provider times out, it's marked unhealthy and the request automatically fails over to the next available provider.
+- **Protection**: Prevents slow backends from causing queue buildup that can crash the proxy server.
 
 ### Environment Variables
 

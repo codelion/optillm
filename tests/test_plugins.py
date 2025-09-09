@@ -199,6 +199,97 @@ def test_proxy_plugin_token_counts():
     assert result['usage']['total_tokens'] == 15
 
 
+def test_proxy_plugin_timeout_config():
+    """Test that proxy plugin properly configures timeout settings"""
+    from optillm.plugins.proxy.config import ProxyConfig
+    import tempfile
+    import yaml
+    
+    # Create test config with timeout settings
+    config = {
+        "providers": [
+            {
+                "name": "test_provider",
+                "base_url": "http://localhost:8000/v1",
+                "api_key": "test-key"
+            }
+        ],
+        "timeouts": {
+            "request": 10,
+            "connect": 3
+        },
+        "queue": {
+            "max_concurrent": 50,
+            "timeout": 30
+        }
+    }
+    
+    # Write config to temp file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump(config, f)
+        config_path = f.name
+    
+    try:
+        # Load config and verify timeout settings
+        loaded_config = ProxyConfig.load(config_path)
+        
+        assert 'timeouts' in loaded_config, "Config should contain timeouts section"
+        assert loaded_config['timeouts']['request'] == 10, "Request timeout should be 10"
+        assert loaded_config['timeouts']['connect'] == 3, "Connect timeout should be 3"
+        
+        assert 'queue' in loaded_config, "Config should contain queue section"
+        assert loaded_config['queue']['max_concurrent'] == 50, "Max concurrent should be 50"
+        assert loaded_config['queue']['timeout'] == 30, "Queue timeout should be 30"
+        
+    finally:
+        import os
+        os.unlink(config_path)
+
+
+def test_proxy_plugin_timeout_handling():
+    """Test that proxy plugin handles timeouts correctly"""
+    from optillm.plugins.proxy.client import ProxyClient
+    from unittest.mock import Mock, patch
+    import concurrent.futures
+    
+    # Create config with short timeout
+    config = {
+        "providers": [
+            {
+                "name": "slow_provider",
+                "base_url": "http://localhost:8001/v1",
+                "api_key": "test-key-1"
+            },
+            {
+                "name": "fast_provider", 
+                "base_url": "http://localhost:8002/v1",
+                "api_key": "test-key-2"
+            }
+        ],
+        "routing": {
+            "strategy": "round_robin",
+            "health_check": {"enabled": False}
+        },
+        "timeouts": {
+            "request": 2,
+            "connect": 1
+        },
+        "queue": {
+            "max_concurrent": 10,
+            "timeout": 5
+        }
+    }
+    
+    # Create proxy client
+    proxy_client = ProxyClient(config)
+    
+    # Verify timeout settings are loaded
+    assert proxy_client.request_timeout == 2, "Request timeout should be 2"
+    assert proxy_client.connect_timeout == 1, "Connect timeout should be 1"
+    assert proxy_client.max_concurrent_requests == 10, "Max concurrent should be 10"
+    assert proxy_client.queue_timeout == 5, "Queue timeout should be 5"
+
+
 def test_plugin_subdirectory_imports():
     """Test all plugins with subdirectories can import their submodules"""
     # Test deep_research
@@ -332,6 +423,18 @@ if __name__ == "__main__":
         print("✅ Proxy plugin token counts test passed")
     except Exception as e:
         print(f"❌ Proxy plugin token counts test failed: {e}")
+    
+    try:
+        test_proxy_plugin_timeout_config()
+        print("✅ Proxy plugin timeout config test passed")
+    except Exception as e:
+        print(f"❌ Proxy plugin timeout config test failed: {e}")
+    
+    try:
+        test_proxy_plugin_timeout_handling()
+        print("✅ Proxy plugin timeout handling test passed")
+    except Exception as e:
+        print(f"❌ Proxy plugin timeout handling test failed: {e}")
     
     try:
         test_plugin_subdirectory_imports()

@@ -137,6 +137,8 @@ class ProxyConfig:
         config.setdefault('providers', [])
         config.setdefault('routing', {})
         config.setdefault('monitoring', {})
+        config.setdefault('timeouts', {})
+        config.setdefault('queue', {})
         
         # Routing defaults
         routing = config['routing']
@@ -153,6 +155,16 @@ class ProxyConfig:
         monitoring.setdefault('log_level', 'INFO')
         monitoring.setdefault('track_latency', True)
         monitoring.setdefault('track_errors', True)
+        
+        # Timeout defaults
+        timeouts = config['timeouts']
+        timeouts.setdefault('request', 30)  # 30 seconds for requests
+        timeouts.setdefault('connect', 5)   # 5 seconds for connection
+        
+        # Queue management defaults
+        queue = config['queue']
+        queue.setdefault('max_concurrent', 100)  # Max concurrent requests
+        queue.setdefault('timeout', 60)  # Max time waiting in queue
         
         # Provider defaults
         for i, provider in enumerate(config['providers']):
@@ -224,6 +236,14 @@ routing:
     interval: 30  # seconds
     timeout: 5    # seconds
 
+timeouts:
+  request: 30     # Maximum time for a request (seconds)
+  connect: 5      # Maximum time for connection (seconds)
+
+queue:
+  max_concurrent: 100  # Maximum concurrent requests
+  timeout: 60          # Maximum time in queue (seconds)
+
 monitoring:
   log_level: INFO
   track_latency: true
@@ -243,6 +263,14 @@ monitoring:
             'routing': {
                 'strategy': 'round_robin',
                 'health_check': {'enabled': False}
+            },
+            'timeouts': {
+                'request': 30,
+                'connect': 5
+            },
+            'queue': {
+                'max_concurrent': 100,
+                'timeout': 60
             },
             'monitoring': {
                 'log_level': 'INFO',
