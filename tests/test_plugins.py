@@ -234,8 +234,8 @@ def test_proxy_plugin_timeout_config():
         loaded_config = ProxyConfig.load(config_path)
         
         assert 'timeouts' in loaded_config, "Config should contain timeouts section"
-        assert loaded_config['timeouts']['request'] == 10, "Request timeout should be 10"
-        assert loaded_config['timeouts']['connect'] == 3, "Connect timeout should be 3"
+        assert loaded_config['timeouts'].get('request') == 10, "Request timeout should be 10"
+        assert loaded_config['timeouts'].get('connect') == 3, "Connect timeout should be 3"
         
         assert 'queue' in loaded_config, "Config should contain queue section"
         assert loaded_config['queue']['max_concurrent'] == 50, "Max concurrent should be 50"
