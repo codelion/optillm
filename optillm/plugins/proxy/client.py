@@ -27,6 +27,14 @@ class Provider:
         self.last_error = None
         self.latencies = []  # Track recent latencies
         
+        # Per-provider concurrency control
+        self.max_concurrent = config.get('max_concurrent', None)  # None means no limit
+        if self.max_concurrent is not None:
+            self._semaphore = threading.Semaphore(self.max_concurrent)
+            logger.info(f"Provider {self.name} limited to {self.max_concurrent} concurrent requests")
+        else:
+            self._semaphore = None
+        
     @property
     def client(self):
         """Lazy initialization of OpenAI client"""
@@ -38,6 +46,13 @@ class Provider:
                     azure_endpoint=self.base_url,
                     api_version="2024-02-01",
                     max_retries=0  # Disable client retries - we handle them
+                )
+            elif 'generativelanguage.googleapis.com' in self.base_url:
+                # Google AI client - create custom client to avoid "models/" prefix
+                from optillm.plugins.proxy.google_client import GoogleAIClient
+                self._client = GoogleAIClient(
+                    api_key=self.api_key,
+                    base_url=self.base_url
                 )
             else:
                 # Standard OpenAI-compatible client
@@ -63,6 +78,28 @@ class Provider:
         if not self.latencies:
             return 0
         return sum(self.latencies) / len(self.latencies)
+    
+    def acquire_slot(self, timeout: Optional[float] = None) -> bool:
+        """
+        Try to acquire a slot for this provider.
+        Returns True if acquired, False if timeout or no limit.
+        """
+        if self._semaphore is None:
+            return True  # No limit, always available
+        
+        return self._semaphore.acquire(blocking=True, timeout=timeout)
+    
+    def release_slot(self):
+        """Release a slot for this provider."""
+        if self._semaphore is not None:
+            self._semaphore.release()
+    
+    def available_slots(self) -> Optional[int]:
+        """Get number of available slots, None if unlimited."""
+        if self._semaphore is None:
+            return None
+        # Note: _value is internal but there's no public method to check availability
+        return self._semaphore._value
 
 class ProxyClient:
     """OpenAI-compatible client that proxies to multiple providers"""
@@ -185,6 +222,13 @@ class ProxyClient:
                         
                     attempted_providers.add(provider)
                     
+                    # Try to acquire a slot for this provider (with reasonable timeout for queueing)
+                    slot_timeout = 10.0  # Wait up to 10 seconds for provider to become available
+                    if not provider.acquire_slot(timeout=slot_timeout):
+                        logger.debug(f"Provider {provider.name} at max capacity, trying next provider")
+                        errors.append((provider.name, "At max concurrent requests"))
+                        continue
+                    
                     try:
                         # Map model name if needed and filter out OptiLLM-specific parameters
                         request_kwargs = self._filter_kwargs(kwargs.copy())
@@ -225,6 +269,11 @@ class ProxyClient:
                         if self.proxy_client.track_errors:
                             provider.is_healthy = False
                             provider.last_error = str(e)
+                    
+                    finally:
+                        # Always release the provider slot
+                        provider.release_slot()
+                        logger.debug(f"Released slot for provider {provider.name}")
             
                 # All providers failed, try fallback client
                 if self.proxy_client.fallback_client:

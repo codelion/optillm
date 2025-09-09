@@ -33,6 +33,7 @@ providers:
     base_url: https://api.openai.com/v1
     api_key: ${OPENAI_API_KEY}
     weight: 2
+    max_concurrent: 5  # Optional: limit this provider to 5 concurrent requests
     model_map:
       gpt-4: gpt-4-turbo-preview  # Optional: map model names
     
@@ -40,6 +41,7 @@ providers:
     base_url: https://api.openai.com/v1
     api_key: ${OPENAI_API_KEY_BACKUP}
     weight: 1
+    max_concurrent: 2  # Optional: limit this provider to 2 concurrent requests
 
 routing:
   strategy: weighted  # Options: weighted, round_robin, failover
@@ -188,6 +190,39 @@ queue:
 - **Queue Management**: Limits concurrent requests to prevent memory exhaustion. New requests wait up to `queue.timeout` seconds before being rejected.
 - **Automatic Failover**: When a provider times out, it's marked unhealthy and the request automatically fails over to the next available provider.
 - **Protection**: Prevents slow backends from causing queue buildup that can crash the proxy server.
+
+### Per-Provider Concurrency Limits
+
+Control the maximum number of concurrent requests each provider can handle:
+
+```yaml
+providers:
+  - name: slow_server
+    base_url: http://192.168.1.100:8080/v1
+    api_key: dummy
+    max_concurrent: 1  # This server can only handle 1 request at a time
+    
+  - name: fast_server
+    base_url: https://api.fast.com/v1
+    api_key: ${API_KEY}
+    max_concurrent: 10  # This server can handle 10 concurrent requests
+    
+  - name: unlimited_server
+    base_url: https://api.unlimited.com/v1
+    api_key: ${API_KEY}
+    # No max_concurrent means no limit for this provider
+```
+
+**Use Cases:**
+- **Hardware-limited servers**: Set `max_concurrent: 1` for servers that can't handle parallel requests
+- **Rate limiting**: Prevent overwhelming providers with too many concurrent requests
+- **Resource management**: Balance load across providers with different capacities
+- **Cost control**: Limit expensive providers while allowing more requests to cheaper ones
+
+**Behavior:**
+- If a provider is at max capacity, the proxy tries the next available provider
+- Requests wait briefly (0.5s) for a slot before moving to the next provider
+- Works with all routing strategies (weighted, round_robin, failover)
 
 ### Environment Variables
 
