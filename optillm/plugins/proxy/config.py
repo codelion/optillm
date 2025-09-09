@@ -172,6 +172,8 @@ class ProxyConfig:
             provider.setdefault('weight', 1)
             provider.setdefault('fallback_only', False)
             provider.setdefault('model_map', {})
+            # Per-provider concurrency limit (None means no limit)
+            provider.setdefault('max_concurrent', None)
         
         return config
     
@@ -200,6 +202,12 @@ class ProxyConfig:
             if provider['weight'] <= 0:
                 logger.warning(f"Provider {provider['name']} has invalid weight {provider['weight']}, setting to 1")
                 provider['weight'] = 1
+            
+            # Validate max_concurrent if specified
+            if provider.get('max_concurrent') is not None:
+                if not isinstance(provider['max_concurrent'], int) or provider['max_concurrent'] <= 0:
+                    logger.warning(f"Provider {provider['name']} has invalid max_concurrent {provider['max_concurrent']}, removing limit")
+                    provider['max_concurrent'] = None
         
         # Validate routing strategy
         valid_strategies = ['weighted', 'round_robin', 'failover']

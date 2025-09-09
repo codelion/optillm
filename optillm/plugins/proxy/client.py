@@ -215,6 +215,13 @@ class ProxyClient:
                         
                     attempted_providers.add(provider)
                     
+                    # Try to acquire a slot for this provider (with short timeout to try next provider quickly)
+                    slot_timeout = 0.5  # Don't wait too long for a single provider
+                    if not provider.acquire_slot(timeout=slot_timeout):
+                        logger.debug(f"Provider {provider.name} at max capacity, trying next provider")
+                        errors.append((provider.name, "At max concurrent requests"))
+                        continue
+                    
                     try:
                         # Map model name if needed and filter out OptiLLM-specific parameters
                         request_kwargs = self._filter_kwargs(kwargs.copy())
@@ -255,6 +262,11 @@ class ProxyClient:
                         if self.proxy_client.track_errors:
                             provider.is_healthy = False
                             provider.last_error = str(e)
+                    
+                    finally:
+                        # Always release the provider slot
+                        provider.release_slot()
+                        logger.debug(f"Released slot for provider {provider.name}")
             
                 # All providers failed, try fallback client
                 if self.proxy_client.fallback_client:
