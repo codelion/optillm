@@ -887,14 +887,30 @@ def proxy_models():
     try:
         if server_config['base_url']:
             client = OpenAI(api_key=API_KEY, base_url=server_config['base_url'])
+            # For external API, fetch models using the OpenAI client
+            models_response = client.models.list()
+            # Convert to dict format
+            models_data = {
+                "object": "list",
+                "data": [model.dict() for model in models_response.data]
+            }
         else:
-            client = default_client
-
-        # Fetch models using the OpenAI client and return the raw response
-        models_response = client.models.list().json()
+            # For local inference, create a models response manually
+            current_model = server_config.get('model', 'gpt-3.5-turbo')
+            models_data = {
+                "object": "list", 
+                "data": [
+                    {
+                        "id": current_model,
+                        "object": "model",
+                        "created": 1677610602,
+                        "owned_by": "optillm"
+                    }
+                ]
+            }
 
         logger.debug('Models retrieved successfully')
-        return models_response, 200
+        return jsonify(models_data), 200
     except Exception as e:
         logger.error(f"Error fetching models: {str(e)}")
         return jsonify({"error": f"Error fetching models: {str(e)}"}), 500
