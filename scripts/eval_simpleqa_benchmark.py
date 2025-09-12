@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 SIMPLEQA_CSV_URL = "https://openaipublic.blob.core.windows.net/simple-evals/simple_qa_test_set.csv"
+SIMPLEQA_VERIFIED_CSV_URL = "https://huggingface.co/datasets/codelion/SimpleQA-Verified/raw/main/simpleqa_verified.csv"
 DEFAULT_TIMEOUT = 600  # 10 minutes for potentially long research operations
 DEFAULT_GRADER_MODEL = "gpt-4o"
 DEFAULT_BASE_URL = "http://localhost:8000/v1"
@@ -90,12 +91,14 @@ class SimpleQAEvaluator:
                  grader_model: str = DEFAULT_GRADER_MODEL,
                  timeout: int = DEFAULT_TIMEOUT,
                  cache_dir: str = "cache",
-                 output_dir: str = "results"):
+                 output_dir: str = "results",
+                 use_verified: bool = False):
         self.model = model
         self.approach = approach
         self.base_url = base_url
         self.grader_model = grader_model
         self.timeout = timeout
+        self.use_verified = use_verified
         self.cache_dir = Path(cache_dir)
         self.output_dir = Path(output_dir)
         
@@ -137,16 +140,23 @@ class SimpleQAEvaluator:
         
     def download_dataset(self) -> str:
         """Download SimpleQA dataset if not cached"""
-        cache_file = self.cache_dir / "simple_qa_test_set.csv"
+        if self.use_verified:
+            cache_file = self.cache_dir / "simpleqa_verified.csv"
+            url = SIMPLEQA_VERIFIED_CSV_URL
+            dataset_name = "SimpleQA-Verified"
+        else:
+            cache_file = self.cache_dir / "simple_qa_test_set.csv"
+            url = SIMPLEQA_CSV_URL
+            dataset_name = "SimpleQA"
         
         if cache_file.exists():
-            logger.info(f"Using cached dataset: {cache_file}")
+            logger.info(f"Using cached {dataset_name} dataset: {cache_file}")
             return str(cache_file)
         
-        logger.info(f"Downloading SimpleQA dataset from {SIMPLEQA_CSV_URL}")
+        logger.info(f"Downloading {dataset_name} dataset from {url}")
         
         try:
-            response = requests.get(SIMPLEQA_CSV_URL, timeout=30)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
             
             with open(cache_file, 'wb') as f:
@@ -176,21 +186,35 @@ class SimpleQAEvaluator:
                     if num_samples and len(questions) >= num_samples:
                         break
                     
-                    # Parse metadata if it's JSON string
-                    try:
-                        metadata = json.loads(row['metadata']) if row['metadata'] else {}
-                    except:
-                        metadata = {}
+                    if self.use_verified:
+                        # SimpleQA-Verified dataset has different fields
+                        metadata = {
+                            'original_index': row.get('original_index', i),
+                            'topic': row.get('topic', ''),
+                            'answer_type': row.get('answer_type', ''),
+                            'multi_step': row.get('multi_step', ''),
+                            'requires_reasoning': row.get('requires_reasoning', ''),
+                            'urls': row.get('urls', '')
+                        }
+                        question_id = row.get('original_index', i)
+                    else:
+                        # Original SimpleQA dataset
+                        try:
+                            metadata = json.loads(row['metadata']) if row.get('metadata') else {}
+                        except:
+                            metadata = {}
+                        question_id = i
                     
                     question_data = {
-                        'id': i,
+                        'id': question_id,
                         'metadata': metadata,
                         'question': row['problem'],
                         'gold_answer': row['answer']
                     }
                     questions.append(question_data)
                     
-            logger.info(f"Loaded {len(questions)} questions from dataset")
+            dataset_type = "SimpleQA-Verified" if self.use_verified else "SimpleQA"
+            logger.info(f"Loaded {len(questions)} questions from {dataset_type} dataset")
             return questions
             
         except Exception as e:
@@ -377,7 +401,8 @@ class SimpleQAEvaluator:
     def save_results(self, timestamp: str) -> Tuple[str, str, str]:
         """Save evaluation results to files"""
         # Create output directory for this run
-        run_dir = self.output_dir / f"simpleqa_{self.model}_{self.approach}"
+        dataset_suffix = "_verified" if self.use_verified else ""
+        run_dir = self.output_dir / f"simpleqa{dataset_suffix}_{self.model}_{self.approach}"
         run_dir.mkdir(parents=True, exist_ok=True)
         
         # File paths
@@ -416,9 +441,11 @@ class SimpleQAEvaluator:
         """Run the complete evaluation"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        logger.info(f"Starting SimpleQA evaluation")
+        dataset_type = "SimpleQA-Verified" if self.use_verified else "SimpleQA"
+        logger.info(f"Starting {dataset_type} evaluation")
         logger.info(f"Model: {self.model}")
         logger.info(f"Approach: {self.approach}")
+        logger.info(f"Dataset: {dataset_type} ({'1k verified questions' if self.use_verified else '4.3k questions'})")
         logger.info(f"Base URL: {self.base_url}")
         logger.info(f"Timeout: {self.timeout}s")
         
@@ -502,6 +529,10 @@ def parse_args():
     parser.add_argument("--output-dir", type=str, default="results",
                        help="Directory for saving results (default: results)")
     
+    # Dataset selection
+    parser.add_argument("--verified", action="store_true",
+                       help="Use SimpleQA-Verified dataset (1k verified questions) instead of original SimpleQA")
+    
     # Debugging
     parser.add_argument("--verbose", action="store_true",
                        help="Enable verbose logging")
@@ -524,7 +555,8 @@ def main():
         grader_model=args.grader_model,
         timeout=args.timeout,
         cache_dir=args.cache_dir,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        use_verified=args.verified
     )
     
     try:
