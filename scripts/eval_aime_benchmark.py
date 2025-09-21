@@ -306,7 +306,7 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
         if extra_body:
             kwargs["extra_body"] = extra_body
         
-        response = client.with_options(timeout=1000.0).chat.completions.create(
+        response = client.with_options(timeout=1800.0).chat.completions.create(
             model=model,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
@@ -355,7 +355,10 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
         
     except Exception as e:
         logger.error(f"Error getting LLM response: {e}")
-        return ""
+        logger.error(f"Error type: {type(e).__name__}")
+        if "timeout" in str(e).lower():
+            logger.error("API call timed out - consider increasing timeout for complex approaches like MARS")
+        raise e  # Re-raise instead of silently returning empty string
 
 def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False, analyze_logits: bool = False, extra_body: dict = None) -> List[Dict]:
     """
@@ -375,7 +378,20 @@ def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = F
     remaining_attempts = n
     
     while remaining_attempts > 0:
-        response = get_llm_response(problem, model, analyze_logits, extra_body)
+        try:
+            response = get_llm_response(problem, model, analyze_logits, extra_body)
+        except Exception as e:
+            logger.error(f"Failed to get response for attempt {n - remaining_attempts + 1}: {e}")
+            # Create a failed attempt record
+            attempt_data = {
+                "attempt_number": len(attempts) + 1,
+                "response": f"ERROR: {str(e)}",
+                "predicted_answer": None,
+                "error": str(e)
+            }
+            attempts.append(attempt_data)
+            remaining_attempts -= 1
+            continue
         
         # If response is already formatted as attempts
         if isinstance(response, list):
@@ -830,11 +846,24 @@ def main(model: str, n_attempts: int, year: int = 2024, analyze_thoughts: bool =
             
         problem_text = item['problem']
         correct_answer = int(item['answer'])
-        
+
+        print(f"\n🔬 Processing Problem {id}: {problem_text[:100]}...")
+        print(f"   Expected answer: {correct_answer}")
+        if extra_body and 'optillm_approach' in extra_body:
+            print(f"   Using approach: {extra_body['optillm_approach']}")
+
         # Make n attempts for each problem
         attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts, analyze_logits, extra_body)
         is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
-        
+
+        # Report result
+        predicted_answers = [attempt.get('predicted_answer') for attempt in attempts]
+        print(f"   Predicted: {predicted_answers}")
+        if is_correct:
+            print(f"   ✅ CORRECT!")
+        else:
+            print(f"   ❌ Incorrect")
+
         result = {
             "index": id,
             "problem": problem_text,
