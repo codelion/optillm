@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
+client = OpenAI(api_key="optillm", base_url="http://localhost:8001/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -45,7 +45,7 @@ THOUGHT_TRANSITIONS = [
 
 def load_2024_dataset() -> list[dict]:
     """
-    Load the dataset of problems.
+    Load the 2024 dataset of problems.
     Returns:
         list[dict]: The dataset of problems.
     """
@@ -55,6 +55,32 @@ def load_2024_dataset() -> list[dict]:
     logging.debug(f"Filtered dataset size: {len(dataset)}.")
     assert len(dataset) == 30, f"Expected 30 problems after filtering by 2024, but found {len(dataset)}"
     return dataset
+
+def load_2025_dataset() -> list[dict]:
+    """
+    Load the 2025 dataset of problems from math-ai/aime25.
+    Returns:
+        list[dict]: The dataset of problems.
+    """
+    dataset = load_dataset("math-ai/aime25")
+    # The AIME 2025 dataset has 30 problems in the "test" split
+    dataset = dataset["test"]
+    logging.debug(f"Loaded AIME 2025 dataset size: {len(dataset)}.")
+    assert len(dataset) == 30, f"Expected 30 problems in AIME 2025, but found {len(dataset)}"
+    return dataset
+
+def load_dataset_by_year(year: int) -> list[dict]:
+    """
+    Load dataset by year (2024 or 2025).
+    Returns:
+        list[dict]: The dataset of problems.
+    """
+    if year == 2024:
+        return load_2024_dataset()
+    elif year == 2025:
+        return load_2025_dataset()
+    else:
+        raise ValueError(f"Unsupported year: {year}. Only 2024 and 2025 are supported.")
 
 def extract_answer(response: str) -> Optional[int]:
     """
@@ -772,23 +798,25 @@ def save_raw_response(filename: str, problem_id: int, response_data: Dict):
     
     return response_id
 
-def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_logits: bool = False, test_time_compute: bool = False, approach_name: str = None, extra_body: dict = None):
+def main(model: str, n_attempts: int, year: int = 2024, analyze_thoughts: bool = False, analyze_logits: bool = False, test_time_compute: bool = False, approach_name: str = None, extra_body: dict = None):
     """Main evaluation function that handles gaps in processed indexes."""
     os.makedirs("results", exist_ok=True)
-    
+
     # Create suffix based on analysis flags
     suffix_parts = []
+    if year != 2024:
+        suffix_parts.append(f"aime{year}")
     if analyze_thoughts:
         suffix_parts.append("thought_analysis")
     if analyze_logits:
         suffix_parts.append("logit_analysis")
     if approach_name:
         suffix_parts.append(approach_name)
-    
+
     suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
     results_file = f"results/evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
-      
-    dataset = load_2024_dataset()
+
+    dataset = load_dataset_by_year(year)
     existing_results = load_existing_results(results_file)
     
     # Create a set of already processed indexes for efficient lookup
@@ -821,9 +849,11 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
     analyze_results(final_results, n_attempts, analyze_thoughts, analyze_logits)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME 2024 problems")
+    parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME problems")
     parser.add_argument("--model", type=str, required=True, help="OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)")
     parser.add_argument("--n", type=int, default=1, help="Number of attempts per problem (for pass@n evaluation)")
+    parser.add_argument("--year", type=int, default=2024, choices=[2024, 2025], help="AIME year to evaluate (2024 or 2025)")
+    parser.add_argument("--approach", type=str, help="OptILLM approach to use (e.g., mars, moa, bon)")
     parser.add_argument("--analyze-thoughts", action="store_true", help="Analyze thinking patterns in responses")
     parser.add_argument("--analyze-logits", action="store_true", help="Analyze token probability distributions")
     parser.add_argument("--test-time-compute", action="store_true", help="Evaluate test-time compute scaling approaches")
@@ -870,7 +900,12 @@ if __name__ == "__main__":
             print(f"Extra body: {extra_body}")
             print(f"{'=' * 80}\n")
             
-            main(args.model, args.n, args.analyze_thoughts, args.analyze_logits, 
+            main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
                  test_time_compute=True, approach_name=approach_slug, extra_body=extra_body)
     else:
-        main(args.model, args.n, args.analyze_thoughts, args.analyze_logits)
+        # Handle approach parameter
+        extra_body = {"optillm_approach": args.approach} if args.approach else None
+        approach_name = args.approach if args.approach else None
+
+        main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
+             approach_name=approach_name, extra_body=extra_body)
