@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
     'min_verified_solutions': 1,
     'thinking_budget_initial': 10000,
     'thinking_budget_max': 32000,
-    'max_response_tokens': 32768,
+    'max_response_tokens': 65536,
     'max_verification_attempts': 10,
     'early_termination': True,
     'use_reasoning_api': True
