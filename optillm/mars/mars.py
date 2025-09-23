@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 # Default MARS configuration inspired by IMO25 solver
 DEFAULT_CONFIG = {
-    'num_agents': 5,
+    'num_agents': 3,
     'max_iterations': 10,
-    'verification_passes_required': 5,
+    'verification_passes_required': 3,
     'consensus_threshold': 2,
     'min_verified_solutions': 1,
     'thinking_budget_initial': 10000,
     'thinking_budget_max': 32000,
-    'max_response_tokens': 4096,
+    'max_response_tokens': 32768,
     'max_verification_attempts': 10,
     'early_termination': True,
     'use_reasoning_api': True
