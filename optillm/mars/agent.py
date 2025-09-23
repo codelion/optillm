@@ -27,18 +27,18 @@ class MARSAgent:
         self.temperature = self._assign_temperature()
 
     def _assign_temperature(self) -> float:
-        """Assign temperature based on agent ID for diversity"""
-        temperatures = [0.3, 0.5, 0.7, 0.9, 1.0]
+        """Assign temperature based on agent ID for 3-agent configuration"""
+        temperatures = [0.3, 0.6, 1.0]  # Low, Medium, High reasoning effort
         return temperatures[self.agent_id % len(temperatures)]
 
     def _get_reasoning_effort(self) -> str:
         """Get reasoning effort level based on agent temperature"""
         if self.temperature <= 0.4:
-            return "low"  # 20% reasoning budget
-        elif self.temperature <= 0.7:
-            return "medium"  # 50% reasoning budget
+            return "low"  # 8k thinking tokens
+        elif self.temperature <= 0.8:
+            return "medium"  # 16k thinking tokens
         else:
-            return "high"  # 80% reasoning budget
+            return "high"  # 32k thinking tokens
 
     def generate_solution(self, problem: str, request_id: str = None) -> Tuple[AgentSolution, int]:
         """Generate a solution for the given problem using reasoning API"""
@@ -52,9 +52,18 @@ class MARSAgent:
         )
 
         # Configure reasoning parameters for OpenRouter
+        reasoning_effort = self._get_reasoning_effort()
         reasoning_config = {
-            "effort": self._get_reasoning_effort()
+            "effort": reasoning_effort
         }
+
+        # Add specific token budgets for 3-agent configuration
+        if reasoning_effort == "low":
+            reasoning_config["max_tokens"] = 8000  # Agent 0: 8k thinking tokens
+        elif reasoning_effort == "medium":
+            reasoning_config["max_tokens"] = 16000  # Agent 1: 16k thinking tokens
+        else:  # high
+            reasoning_config["max_tokens"] = 32000  # Agent 2: 32k thinking tokens
 
         try:
             # Make API call with reasoning via extra_body for OpenRouter compatibility
