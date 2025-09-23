@@ -64,7 +64,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": exploration_prompt}
                 ],
-                max_tokens=self.config.get('max_response_tokens', 4096),
+                max_tokens=self.config.get('max_response_tokens', 16384),
                 temperature=self.temperature,
                 timeout=300,  # 5 minute timeout for complex problems
                 extra_body={
@@ -113,7 +113,7 @@ class MARSAgent:
                 timestamp=datetime.now()
             ), 0
 
-    def verify_solution(self, problem: str, solution: str, verifier_id: int, request_id: str = None) -> VerificationResult:
+    def verify_solution(self, problem: str, solution: str, verifier_id: int, solution_agent_id: int, request_id: str = None) -> VerificationResult:
         """Verify a solution using mathematical reasoning"""
         logger.info(f"Agent {self.agent_id} verifying solution (verifier_id: {verifier_id})")
 
@@ -129,7 +129,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": verification_prompt}
                 ],
-                max_tokens=2048,
+                max_tokens=8192,
                 temperature=0.1,  # Low temperature for consistent verification
                 timeout=180,
                 extra_body={
@@ -146,7 +146,7 @@ class MARSAgent:
 
             return VerificationResult(
                 verifier_id=verifier_id,
-                solution_id=f"agent_{self.agent_id}",  # Will be updated by workspace
+                solution_id=f"agent_{solution_agent_id}_iter_0",  # Use the solution's agent_id
                 assessment=assessment,
                 confidence=confidence,
                 issues=issues,
@@ -159,7 +159,7 @@ class MARSAgent:
             logger.error(f"Agent {self.agent_id} error in verification: {str(e)}")
             return VerificationResult(
                 verifier_id=verifier_id,
-                solution_id=f"agent_{self.agent_id}",
+                solution_id=f"agent_{solution_agent_id}_iter_0",
                 assessment="INCOMPLETE",
                 confidence=0.0,
                 issues=[f"Verification error: {str(e)}"],
@@ -186,7 +186,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": improvement_prompt}
                 ],
-                max_tokens=4096,
+                max_tokens=16384,
                 temperature=self.temperature * 0.8,  # Slightly lower temperature for improvement
                 timeout=300,
                 extra_body={

@@ -71,6 +71,7 @@ class MARSVerifier:
                     problem=self.workspace.problem,
                     solution=solution.solution,
                     verifier_id=verifier_agent.agent_id,
+                    solution_agent_id=solution.agent_id,
                     request_id=request_id
                 )
 

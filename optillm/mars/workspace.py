@@ -51,8 +51,8 @@ class MARSWorkspace:
 
     def add_solution(self, agent_solution: AgentSolution) -> str:
         """Add a new agent solution to the workspace"""
+        # Keep the original agent_id, don't overwrite it
         solution_id = f"agent_{agent_solution.agent_id}_iter_{self.iteration_count}"
-        agent_solution.agent_id = len(self.solutions)  # Unique ID
         self.solutions.append(agent_solution)
         self.total_reasoning_tokens += agent_solution.reasoning_tokens
 
@@ -64,21 +64,38 @@ class MARSWorkspace:
         self.verification_results.append(verification)
 
         # Update the corresponding solution's verification status
-        for solution in self.solutions:
-            if f"agent_{solution.agent_id}_iter_{self.iteration_count}" == verification.solution_id:
-                solution.verification_results.append({
-                    'assessment': verification.assessment,
-                    'confidence': verification.confidence,
-                    'issues': verification.issues,
-                    'detailed_report': verification.detailed_report
-                })
+        # Extract agent_id from solution_id (format: "agent_X_iter_Y")
+        if verification.solution_id.startswith("agent_"):
+            try:
+                agent_id = int(verification.solution_id.split("_")[1])
 
-                # Update verification score (average of all verifications)
-                verified_count = len([v for v in solution.verification_results if v['assessment'] == 'CORRECT'])
-                total_verifications = len(solution.verification_results)
-                solution.verification_score = verified_count / total_verifications if total_verifications > 0 else 0
-                solution.is_verified = solution.verification_score >= self.config.get('verification_threshold', 0.8)
-                break
+                for solution in self.solutions:
+                    if solution.agent_id == agent_id:
+                        solution.verification_results.append({
+                            'assessment': verification.assessment,
+                            'confidence': verification.confidence,
+                            'issues': verification.issues,
+                            'detailed_report': verification.detailed_report
+                        })
+
+                        # Update verification score (average of all verifications)
+                        verified_count = len([v for v in solution.verification_results if v['assessment'] == 'CORRECT'])
+                        total_verifications = len(solution.verification_results)
+                        solution.verification_score = verified_count / total_verifications if total_verifications > 0 else 0
+
+                        # Use count-based verification instead of percentage
+                        consecutive_correct = 0
+                        for v in reversed(solution.verification_results):
+                            if v['assessment'] == 'CORRECT':
+                                consecutive_correct += 1
+                            else:
+                                break
+
+                        verification_threshold = self.config.get('verification_passes_required', 5)
+                        solution.is_verified = consecutive_correct >= verification_threshold
+                        break
+            except (IndexError, ValueError):
+                logger.warning(f"Invalid solution_id format: {verification.solution_id}")
 
         logger.info(f"Added verification for {verification.solution_id}: {verification.assessment}")
 

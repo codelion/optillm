@@ -306,7 +306,7 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
         if extra_body:
             kwargs["extra_body"] = extra_body
         
-        response = client.with_options(timeout=1800.0).chat.completions.create(
+        response = client.with_options(timeout=3600.0).chat.completions.create(
             model=model,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}

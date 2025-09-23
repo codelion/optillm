@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Default MARS configuration inspired by IMO25 solver
 DEFAULT_CONFIG = {
     'num_agents': 5,
-    'max_iterations': 30,
+    'max_iterations': 10,
     'verification_passes_required': 5,
     'consensus_threshold': 2,
     'min_verified_solutions': 1,
