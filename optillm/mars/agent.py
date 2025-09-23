@@ -34,11 +34,11 @@ class MARSAgent:
     def _get_reasoning_effort(self) -> str:
         """Get reasoning effort level based on agent temperature"""
         if self.temperature <= 0.4:
-            return "low"  # 8k thinking tokens
+            return "low"  # 12.5% of max_tokens
         elif self.temperature <= 0.8:
-            return "medium"  # 16k thinking tokens
+            return "medium"  # 25% of max_tokens
         else:
-            return "high"  # 32k thinking tokens
+            return "high"  # 50% of max_tokens
 
     def generate_solution(self, problem: str, request_id: str = None) -> Tuple[AgentSolution, int]:
         """Generate a solution for the given problem using reasoning API"""
@@ -51,19 +51,21 @@ class MARSAgent:
             problem=problem
         )
 
-        # Configure reasoning parameters for OpenRouter
+        # Configure reasoning parameters based on proportional budgets
         reasoning_effort = self._get_reasoning_effort()
-        reasoning_config = {
-            "effort": reasoning_effort
-        }
+        max_tokens = self.config.get('max_tokens', 64000)
 
-        # Add specific token budgets for 3-agent configuration
+        # Calculate reasoning tokens based on effort level and proportions
         if reasoning_effort == "low":
-            reasoning_config["max_tokens"] = 8000  # Agent 0: 8k thinking tokens
+            reasoning_tokens = int(max_tokens * self.config.get('low_effort_ratio', 0.125))
         elif reasoning_effort == "medium":
-            reasoning_config["max_tokens"] = 16000  # Agent 1: 16k thinking tokens
+            reasoning_tokens = int(max_tokens * self.config.get('medium_effort_ratio', 0.25))
         else:  # high
-            reasoning_config["max_tokens"] = 32000  # Agent 2: 32k thinking tokens
+            reasoning_tokens = int(max_tokens * self.config.get('high_effort_ratio', 0.5))
+
+        reasoning_config = {
+            "max_tokens": reasoning_tokens
+        }
 
         try:
             # Make API call with reasoning via extra_body for OpenRouter compatibility
@@ -73,7 +75,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": exploration_prompt}
                 ],
-                max_tokens=self.config.get('max_response_tokens', 32768),
+                max_tokens=max_tokens,
                 temperature=self.temperature,
                 timeout=300,  # 5 minute timeout for complex problems
                 extra_body={
@@ -131,6 +133,11 @@ class MARSAgent:
             solution=solution
         )
 
+        # Calculate verification token budgets
+        max_tokens = self.config.get('max_tokens', 64000)
+        verification_max_tokens = int(max_tokens * self.config.get('verification_ratio', 0.5))
+        verification_reasoning_tokens = int(verification_max_tokens * 0.5)
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -138,12 +145,12 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": verification_prompt}
                 ],
-                max_tokens=16384,
+                max_tokens=verification_max_tokens,
                 temperature=0.1,  # Low temperature for consistent verification
                 timeout=180,
                 extra_body={
                     "reasoning": {
-                        "effort": "medium"
+                        "max_tokens": verification_reasoning_tokens
                     }
                 }
             )
@@ -188,6 +195,10 @@ class MARSAgent:
             issues="\n".join(f"- {issue}" for issue in issues)
         )
 
+        # Calculate improvement token budgets (use high effort for iterations)
+        max_tokens = self.config.get('max_tokens', 64000)
+        improvement_reasoning_tokens = int(max_tokens * self.config.get('high_effort_ratio', 0.5))
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -195,12 +206,12 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": improvement_prompt}
                 ],
-                max_tokens=32768,
+                max_tokens=max_tokens,
                 temperature=self.temperature * 0.8,  # Slightly lower temperature for improvement
                 timeout=300,
                 extra_body={
                     "reasoning": {
-                        "effort": "high"
+                        "max_tokens": improvement_reasoning_tokens
                     }
                 }
             )

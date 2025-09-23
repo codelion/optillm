@@ -15,19 +15,23 @@ from .prompts import SYNTHESIS_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Default MARS configuration inspired by IMO25 solver
+# Default MARS configuration with unified token budget system
 DEFAULT_CONFIG = {
     'num_agents': 3,
-    'max_iterations': 10,
-    'verification_passes_required': 3,
-    'consensus_threshold': 2,
-    'min_verified_solutions': 1,
-    'thinking_budget_initial': 10000,
-    'thinking_budget_max': 32000,
-    'max_response_tokens': 64000,
+    'max_iterations': 5,  # Balanced for quality vs efficiency
+    'verification_passes_required': 3,  # Restored for better verification
+    'consensus_threshold': 2,  # Keep at 2 for 3-agent setup
+    'min_verified_solutions': 1,  # Keep minimal requirement
+    'max_tokens': 64000,  # Base token budget
     'max_verification_attempts': 10,
     'early_termination': True,
-    'use_reasoning_api': True
+    'use_reasoning_api': True,
+    # Token budget proportions
+    'high_effort_ratio': 0.5,    # 32000 tokens
+    'medium_effort_ratio': 0.25,  # 16000 tokens
+    'low_effort_ratio': 0.125,   # 8000 tokens
+    'verification_ratio': 0.5,   # 32000 tokens for verification
+    'synthesis_ratio': 1.0       # 64000 tokens for synthesis
 }
 
 def multi_agent_reasoning_system(
@@ -185,19 +189,23 @@ def _synthesize_final_solution(
     )
 
     try:
-        # Use high reasoning effort for synthesis
+        # Calculate synthesis token budgets
+        synthesis_max_tokens = int(config['max_tokens'] * config['synthesis_ratio'])
+        synthesis_reasoning_tokens = int(synthesis_max_tokens * 0.5)
+
+        # Use proportional reasoning effort for synthesis
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are a mathematical synthesis expert."},
                 {"role": "user", "content": synthesis_prompt}
             ],
-            max_tokens=config['max_response_tokens'],
+            max_tokens=synthesis_max_tokens,
             temperature=0.3,  # Lower temperature for synthesis
             timeout=300,
             extra_body={
                 "reasoning": {
-                    "effort": "high"
+                    "max_tokens": synthesis_reasoning_tokens
                 }
             }
         )
@@ -210,11 +218,11 @@ def _synthesize_final_solution(
                     {"role": "system", "content": "You are a mathematical synthesis expert."},
                     {"role": "user", "content": synthesis_prompt}
                 ],
-                "max_tokens": config['max_response_tokens'],
+                "max_tokens": synthesis_max_tokens,
                 "temperature": 0.3,
                 "extra_body": {
                     "reasoning": {
-                        "effort": "high"
+                        "max_tokens": synthesis_reasoning_tokens
                     }
                 }
             }
