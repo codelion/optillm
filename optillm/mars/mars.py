@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG = {
     'num_agents': 3,
     'max_iterations': 5,  # Balanced for quality vs efficiency
-    'verification_passes_required': 3,  # Restored for better verification
+    'verification_passes_required': 2,  # Balanced for 5-iteration efficiency
     'consensus_threshold': 2,  # Keep at 2 for 3-agent setup
     'min_verified_solutions': 1,  # Keep minimal requirement
     'max_tokens': 64000,  # Base token budget
