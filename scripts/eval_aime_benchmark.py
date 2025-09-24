@@ -311,7 +311,7 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=8192,
+            max_tokens=30000,
             **kwargs
         )
         

@@ -133,7 +133,7 @@ REASONING: [Brief explanation]"""
                 {"role": "system", "content": "You are an expert mathematician and IMO judge."},
                 {"role": "user", "content": judge_prompt}
             ],
-            max_tokens=2048,
+            max_tokens=30000,
             temperature=0.1  # Low temperature for consistent judging
         )
 
@@ -302,7 +302,7 @@ def get_llm_response(problem: str, model: str, extra_body: dict = None, timeout:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": problem}
             ],
-            max_tokens=8192,  # Extended token limit for complex proofs
+            max_tokens=30000,  # Extended token limit for complex proofs
             **kwargs
         )
 
