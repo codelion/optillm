@@ -3,8 +3,10 @@ import yaml
 import json
 import optillm
 import time
+import math_verify
 
 from optillm import conversation_logger
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Literal, Any, Optional
@@ -32,6 +34,82 @@ class CepoConfig:
     use_plan_diversity: bool  # whether to use plan diversity
     rating_model: Optional[str] = None # model to be used for rating
     print_output: bool = False  # whether to print the output of each stage
+
+
+MCQ_PATTERNS = [
+    # 0)"**Answer:** A" or "*Answers* – B", i.e. markdown‐wrapped "Answer(s)" with an unwrapped letter.
+    re.compile(
+        r'''(?ix)                   # case‐insensitive, ignore‐space
+        (?:\*{1,2}|_{1,2})          # leading *…*  or _…_
+        Answer[s]?                  #   Answer or Answers
+        \s*[:\-–]?                  #   optional separator
+        (?:\*{1,2}|_{1,2})          # closing wrapper
+        \s*                         # optional space
+        ([ABCD])\b                  # the actual letter
+        ''',
+        re.X
+    ),
+
+    # 0.1)
+    re.compile(r'''(?ix)           # ignore case, allow verbose mode
+        ^\s*                      # optional leading whitespace
+        (?:\*{1,2}|_{1,2})?       # optional markdown wrapper
+        Answer:?                   # the word 'answer' with an optional colon
+        (?:\*{1,2}|_{1,2})?       # optional markdown wrapper again
+        \s*:?\s*                  # optional colon with optional spaces
+        (?:\*{1,2}|_{1,2})?       # optional markdown wrapper before letter
+        ([ABCD])                 # capture the letter
+        (?:\*{1,2}|_{1,2})?       # optional markdown wrapper after letter
+        \s*                     # optional trailing whitespace, end of line
+    ''', re.MULTILINE),
+
+    # 1) Answer: (C)   or   Answers: (B)
+    re.compile(r'(?ix)\bAnswer[s]?\b\s*[:\-–]?\s*\(\s*([ABCD])\s*\)'),
+
+    # 2) Answer: C    or   Answers – D
+    re.compile(r'(?ix)\bAnswer[s]?\b\s*[:\-–]?\s*([ABCD])\b'),
+
+    # 3) Option B   or   Choice: C
+    re.compile(r'(?ix)\b(?:Option|Choice)\b\s*[:\-–]?\s*([ABCD])\b'),
+
+    # 7) LaTeX \boxed{...A...}, catches both \boxed{A} and
+    #    \boxed{\text{A } 2.08\times10^{-6}\,\mathrm{m}} etc.
+    re.compile(r'(?x)\\boxed\{[^}]*?([ABCD])[^}]*\}', re.MULTILINE),
+
+    # 7.5) LaTeX \boxed{\textbf{...C...}}
+    re.compile(r'(?x)\\boxed\{[^}]*?\\textbf\{[^}]*?([ABCD])[^}]*\}[^}]*\}', re.MULTILINE),
+
+    # 7.51) LaTeX \boxed{\text{...C...}}
+    re.compile(r'(?x)\\boxed\{[^}]*?\\text\{[^}]*?([ABCD])[^}]*\}[^}]*\}', re.MULTILINE),
+
+    # 4) bare singletons:  (A)  [B]
+    re.compile(r'(?x)(?<![A-Za-z0-9])[\(\[]\s*([ABCD])\s*[\)\]](?![A-Za-z0-9])'),
+
+    # 5) Markdown‐wrapped: *A*  **B**  _C_  __D__
+    re.compile(r'(?x)(?<![A-Za-z0-9])(?:\*{1,2}|_{1,2})([ABCD])(?:\*{1,2}|_{1,2})(?![A-Za-z0-9])'),
+
+    # 6) LaTeX \textbf{...C...}
+    re.compile(r'(?x)\\textbf\{[^}]*?([ABCD])[^}]*\}'),
+
+    # 8) markdown‐wrapped answer plus “)” plus description, e.g. **D) …**
+    re.compile(r'''(?x)                        # ignore whitespace in pattern
+        (?<![A-Za-z0-9])            # not preceded by word‐char
+        (?:\*{1,2}|_{1,2})          # opening ** or __ or * or _
+        \s*([ABCD])\)               # capture letter plus “)”
+        [^*_\n]+?                   # some text inside wrapper
+        (?:\*{1,2}|_{1,2})          # closing wrapper
+        (?![A-Za-z0-9])             # not followed by word‐char
+    '''),
+
+    # 9) final fallback: a line that's exactly "A", "B.", "C)", "**D**", etc.
+    re.compile(r'''(?x)^\s*
+        (?:\*{1,2}|_{1,2})?     # optional markdown wrapper
+        ([ABCD])                # capture group for letter
+        (?:\*{1,2}|_{1,2})?     # optional closing markdown
+        \s*[\.\)\-–:]?          # optional separator after the letter
+        \s*.*$                  # allow any following text
+    ''', re.MULTILINE),
+]
 
 
 # given command line arguments which includes a yaml file path, initialize a CePO configuration
@@ -463,121 +541,6 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         print(f"\nCePO: Answer generated for one bestofn_n attempt.")
 
     return final_output, completion_tokens, cb_log
-    
-        
-        # Log provider call if conversation logging is enabled
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-        completion_tokens += response.usage.completion_tokens
-
-        if response.choices[0].finish_reason == "length":
-            # Skipping plan generation due to exceeding the token budget. Usually it means the plan is incomplete.
-            continue
-
-        # Step 2 - Execute the plan
-        content = f"Can you execute the above plan step-by-step to produce the final answer. "\
-                  f"Be extra careful when executing steps where your confidence is lower."
-        messages.extend([{"role": "assistant", "content": response.choices[0].message.content}, {"role": "user", "content": content}])
-        
-        # Prepare request for logging
-        provider_request = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": cepo_config.planning_max_tokens_step2,
-            "temperature": cepo_config.planning_temperature_step2,
-            "stream": False,
-        }
-        
-        response = client.chat.completions.create(**provider_request)
-        
-        # Log provider call if conversation logging is enabled
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-        completion_tokens += response.usage.completion_tokens
-
-        if response.choices[0].finish_reason == "length":
-            messages.append({"role": "assistant", "content": response.choices[0].message.content})
-            cb_log[f"messages_planning_{i}_rejected_due_to_length"] = messages
-            if cepo_config.print_output:
-                print(f"\nCePO: Plan proposal rejected due to length. Attempt {i + 1} out of {cepo_config.planning_m}.\nMessages: {messages}")
-            continue
-
-        plans.append(response.choices[0].message.content)
-        messages.append({"role": "assistant", "content": response.choices[0].message.content})
-        cb_log[f"messages_planning_{i}"] = messages
-        if cepo_config.print_output:
-            print(f"\nCePO: Plan proposal generated. Attempt {i + 1} out of {cepo_config.planning_m}.\nMessages: {messages}")
-        
-        if len(plans) == cepo_config.planning_n:
-            break
-
-    if not plans:
-        # If no plans were generated succesfully, take the last one even if it was rejected due to length
-        plans.append(response.choices[0].message.content)
-        messages.append({"role": "assistant", "content": response.choices[0].message.content})
-        cb_log[f"messages_planning_{i}_no_plans_so_taking_the_last_one"] = messages
-        if cepo_config.print_output:
-            print(f"\nCePO: No plans generated successfully. Taking the last one from rejected due to length.\nMessages: {messages}")
-
-    # Step 3 - Review and address inconsistencies
-    try:
-        plans_message = ""
-        for i, plan in enumerate(plans):
-            plans_message += f"Response {i + 1}:\n{plan}\n\n"
-        plans_message = plans_message[:-2]  # remove the last 2x newline
-        content = f"Can you review your last {len(plans)} responses and identify any inconsistency between them. After that, can you address "\
-                  f"it and present a final step-by-step solution to the problem? Here is the question:\n{question_only}"
-        messages = [{"role": "assistant", "content": plans_message}, {"role": "user", "content": content}]
-
-        # Prepare request for logging
-        provider_request = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": cepo_config.planning_max_tokens_step3,
-            "temperature": cepo_config.planning_temperature_step3,
-            "stream": False,
-        }
-        
-        response = client.chat.completions.create(**provider_request)
-        
-        # Log provider call if conversation logging is enabled
-        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-        final_solution = response.choices[0].message.content
-        completion_tokens += response.usage.completion_tokens
-    except (CerebrasBadRequestError, OpenAIBadRequestError) as e:
-        # In case of an error, take the first plan as the final solution
-        final_solution = plans[0]
-        messages = []
-
-    # Step 4 - Answer the question
-    content = f"Use your final solution from above to correctly answer the question. Here is the question:\n{task}"
-    messages = [{"role": "assistant", "content": final_solution}, {"role": "user", "content": content}]
-
-    # Prepare request for logging
-    provider_request = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": cepo_config.planning_max_tokens_step4,
-        "temperature": cepo_config.planning_temperature_step4,
-        "stream": False,
-    }
-    
-    response = client.chat.completions.create(**provider_request)
-    
-    # Log provider call if conversation logging is enabled
-    if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
-        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-        optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-    completion_tokens += response.usage.completion_tokens
-
-    cb_log["messages"] = messages
-    if cepo_config.print_output:
-        print(f"\nCePO: Answer generated.\nMessages: {messages}")
-    return response.choices[0].message.content, completion_tokens, cb_log
 
 
 def generate_approaches(system_prompt: str, initial_query: str, num_approach: int, client: Any, model: str, cepo_config: CepoConfig, max_retry: int = 2, request_id: str = None) -> tuple[list[str], int]:
@@ -877,6 +840,79 @@ def rate_completions_pairwise(system_prompt: str, initial_query: str, client: An
     return completions[best_index], completion_tokens, cb_log
 
 
+def extract_answer_mathverify(response_str, last_n_chars=100):
+    response_str = str(response_str)
+    try:
+        float(response_str)
+        return [float(response_str)]
+    except:
+        response_str = response_str.split("</think>", 1)[1] if "</think>" in response_str else response_str
+        if last_n_chars is not None:
+            response_str = response_str[-last_n_chars:]
+        parsed_result = math_verify.parse(response_str, parsing_timeout=None)
+        return parsed_result
+
+
+def extract_abcd(text: str) -> str | None:
+    """
+    Scan text (with Markdown/LaTeX wrappers intact) and return
+    'A', 'B', 'C', or 'D' if a correct-answer declaration is found.
+    Otherwise return None.
+    """
+    matches = []
+    for prio, pat in enumerate(MCQ_PATTERNS):
+        m = pat.search(text)
+        if m:
+            letter = m.group(1).upper()
+            if letter in 'ABCD':
+                matches.append((prio, m, letter))
+
+    matches.sort(key=lambda triple: (
+        triple[0],
+        len(triple[1].group(0))
+    ))
+    for _, match, letter in matches:
+        return letter
+    return text.removeprefix('**')[:1]
+
+
+def majority_vote_math(completions, last_n_chars=100):
+    extracted_answer_map = []
+    for response in completions:
+        extracted_answer = extract_answer_mathverify(response, last_n_chars)
+        extracted_answer = extracted_answer[0] if extracted_answer else None
+        extracted_answer_map.append((response, extracted_answer))
+
+    counts = Counter(answer for _, answer in extracted_answer_map)
+    majority_answer, count = counts.most_common(1)[0]
+    # TODO it may return all "None", we probably should handle this case
+    # Return one response whose extracted answer matches the majority
+    for response, answer in extracted_answer_map:
+        if answer == majority_answer:
+            return response, count
+
+
+def majority_vote_mcq(completions, last_n_chars=100):
+    extracted_answer_map = []
+    for response in completions:
+        extracted_answer = extract_abcd(response[-last_n_chars:])
+        extracted_answer_map.append((response, extracted_answer))
+
+    counts = Counter(answer for _, answer in extracted_answer_map)
+    majority_answer, count = counts.most_common(1)[0]
+    # TODO it may return all "None", we probably should handle this case
+    for response, answer in extracted_answer_map:
+        if answer == majority_answer:
+            return response, count
+        
+
+def rate_completions_majority_vote(completions: list[str], last_n_chars: int = 150) -> tuple[str, int, dict]:
+    mcq_majority, count = majority_vote_mcq(completions, last_n_chars)
+    if mcq_majority is None:
+        return majority_vote_math(completions, last_n_chars)
+    return mcq_majority, count
+
+
 def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_config: CepoConfig, request_id: str = None) -> tuple[str, int]:
     """
     Applies CePO reasoning flow for the given task. First, it generates multiple completions, and then rates them to select the best one.
@@ -907,14 +943,15 @@ def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_c
     completions = [c for c in completions if c]  # safeguard in case completion is None (observed with GPT OSS)
 
     # Rate the completions
+    rating_model = cepo_config.rating_model if cepo_config.rating_model else model
     if cepo_config.bestofn_rating_type == "absolute":
-        rate_completions_fn = rate_completions_absolute
+        best_completion, completion_tokens_rating, cb_log = rate_completions_absolute(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
     elif cepo_config.bestofn_rating_type == "pairwise":
-        rate_completions_fn = rate_completions_pairwise
+        best_completion, completion_tokens_rating, cb_log = rate_completions_pairwise(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
+    elif cepo_config.bestofn_rating_type == "majority_with_code_exec":
+        best_completion, _ = rate_completions_majority_vote(completions)
+        completion_tokens_rating = 0
     else:
         raise ValueError("Invalid rating type in cepo_config")
-    rating_model = cepo_config.rating_model if cepo_config.rating_model else model
-    
-    best_completion, completion_tokens_rating, cb_log = rate_completions_fn(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
     
     return best_completion, completion_tokens_planning + completion_tokens_rating
