@@ -34,11 +34,11 @@ class MARSAgent:
     def _get_reasoning_effort(self) -> str:
         """Get reasoning effort level based on agent temperature"""
         if self.temperature <= 0.4:
-            return "low"  # 12.5% of max_tokens
+            return "low"  # 8k reasoning tokens
         elif self.temperature <= 0.8:
-            return "medium"  # 25% of max_tokens
+            return "medium"  # 16k reasoning tokens
         else:
-            return "high"  # 50% of max_tokens
+            return "high"  # 24k reasoning tokens
 
     def generate_solution(self, problem: str, request_id: str = None) -> Tuple[AgentSolution, int]:
         """Generate a solution for the given problem using reasoning API"""
@@ -51,20 +51,21 @@ class MARSAgent:
             problem=problem
         )
 
-        # Configure reasoning parameters based on proportional budgets
+        # Configure reasoning parameters based on fixed budgets
         reasoning_effort = self._get_reasoning_effort()
-        max_tokens = self.config.get('max_tokens', 64000)
+        max_tokens = self.config['max_tokens']  # Fixed 32k
 
-        # Calculate reasoning tokens based on effort level and proportions
+        # Use fixed reasoning tokens based on effort level
         if reasoning_effort == "low":
-            reasoning_tokens = int(max_tokens * self.config.get('low_effort_ratio', 0.125))
+            reasoning_tokens = self.config['low_effort_tokens']  # 8k
         elif reasoning_effort == "medium":
-            reasoning_tokens = int(max_tokens * self.config.get('medium_effort_ratio', 0.25))
+            reasoning_tokens = self.config['medium_effort_tokens']  # 16k
         else:  # high
-            reasoning_tokens = int(max_tokens * self.config.get('high_effort_ratio', 0.5))
+            reasoning_tokens = self.config['high_effort_tokens']  # 24k
 
         reasoning_config = {
-            "max_tokens": reasoning_tokens
+            "max_tokens": reasoning_tokens,
+            "effort": reasoning_effort
         }
 
         try:
@@ -75,7 +76,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": exploration_prompt}
                 ],
-                max_tokens=reasoning_tokens + 8000,
+                max_tokens=max_tokens,
                 temperature=self.temperature,
                 timeout=300,  # 5 minute timeout for complex problems
                 extra_body={
@@ -133,10 +134,9 @@ class MARSAgent:
             solution=solution
         )
 
-        # Calculate verification token budgets
-        max_tokens = self.config.get('max_tokens', 64000)
-        verification_max_tokens = int(max_tokens * self.config.get('verification_ratio', 0.5))
-        verification_reasoning_tokens = int(verification_max_tokens * 0.5)
+        # Use fixed verification token budgets
+        max_tokens = self.config['max_tokens']  # Fixed 32k
+        verification_reasoning_tokens = self.config['verification_tokens']  # Fixed 8k
 
         try:
             response = self.client.chat.completions.create(
@@ -145,12 +145,13 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": verification_prompt}
                 ],
-                max_tokens=verification_reasoning_tokens + 8000,
+                max_tokens=max_tokens,
                 temperature=0.1,  # Low temperature for consistent verification
                 timeout=180,
                 extra_body={
                     "reasoning": {
-                        "max_tokens": verification_reasoning_tokens
+                        "max_tokens": verification_reasoning_tokens,
+                        "effort": "low"
                     }
                 }
             )
@@ -195,9 +196,9 @@ class MARSAgent:
             issues="\n".join(f"- {issue}" for issue in issues)
         )
 
-        # Calculate improvement token budgets (use high effort for iterations)
-        max_tokens = self.config.get('max_tokens', 64000)
-        improvement_reasoning_tokens = int(max_tokens * self.config.get('high_effort_ratio', 0.5))
+        # Use fixed improvement token budgets (use high effort for iterations)
+        max_tokens = self.config['max_tokens']  # Fixed 32k
+        improvement_reasoning_tokens = self.config['high_effort_tokens']  # Fixed 24k
 
         try:
             response = self.client.chat.completions.create(
@@ -206,12 +207,13 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": improvement_prompt}
                 ],
-                max_tokens=improvement_reasoning_tokens + 8000,
+                max_tokens=max_tokens,
                 temperature=self.temperature * 0.8,  # Slightly lower temperature for improvement
                 timeout=300,
                 extra_body={
                     "reasoning": {
-                        "max_tokens": improvement_reasoning_tokens
+                        "max_tokens": improvement_reasoning_tokens,
+                        "effort": "high"
                     }
                 }
             )

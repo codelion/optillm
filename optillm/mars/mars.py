@@ -15,23 +15,23 @@ from .prompts import SYNTHESIS_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# Default MARS configuration with unified token budget system
+# Default MARS configuration with fixed 32k token budget
 DEFAULT_CONFIG = {
     'num_agents': 3,
     'max_iterations': 5,  # Balanced for quality vs efficiency
     'verification_passes_required': 2,  # Balanced for 5-iteration efficiency
     'consensus_threshold': 2,  # Keep at 2 for 3-agent setup
     'min_verified_solutions': 1,  # Keep minimal requirement
-    'max_tokens': 64000,  # Base token budget
+    'max_tokens': 32000,  # Fixed 32k token budget for all calls
     'max_verification_attempts': 3,
     'early_termination': True,
     'use_reasoning_api': True,
-    # Token budget proportions
-    'high_effort_ratio': 0.5,    # 32000 tokens
-    'medium_effort_ratio': 0.25,  # 16000 tokens
-    'low_effort_ratio': 0.125,   # 8000 tokens
-    'verification_ratio': 0.5,   # 32000 tokens for verification
-    'synthesis_ratio': 1.0       # 64000 tokens for synthesis
+    # Fixed reasoning token allocations
+    'low_effort_tokens': 8000,     # Agent 0 (temperature 0.3)
+    'medium_effort_tokens': 16000, # Agent 1 (temperature 0.6)
+    'high_effort_tokens': 24000,   # Agent 2 (temperature 1.0)
+    'verification_tokens': 8000,   # Fixed low effort for verification consistency
+    'synthesis_tokens': 24000      # Fixed high effort for final synthesis
 }
 
 def multi_agent_reasoning_system(
@@ -189,11 +189,11 @@ def _synthesize_final_solution(
     )
 
     try:
-        # Calculate synthesis token budgets
-        synthesis_max_tokens = int(config['max_tokens'] * config['synthesis_ratio'])
-        synthesis_reasoning_tokens = int(synthesis_max_tokens * 0.5)
+        # Use fixed synthesis token budgets
+        synthesis_max_tokens = config['max_tokens']  # Fixed 32k
+        synthesis_reasoning_tokens = config['synthesis_tokens']  # Fixed 24k
 
-        # Use proportional reasoning effort for synthesis
+        # Use fixed reasoning effort for synthesis
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -205,7 +205,8 @@ def _synthesize_final_solution(
             timeout=300,
             extra_body={
                 "reasoning": {
-                    "max_tokens": synthesis_reasoning_tokens
+                    "max_tokens": synthesis_reasoning_tokens,
+                    "effort": "high"
                 }
             }
         )
@@ -222,7 +223,8 @@ def _synthesize_final_solution(
                 "temperature": 0.3,
                 "extra_body": {
                     "reasoning": {
-                        "max_tokens": synthesis_reasoning_tokens
+                        "max_tokens": synthesis_reasoning_tokens,
+                        "effort": "high"
                     }
                 }
             }
