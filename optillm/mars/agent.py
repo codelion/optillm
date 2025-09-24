@@ -75,7 +75,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": exploration_prompt}
                 ],
-                max_tokens=max_tokens,
+                max_tokens=reasoning_tokens + 8000,
                 temperature=self.temperature,
                 timeout=300,  # 5 minute timeout for complex problems
                 extra_body={
@@ -145,7 +145,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": verification_prompt}
                 ],
-                max_tokens=verification_max_tokens,
+                max_tokens=verification_reasoning_tokens + 8000,
                 temperature=0.1,  # Low temperature for consistent verification
                 timeout=180,
                 extra_body={
@@ -206,7 +206,7 @@ class MARSAgent:
                     {"role": "system", "content": MATHEMATICAL_SYSTEM_PROMPT},
                     {"role": "user", "content": improvement_prompt}
                 ],
-                max_tokens=max_tokens,
+                max_tokens=improvement_reasoning_tokens + 8000,
                 temperature=self.temperature * 0.8,  # Slightly lower temperature for improvement
                 timeout=300,
                 extra_body={
