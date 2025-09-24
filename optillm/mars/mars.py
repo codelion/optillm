@@ -1,10 +1,12 @@
 """
-MARS: Multi-Agent Reasoning System main orchestration
+MARS: Multi-Agent Reasoning System main orchestration with parallel execution
 """
 
+import asyncio
 import logging
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 import optillm
 from optillm import conversation_logger
 
@@ -36,7 +38,7 @@ def multi_agent_reasoning_system(
     request_id: str = None
 ) -> Tuple[str, int]:
     """
-    Main MARS function implementing multi-agent mathematical reasoning
+    Main MARS function implementing multi-agent mathematical reasoning with parallel execution
 
     Args:
         system_prompt: System-level instructions
@@ -48,11 +50,30 @@ def multi_agent_reasoning_system(
     Returns:
         Tuple of (final_solution, total_reasoning_tokens)
     """
+    return asyncio.run(_run_mars_parallel(
+        system_prompt, initial_query, client, model, request_id
+    ))
+
+async def _run_mars_parallel(
+    system_prompt: str,
+    initial_query: str,
+    client,
+    model: str,
+    request_id: str = None
+) -> Tuple[str, int]:
+    """Async implementation of MARS with parallel execution"""
     logger.info(f"Starting MARS with model: {model}")
 
     # Initialize configuration
     config = DEFAULT_CONFIG.copy()
     total_reasoning_tokens = 0
+
+    # Calculate optimal worker count for parallel execution
+    max_workers = max(
+        config['num_agents'],  # For generation phase
+        config['num_agents'] * min(2, config['verification_passes_required'])  # For verification
+    )
+    logger.info(f"Using {max_workers} parallel workers")
 
     # Initialize workspace for collaboration
     workspace = MARSWorkspace(initial_query, config)
@@ -66,37 +87,41 @@ def multi_agent_reasoning_system(
 
         logger.info(f"Initialized {len(agents)} agents with diverse temperatures")
 
-        # Phase 2: Multi-Agent Exploration
-        logger.info("Phase 1: Multi-Agent Exploration")
-        exploration_tokens = _run_exploration_phase(agents, workspace, request_id)
-        total_reasoning_tokens += exploration_tokens
+        # Create thread pool executor for parallel API calls
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Phase 2: Multi-Agent Exploration (parallel)
+            logger.info("Phase 1: Multi-Agent Exploration")
+            exploration_tokens = await _run_exploration_phase_parallel(
+                agents, workspace, request_id, executor
+            )
+            total_reasoning_tokens += exploration_tokens
 
-        # Phase 3: Verification System
-        logger.info("Phase 2: Verification System")
-        verifier = MARSVerifier(agents, workspace, config)
-        verification_summary = verifier.verify_solutions(request_id)
+            # Phase 3: Verification System (parallel)
+            logger.info("Phase 2: Verification System")
+            verifier = MARSVerifier(agents, workspace, config)
+            verification_summary = await verifier.verify_solutions_parallel(request_id, executor)
 
-        # Phase 4: Iterative Improvement (if needed)
-        iteration_count = 0
-        while workspace.should_continue_iteration() and iteration_count < config['max_iterations']:
-            iteration_count += 1
-            logger.info(f"Phase 3: Iterative Improvement - Iteration {iteration_count}")
+            # Phase 4: Iterative Improvement (if needed)
+            iteration_count = 0
+            while workspace.should_continue_iteration() and iteration_count < config['max_iterations']:
+                iteration_count += 1
+                logger.info(f"Phase 3: Iterative Improvement - Iteration {iteration_count}")
 
-            # Improve unverified solutions
-            improvement_summary = verifier.iterative_improvement(request_id)
-            total_reasoning_tokens += improvement_summary['total_reasoning_tokens']
+                # Improve unverified solutions (parallel)
+                improvement_summary = await verifier.iterative_improvement_parallel(request_id, executor)
+                total_reasoning_tokens += improvement_summary['total_reasoning_tokens']
 
-            # Re-verify improved solutions
-            verification_summary = verifier.verify_solutions(request_id)
+                # Re-verify improved solutions (parallel)
+                verification_summary = await verifier.verify_solutions_parallel(request_id, executor)
 
-            # Check for early termination
-            if config['early_termination'] and workspace.has_consensus():
-                logger.info("Early termination: consensus reached")
-                break
+                # Check for early termination
+                if config['early_termination'] and workspace.has_consensus():
+                    logger.info("Early termination: consensus reached")
+                    break
 
-            workspace.iteration_count = iteration_count
+                workspace.iteration_count = iteration_count
 
-        # Phase 5: Final Synthesis
+        # Phase 5: Final Synthesis (sequential - needs all results)
         logger.info("Phase 4: Final Synthesis")
         final_solution, synthesis_tokens = _synthesize_final_solution(
             workspace, client, model, config, request_id
@@ -126,24 +151,50 @@ def multi_agent_reasoning_system(
         except:
             return error_response, 0
 
-def _run_exploration_phase(agents: List[MARSAgent], workspace: MARSWorkspace, request_id: str = None) -> int:
-    """Run the multi-agent exploration phase"""
-    total_tokens = 0
+async def _run_exploration_phase_parallel(
+    agents: List[MARSAgent],
+    workspace: MARSWorkspace,
+    request_id: str = None,
+    executor: ThreadPoolExecutor = None
+) -> int:
+    """Run the multi-agent exploration phase with parallel execution"""
 
-    # Generate solutions from all agents in parallel (conceptually)
-    for agent in agents:
+    async def generate_solution_async(agent: MARSAgent):
+        """Async wrapper for agent solution generation"""
+        loop = asyncio.get_event_loop()
         try:
-            agent_solution, reasoning_tokens = agent.generate_solution(
-                workspace.problem, request_id
+            solution, tokens = await loop.run_in_executor(
+                executor,
+                agent.generate_solution,
+                workspace.problem,
+                request_id
             )
-            workspace.add_solution(agent_solution)
-            total_tokens += reasoning_tokens
-
+            return agent.agent_id, solution, tokens, None
         except Exception as e:
             logger.error(f"Agent {agent.agent_id} failed during exploration: {str(e)}")
+            return agent.agent_id, None, 0, e
+
+    # Run all agents in parallel
+    tasks = [generate_solution_async(agent) for agent in agents]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    total_tokens = 0
+    successful_solutions = 0
+
+    for result in results:
+        if isinstance(result, Exception):
+            logger.error(f"Agent task failed: {str(result)}")
             continue
 
-    logger.info(f"Exploration phase complete: {len(workspace.solutions)} solutions generated")
+        agent_id, solution, tokens, error = result
+        if error is None and solution is not None:
+            workspace.add_solution(solution)
+            total_tokens += tokens
+            successful_solutions += 1
+        else:
+            logger.error(f"Agent {agent_id} generated no solution")
+
+    logger.info(f"Exploration phase complete: {successful_solutions} solutions generated in parallel")
     return total_tokens
 
 def _synthesize_final_solution(

@@ -16,6 +16,7 @@ from optillm.reread import re2_approach
 from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
+from optillm.mars import multi_agent_reasoning_system
 
 
 class MockClient:
@@ -55,7 +56,8 @@ def test_approach_imports():
         re2_approach,
         cot_reflection,
         plansearch,
-        leap
+        leap,
+        multi_agent_reasoning_system
     ]
     
     for approach in approaches:
@@ -76,6 +78,7 @@ def test_basic_approach_calls():
         ("re2_approach", re2_approach),
         ("cot_reflection", cot_reflection),
         ("leap", leap),
+        ("mars", multi_agent_reasoning_system),
     ]
     
     for name, approach_func in simple_approaches:
@@ -103,6 +106,7 @@ def test_approach_parameters():
         "cot_reflection": cot_reflection,
         "plansearch": plansearch,
         "leap": leap,
+        "multi_agent_reasoning_system": multi_agent_reasoning_system,
     }
     
     for name, func in approaches.items():

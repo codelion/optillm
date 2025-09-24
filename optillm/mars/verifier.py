@@ -1,10 +1,12 @@
 """
-MARS Verification system implementing 5-pass verification threshold
+MARS Verification system implementing 5-pass verification threshold with parallel execution
 """
 
+import asyncio
 import logging
 from typing import Dict, List, Any, Tuple
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from .workspace import MARSWorkspace, AgentSolution, VerificationResult
 from .agent import MARSAgent
 
@@ -48,6 +50,71 @@ class MARSVerifier:
         verification_summary['consensus_reached'] = len(verified_solutions) >= self.config.get('consensus_threshold', 2)
 
         logger.info(f"Verification complete: {verification_summary['solutions_verified']} solutions verified")
+        return verification_summary
+
+    async def verify_solutions_parallel(
+        self,
+        request_id: str = None,
+        executor: ThreadPoolExecutor = None
+    ) -> Dict[str, Any]:
+        """Run comprehensive verification on all solutions in workspace with parallel execution"""
+        logger.info(f"Starting parallel verification process with {self.verification_threshold}-pass threshold")
+
+        verification_summary = {
+            'total_verifications': 0,
+            'solutions_verified': 0,
+            'consensus_reached': False,
+            'verification_details': []
+        }
+
+        solutions = self.workspace.solutions
+        if not solutions:
+            logger.warning("No solutions to verify")
+            return verification_summary
+
+        # Verify all solutions in parallel
+        async def verify_solution_async(solution: AgentSolution):
+            """Async wrapper for single solution verification"""
+            loop = asyncio.get_event_loop()
+            try:
+                result = await loop.run_in_executor(
+                    executor,
+                    self._verify_single_solution,
+                    solution,
+                    request_id
+                )
+                return result
+            except Exception as e:
+                logger.error(f"Verification failed for solution from agent {solution.agent_id}: {str(e)}")
+                return {
+                    'solution_agent_id': solution.agent_id,
+                    'verification_count': 0,
+                    'consecutive_passes': 0,
+                    'passes_threshold': False,
+                    'verification_results': []
+                }
+
+        # Run verifications in parallel
+        tasks = [verify_solution_async(solution) for solution in solutions]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Verification task failed: {str(result)}")
+                continue
+
+            verification_summary['verification_details'].append(result)
+            verification_summary['total_verifications'] += result['verification_count']
+
+            if result['passes_threshold']:
+                verification_summary['solutions_verified'] += 1
+
+        # Check for consensus
+        verified_solutions = self.workspace.get_verified_solutions()
+        verification_summary['consensus_reached'] = len(verified_solutions) >= self.config.get('consensus_threshold', 2)
+
+        logger.info(f"Parallel verification complete: {verification_summary['solutions_verified']} solutions verified")
         return verification_summary
 
     def _verify_single_solution(self, solution: AgentSolution, request_id: str = None) -> Dict[str, Any]:
@@ -175,6 +242,86 @@ class MARSVerifier:
 
                     improvement_summary['improvement_attempts'] += 1
 
+        return improvement_summary
+
+    async def iterative_improvement_parallel(
+        self,
+        request_id: str = None,
+        executor: ThreadPoolExecutor = None
+    ) -> Dict[str, Any]:
+        """Run iterative improvement on solutions that failed verification with parallel execution"""
+        logger.info("Starting parallel iterative improvement process")
+
+        improvement_summary = {
+            'solutions_improved': 0,
+            'improvement_attempts': 0,
+            'total_reasoning_tokens': 0
+        }
+
+        # Get solutions that need improvement
+        unverified_solutions = [s for s in self.workspace.solutions if not s.is_verified]
+
+        # Filter solutions that have verification feedback and can be improved
+        improvable_solutions = []
+        for solution in unverified_solutions:
+            if solution.verification_results:
+                latest_verification = solution.verification_results[-1]
+                if latest_verification['assessment'] in ['INCORRECT', 'INCOMPLETE']:
+                    original_agent = next((a for a in self.agents if a.agent_id == solution.agent_id), None)
+                    if original_agent:
+                        improvable_solutions.append((solution, original_agent, latest_verification))
+
+        if not improvable_solutions:
+            logger.info("No solutions need improvement")
+            return improvement_summary
+
+        # Improve solutions in parallel
+        async def improve_solution_async(solution_data):
+            """Async wrapper for solution improvement"""
+            solution, agent, verification = solution_data
+            loop = asyncio.get_event_loop()
+
+            try:
+                improved_solution, reasoning_tokens = await loop.run_in_executor(
+                    executor,
+                    agent.improve_solution,
+                    self.workspace.problem,
+                    solution.solution,
+                    verification['detailed_report'],
+                    verification['issues'],
+                    request_id
+                )
+
+                # Update solution with improvement
+                solution.solution = improved_solution
+                solution.timestamp = datetime.now()
+                solution.reasoning_tokens += reasoning_tokens
+
+                logger.info(f"Improved solution from agent {solution.agent_id}")
+                return solution.agent_id, True, reasoning_tokens, None
+
+            except Exception as e:
+                logger.error(f"Failed to improve solution from agent {solution.agent_id}: {str(e)}")
+                return solution.agent_id, False, 0, e
+
+        # Run improvements in parallel
+        tasks = [improve_solution_async(sol_data) for sol_data in improvable_solutions]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results
+        for result in results:
+            improvement_summary['improvement_attempts'] += 1
+
+            if isinstance(result, Exception):
+                logger.error(f"Improvement task failed: {str(result)}")
+                continue
+
+            agent_id, success, tokens, error = result
+            if success:
+                improvement_summary['solutions_improved'] += 1
+                improvement_summary['total_reasoning_tokens'] += tokens
+
+        logger.info(f"Parallel improvement complete: {improvement_summary['solutions_improved']} solutions improved")
         return improvement_summary
 
     def final_consensus_check(self) -> bool:

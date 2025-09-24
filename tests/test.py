@@ -26,6 +26,7 @@ from optillm.cot_reflection import cot_reflection
 from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
+from optillm.mars import multi_agent_reasoning_system
 from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
 
 # Setup logging
@@ -57,6 +58,7 @@ APPROACHES = {
     'plansearch': plansearch,
     'leap': leap,
     're2': re2_approach,
+    'mars': multi_agent_reasoning_system,
     'cepo': lambda s, q, c, m: cepo(s,q,c,m,init_cepo_config({'cepo_config_file': './optillm/cepo/configs/cepo_config.yaml'})),
 }
 
