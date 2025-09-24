@@ -23,7 +23,7 @@ DEFAULT_CONFIG = {
     'consensus_threshold': 2,  # Keep at 2 for 3-agent setup
     'min_verified_solutions': 1,  # Keep minimal requirement
     'max_tokens': 64000,  # Base token budget
-    'max_verification_attempts': 10,
+    'max_verification_attempts': 3,
     'early_termination': True,
     'use_reasoning_api': True,
     # Token budget proportions
