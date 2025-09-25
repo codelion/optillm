@@ -423,7 +423,7 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 'cepo':
             return cepo(system_prompt, initial_query, client, model, cepo_config, request_id)
         elif approach == 'mars':
-            return multi_agent_reasoning_system(system_prompt, initial_query, client, model, request_id)
+            return multi_agent_reasoning_system(system_prompt, initial_query, client, model, request_config=request_config, request_id=request_id)
     elif approach in plugin_approaches:
         # Check if the plugin accepts request_config
         plugin_func = plugin_approaches[approach]

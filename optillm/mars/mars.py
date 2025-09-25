@@ -35,6 +35,7 @@ def multi_agent_reasoning_system(
     initial_query: str,
     client,
     model: str,
+    request_config: dict = None,
     request_id: str = None
 ) -> Tuple[str, int]:
     """
@@ -51,7 +52,7 @@ def multi_agent_reasoning_system(
         Tuple of (final_solution, total_reasoning_tokens)
     """
     return asyncio.run(_run_mars_parallel(
-        system_prompt, initial_query, client, model, request_id
+        system_prompt, initial_query, client, model, request_config, request_id
     ))
 
 async def _run_mars_parallel(
@@ -59,6 +60,7 @@ async def _run_mars_parallel(
     initial_query: str,
     client,
     model: str,
+    request_config: dict = None,
     request_id: str = None
 ) -> Tuple[str, int]:
     """Async implementation of MARS with parallel execution"""
@@ -66,6 +68,14 @@ async def _run_mars_parallel(
 
     # Initialize configuration
     config = DEFAULT_CONFIG.copy()
+
+    # Override max_tokens from request_config if provided
+    if request_config and 'max_tokens' in request_config:
+        config['max_tokens'] = request_config['max_tokens']
+        logger.info(f"Using max_tokens from request: {config['max_tokens']}")
+    else:
+        logger.info(f"Using default max_tokens: {config['max_tokens']}")
+
     total_reasoning_tokens = 0
 
     # Calculate optimal worker count for parallel execution
@@ -191,6 +201,14 @@ async def _run_exploration_phase_parallel(
             workspace.add_solution(solution)
             total_tokens += tokens
             successful_solutions += 1
+
+            # ENHANCED LOGGING: Log individual agent solution details
+            logger.info(f"Agent {agent_id} exploration complete:")
+            logger.info(f"  - Solution length: {solution.solution_length} chars")
+            logger.info(f"  - Total tokens: {solution.total_tokens}")
+            logger.info(f"  - Reasoning tokens: {solution.reasoning_tokens}")
+            logger.info(f"  - Confidence: {solution.confidence:.2f}")
+            logger.info(f"  - Solution preview: {solution.solution[:200]}...")
         else:
             logger.error(f"Agent {agent_id} generated no solution")
 
@@ -274,7 +292,9 @@ def _synthesize_final_solution(
 
         # Extract reasoning tokens from correct nested structure (matching agent.py fix)
         reasoning_tokens = 0
+        total_tokens = 0
         if hasattr(response, 'usage') and response.usage:
+            total_tokens = getattr(response.usage, 'total_tokens', 0)
             # Check completion_tokens_details first (OpenRouter structure)
             if hasattr(response.usage, 'completion_tokens_details') and response.usage.completion_tokens_details:
                 reasoning_tokens = getattr(response.usage.completion_tokens_details, 'reasoning_tokens', 0)
@@ -282,7 +302,12 @@ def _synthesize_final_solution(
             if reasoning_tokens == 0:
                 reasoning_tokens = getattr(response.usage, 'reasoning_tokens', 0)
 
-        logger.info(f"Synthesis complete with {reasoning_tokens} reasoning tokens")
+        # ENHANCED LOGGING: Log synthesis details
+        logger.info(f"Synthesis complete:")
+        logger.info(f"  - Synthesis solution length: {len(final_solution)} characters")
+        logger.info(f"  - Reasoning tokens: {reasoning_tokens}")
+        logger.info(f"  - Total tokens: {total_tokens}")
+        logger.info(f"  - Final solution preview: {final_solution[:200]}...")
         return final_solution, reasoning_tokens
 
     except Exception as e:

@@ -182,7 +182,7 @@ Your task is to act as an IMO grader. Now, generate the **summary** and the **st
                 {"role": "system", "content": verification_system_prompt},
                 {"role": "user", "content": verification_prompt}
             ],
-            max_tokens=30000,
+            max_tokens=64000,
             temperature=0.1
         )
 
@@ -354,7 +354,7 @@ def get_llm_response(problem: str, model: str, extra_body: dict = None, timeout:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": problem}
             ],
-            max_tokens=30000,  # Extended token limit for complex proofs
+            max_tokens=64000,  # Extended token limit for complex IMO proofs (increased from 30000)
             **kwargs
         )
 

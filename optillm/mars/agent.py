@@ -77,9 +77,18 @@ class MARSAgent:
 
             solution_text = response.choices[0].message.content.strip()
 
+            # ENHANCED LOGGING: Log solution details
+            solution_length = len(solution_text)
+
+            logger.info(f"Agent {self.agent_id} solution details:")
+            logger.info(f"  - Length: {solution_length} characters")
+            logger.info(f"  - Last 100 chars: ...{solution_text[-100:] if solution_length > 100 else solution_text}")
+
             # Extract reasoning tokens from the correct nested structure
             reasoning_tokens = 0
+            total_tokens = 0
             if hasattr(response, 'usage') and response.usage:
+                total_tokens = getattr(response.usage, 'total_tokens', 0)
                 # Check completion_tokens_details first (OpenRouter structure)
                 if hasattr(response.usage, 'completion_tokens_details') and response.usage.completion_tokens_details:
                     reasoning_tokens = getattr(response.usage.completion_tokens_details, 'reasoning_tokens', 0)
@@ -88,10 +97,12 @@ class MARSAgent:
                 if reasoning_tokens == 0:
                     reasoning_tokens = getattr(response.usage, 'reasoning_tokens', 0)
 
+            logger.info(f"Agent {self.agent_id} token usage: reasoning={reasoning_tokens}, total={total_tokens}")
+
             # Extract confidence from solution (heuristic based on response characteristics)
             confidence = self._estimate_confidence(solution_text)
 
-            # Create agent solution object
+            # Create agent solution object with enhanced metadata
             agent_solution = AgentSolution(
                 agent_id=self.agent_id,
                 temperature=self.temperature,
@@ -101,20 +112,27 @@ class MARSAgent:
                 timestamp=datetime.now()
             )
 
+            # Add metadata to solution object
+            agent_solution.solution_length = solution_length
+            agent_solution.total_tokens = total_tokens
+
             logger.info(f"Agent {self.agent_id} generated solution with {reasoning_tokens} reasoning tokens")
             return agent_solution, reasoning_tokens
 
         except Exception as e:
             logger.error(f"Agent {self.agent_id} error generating solution: {str(e)}")
             # Return empty solution with error indication
-            return AgentSolution(
+            error_solution = AgentSolution(
                 agent_id=self.agent_id,
                 temperature=self.temperature,
                 solution=f"Error generating solution: {str(e)}",
                 confidence=0.0,
                 reasoning_tokens=0,
                 timestamp=datetime.now()
-            ), 0
+            )
+            error_solution.solution_length = len(error_solution.solution)
+            error_solution.total_tokens = 0
+            return error_solution, 0
 
     def verify_solution(self, problem: str, solution: str, verifier_id: int, solution_agent_id: int, request_id: str = None) -> VerificationResult:
         """Verify a solution using mathematical reasoning"""
