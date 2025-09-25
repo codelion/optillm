@@ -20,18 +20,22 @@ class CepoConfig:
     bestofn_n: int  # number of responses to be generated in best of n stage
     bestofn_temperature: float  # temperature for verifier in best of n stage
     bestofn_max_tokens: int  # maximum number of tokens for verifier in best of n stage
-    bestofn_rating_type: Literal["absolute", "pairwise"]  # type of rating in best of n stage
+    bestofn_rating_type: Literal["absolute", "pairwise", "majority"]  # type of rating in best of n stage
     planning_n: int  # number of plans generated in planning stage
     planning_m: int  # number of attempts to generate n plans in planning stage
     planning_temperature_step1: float  # temperature for generator in step 1 of planning stage
     planning_temperature_step2: float  # temperature for generator in step 2 of planning stage
+    planning_temperature_direct_resp: float  # temperature for generator after step 2 if planning fails and answer directly
     planning_temperature_step3: float  # temperature for generator in step 3 of planning stage
     planning_temperature_step4: float  # temperature for generator in step 4 of planning stage
     planning_max_tokens_step1: int  # maximum number of tokens in step 1 of planning stage
     planning_max_tokens_step2: int  # maximum number of tokens in step 2 of planning stage
+    planning_max_tokens_direct_resp: float  #  maximum number of tokens after step 2 if planning fails and answer directly
     planning_max_tokens_step3: int  # maximum number of tokens in step 3 of planning stage
     planning_max_tokens_step4: int  # maximum number of tokens in step 4 of planning stage
     use_plan_diversity: bool  # whether to use plan diversity
+    use_reasoning_fallback: bool  # whether to fallback to lower levels of reasoning when higher level fails
+    num_of_retries: int  # number of retries if llm call fails, 0 for no retries
     rating_model: Optional[str] = None # model to be used for rating
     print_output: bool = False  # whether to print the output of each stage
 
@@ -203,6 +207,7 @@ def extract_llm_response(response):
 def llm_call(
     client: Any,
     provider_request: dict,
+    cepo_config: CepoConfig
 ) -> tuple[str, str, int]:
     """
     Call the LLM with retries on transient errors.
@@ -220,7 +225,7 @@ def llm_call(
             - finish_reason: Why generation stopped.
             - completion_tokens: Number of tokens generated.
     """
-    retries = 2  # total attempts = retries + 1 initial call
+    retries = cepo_config.num_of_retries  # total attempts = retries + 1 initial call
     for attempt in range(retries):
         try:
             response_object = client.chat.completions.create(
@@ -247,7 +252,8 @@ def llm_call(
 def llm_call_reason_effort_fallback(
     client: Any,
     provider_request: dict,
-    reasoning_effort_levels: list
+    reasoning_effort_levels: list,
+    cepo_config: CepoConfig
 ) -> tuple[Optional[Any], str, int]:
     """
     Call LLM with fallback on reasoning effort levels.
@@ -291,6 +297,8 @@ def llm_call_reason_effort_fallback(
           automatically, but a permanent fix may require upstream changes
           (see https://github.com/pydantic/pydantic-ai/issues/2449).
     """
+    if not cepo_config.use_reasoning_fallback:
+        reasoning_effort_levels = ["high"]
     for effort in reasoning_effort_levels:
         try:
             # Try with the current reasoning effort level
@@ -298,6 +306,7 @@ def llm_call_reason_effort_fallback(
             response, finish_reason, completion_tokens = llm_call(
                 client=client,
                 provider_request=provider_request,
+                cepo_config=cepo_config
             )
             if response is not None and finish_reason != "length":
                 return response, finish_reason, completion_tokens
@@ -308,27 +317,6 @@ def llm_call_reason_effort_fallback(
             continue
 
     return None, "error", 0
-
-
-def fallback_direct_answer(client, model, question, max_tokens=None, temperature=1.0, top_p=1.0): # TODO clean-up
-    messages = [
-        {"role": "user", "content": question},
-    ]
-
-    response, finish_reason, completion_tokens = llm_call_reason_effort_fallback(
-                messages=messages,
-                client=client,
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                reasoning_effort_levels=["high", "medium", "low"]
-            )
-    if response is None or finish_reason == "length":
-        print("Direct answer failed, empty response or length")
-        response = ""
-    messages.append({"role": "assistant", "content": response})
-    return response, messages
 
 
 def generate_completion(system_prompt: str, task: str, client: Any, model: str, cepo_config: CepoConfig, approach: Optional[str] = None, request_id: str = None) -> str:
@@ -385,7 +373,8 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
             response, finish_reason, completion_tokens = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
-                reasoning_effort_levels=["high", "medium"]
+                reasoning_effort_levels=["high", "medium"],
+                cepo_config=cepo_config
             )
             local_completion_tokens += completion_tokens
             # Log provider call if conversation logging is enabled
@@ -418,7 +407,8 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         response, finish_reason, completion_tokens = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
-                reasoning_effort_levels=["high", "medium"]
+                reasoning_effort_levels=["high", "medium"],
+                cepo_config=cepo_config
             )
         local_completion_tokens += completion_tokens
 
@@ -453,10 +443,39 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     plans = [plan for _, plan in sorted(plans)]  # keep original order
 
     if not plans:
-        # Fallback plan
-        fallback_generation, fallback_messages = fallback_direct_answer(client, model, question_only)
-        plans.append(fallback_generation)
-        cb_log[f"messages_planning_fallback_used"] = fallback_messages
+        # If no plans were generated, attempt to answer directly
+        messages = [
+            {"role": "user", "content": question_only},
+        ]
+
+        provider_request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": cepo_config.planning_max_tokens_step2_direct,
+            "temperature":cepo_config.planning_temperature_step2_direct,
+            "top_p": 0.95,
+            "reasoning_effort_levels": ["high", "medium", "low"]
+        }
+
+        response, finish_reason, completion_tokens = llm_call_reason_effort_fallback(
+                    client=client,
+                    provider_request=provider_request,
+                    cepo_config=cepo_config
+                )
+        local_completion_tokens += completion_tokens
+
+        # Log provider call if conversation logging is enabled
+        if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and request_id:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
+            optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)    
+    
+        if response is None or finish_reason == "length":
+            print("Direct answer failed, empty response or length")
+            response = ""
+        messages.append({"role": "assistant", "content": response})
+
+        plans.append(response)
+        cb_log[f"messages_planning_fallback_used"] = messages
         if cepo_config.print_output:
             print(f"\nCePO: No plans generated successfully. Taking the fallback.\n")
 
@@ -483,7 +502,8 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
     response, finish_reason, completion_tokens_ = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
-                reasoning_effort_levels=["high", "medium"]
+                reasoning_effort_levels=["high", "medium"],
+                cepo_config=cepo_config
             )
     completion_tokens += completion_tokens_
 
@@ -519,7 +539,8 @@ def generate_completion(system_prompt: str, task: str, client: Any, model: str, 
         response, finish_reason, completion_tokens_ = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
-                reasoning_effort_levels=["high", "medium"]
+                reasoning_effort_levels=["high", "medium"],
+                cepo_config=cepo_config
             )
         completion_tokens += completion_tokens_
 
@@ -718,7 +739,8 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
         rating_response, _, completion_tokens = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
-                reasoning_effort_levels=["high", "medium"]
+                reasoning_effort_levels=["high", "medium"],
+                cepo_config=cepo_config
             )
 
         # Log provider call if conversation logging is enabled
@@ -906,7 +928,7 @@ def majority_vote_mcq(completions, last_n_chars=100):
             return response, count
         
 
-def rate_completions_majority_vote(completions: list[str], last_n_chars: int = 150) -> tuple[str, int, dict]:
+def rate_completions_majority(completions: list[str], last_n_chars: int = 150) -> tuple[str, int, dict]:
     mcq_majority, count = majority_vote_mcq(completions, last_n_chars)
     if mcq_majority is None:
         return majority_vote_math(completions, last_n_chars)
@@ -948,8 +970,8 @@ def cepo(system_prompt: str, initial_query: str, client: Any, model: str, cepo_c
         best_completion, completion_tokens_rating, cb_log = rate_completions_absolute(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
     elif cepo_config.bestofn_rating_type == "pairwise":
         best_completion, completion_tokens_rating, cb_log = rate_completions_pairwise(system_prompt, initial_query, client, rating_model, completions, cepo_config, cb_log, request_id)
-    elif cepo_config.bestofn_rating_type == "majority_with_code_exec":
-        best_completion, _ = rate_completions_majority_vote(completions)
+    elif cepo_config.bestofn_rating_type == "majority":
+        best_completion, _ = rate_completions_majority(completions)
         completion_tokens_rating = 0
     else:
         raise ValueError("Invalid rating type in cepo_config")
