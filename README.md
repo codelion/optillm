@@ -490,12 +490,16 @@ optillm supports various command-line arguments for configuration. When using Do
 | `--cepo_planning_m` | Number of attempts to generate n plans in planning stage | 6 |
 | `--cepo_planning_temperature_step1` | Temperature for generator in step 1 of planning stage | 0.55 |
 | `--cepo_planning_temperature_step2` | Temperature for generator in step 2 of planning stage | 0.25 |
+| `--cepo_planning_temperature_direct_resp` | Temperature for generator after step 2 if planning fails and answer directly | 0.1 |
 | `--cepo_planning_temperature_step3` | Temperature for generator in step 3 of planning stage | 0.1 |
 | `--cepo_planning_temperature_step4` | Temperature for generator in step 4 of planning stage | 0 |
 | `--cepo_planning_max_tokens_step1` | Maximum number of tokens in step 1 of planning stage | 4096 |
 | `--cepo_planning_max_tokens_step2` | Maximum number of tokens in step 2 of planning stage | 4096 |
+| `--cepo_planning_max_tokens_direct_resp` | Maximum number of tokens after step 2 if planning fails and answer directly | 4096 |
 | `--cepo_planning_max_tokens_step3` | Maximum number of tokens in step 3 of planning stage | 4096 |
 | `--cepo_planning_max_tokens_step4` | Maximum number of tokens in step 4 of planning stage | 4096 |
+| `--cepo_use_reasoning_fallback` | Whether to fallback to lower levels of reasoning when higher level fails | False |
+| `--cepo_num_of_retries` | Number of retries if llm call fails, 0 for no retries | 0 |
 | `--cepo_print_output` | Whether to print the output of each stage | `False` |
 | `--cepo_config_file` | Path to CePO configuration file | `None` |
 | `--cepo_use_plan_diversity` | Use additional plan diversity step | `False` |
@@ -583,6 +587,19 @@ Authorization: Bearer your_secret_api_key
 | gpt-4o-2024-08-06 (full context) | 74.0          |
 
  ¹ Numbers in parentheses for LongCePO indicate accuracy of majority voting from 5 runs.
+
+### CePO on math and code benchmarks (Sep 2025)
+
+| Method                  | AIME 2024 | AIME 2025 |  GPQA  | LiveCodeBench |
+| ----------------------: | :-------: | :-------: | :----: | :-----------: |
+| Qwen3 8B                |   74.0    |   68.3    |  59.3  |     55.7      |
+| CePO (using Qwen3 8B)   |   86.7    |   80.0    |  62.5  |     60.5      |
+| Qwen3 32B               |   81.4    |   72.9    |  66.8  |     65.7      |
+| CePO (using Qwen3 32B)  | **90.7**  | **83.3**  |  70.0  |   **71.9**    |
+| Qwen3 235B              |   85.7    |   81.5    |  71.1  |     70.7      |
+| DeepSeek R1             |   79.8    |   70.0    |  71.5  |     64.3      |
+| OpenAI o3-mini          |   79.6    |   74.8    |  76.8  |     66.3      |
+| Grok3 Think             |   83.9    |   77.3    |**80.2**|     70.6      |
 
 ### CePO on math and code benchmarks (Mar 2025)
 
