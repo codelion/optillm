@@ -99,91 +99,143 @@ def extract_final_answer(solution: str, problem_id: int) -> Dict[str, any]:
     return result
 
 
-def verify_solution_with_llm(problem: str, solution: str, model: str) -> Dict[str, any]:
+def imo25_verify_solution(problem: str, solution: str, model: str) -> Dict[str, any]:
     """
-    Use an LLM as a judge to verify the correctness of a solution
+    Two-stage verification system from IMO25 repository:
+    Stage 1: Detailed verification using comprehensive IMO grader prompt
+    Stage 2: Simple yes/no check on solution correctness
     """
-    judge_prompt = f"""You are an expert mathematical judge evaluating IMO solutions.
 
-PROBLEM:
+    # Stage 1: Detailed verification using IMO25's verification system prompt
+    verification_system_prompt = """You are an expert mathematician and a meticulous grader for an International Mathematical Olympiad (IMO) level exam. Your primary task is to rigorously verify the provided mathematical solution. A solution is to be judged correct **only if every step is rigorously justified.** A solution that arrives at a correct final answer through flawed reasoning, educated guesses, or with gaps in its arguments must be flagged as incorrect or incomplete.
+
+### Instructions ###
+
+**1. Core Instructions**
+*   Your sole task is to find and report all issues in the provided solution. You must act as a **verifier**, NOT a solver. **Do NOT attempt to correct the errors or fill the gaps you find.**
+*   You must perform a **step-by-step** check of the entire solution. This analysis will be presented in a **Detailed Verification Log**, where you justify your assessment of each step: for correct steps, a brief justification suffices; for steps with errors or gaps, you must provide a detailed explanation.
+
+**2. How to Handle Issues in the Solution**
+When you identify an issue in a step, you MUST first classify it into one of the following two categories and then follow the specified procedure.
+
+*   **a. Critical Error:**
+    This is any error that breaks the logical chain of the proof. This includes both **logical fallacies** (e.g., claiming that `A>B, C>D` implies `A-C>B-D`) and **factual errors** (e.g., a calculation error like `2+3=6`).
+    *   **Procedure:**
+        *   Explain the specific error and state that it **invalidates the current line of reasoning**.
+        *   Do NOT check any further steps that rely on this error.
+        *   You MUST, however, scan the rest of the solution to identify and verify any fully independent parts. For example, if a proof is split into multiple cases, an error in one case does not prevent you from checking the other cases.
+
+*   **b. Justification Gap:**
+    This is for steps where the conclusion may be correct, but the provided argument is incomplete, hand-wavy, or lacks sufficient rigor.
+    *   **Procedure:**
+        *   Explain the gap in the justification.
+        *   State that you will **assume the step's conclusion is true** for the sake of argument.
+        *   Then, proceed to verify all subsequent steps to check if the remainder of the argument is sound.
+
+**3. Output Format**
+Your response MUST be structured into two main sections: a **Summary** followed by the **Detailed Verification Log**.
+
+*   **a. Summary**
+    This section MUST be at the very beginning of your response. It must contain two components:
+    *   **Final Verdict**: A single, clear sentence declaring the overall validity of the solution. For example: "The solution is correct," "The solution contains a Critical Error and is therefore invalid," or "The solution's approach is viable but contains several Justification Gaps."
+    *   **List of Findings**: A bulleted list that summarizes **every** issue you discovered. For each finding, you must provide:
+        *   **Location:** A direct quote of the key phrase or equation where the issue occurs.
+        *   **Issue:** A brief description of the problem and its classification (**Critical Error** or **Justification Gap**).
+
+*   **b. Detailed Verification Log**
+    Following the summary, provide the full, step-by-step verification log as defined in the Core Instructions. When you refer to a specific part of the solution, **quote the relevant text** to make your reference clear before providing your detailed analysis of that part.
+
+**Example of the Required Summary Format**
+*This is a generic example to illustrate the required format. Your findings must be based on the actual solution provided below.*
+
+**Final Verdict:** The solution is **invalid** because it contains a Critical Error.
+
+**List of Findings:**
+*   **Location:** "By interchanging the limit and the integral, we get..."
+    *   **Issue:** Justification Gap - The solution interchanges a limit and an integral without providing justification, such as proving uniform convergence.
+*   **Location:** "From $A > B$ and $C > D$, it follows that $A-C > B-D$"
+    *   **Issue:** Critical Error - This step is a logical fallacy. Subtracting inequalities in this manner is not a valid mathematical operation.
+
+### Verification Task Reminder ###
+
+Your task is to act as an IMO grader. Now, generate the **summary** and the **step-by-step verification log** for the solution above. In your log, justify each correct step and explain in detail any errors or justification gaps you find, as specified in the instructions above."""
+
+    verification_prompt = f"""
+======================================================================
+### Problem ###
+
 {problem}
 
-STUDENT SOLUTION:
+======================================================================
+### Solution ###
+
 {solution}
 
-Please evaluate this solution and provide:
-1. CORRECTNESS SCORE (0-10): How mathematically correct is this solution?
-2. COMPLETENESS SCORE (0-10): How complete and rigorous is the proof?
-3. KEY INSIGHTS: Did the solution identify the key mathematical insights needed?
-4. ERRORS: List any mathematical errors or logical gaps
-5. OVERALL ASSESSMENT: Is this solution likely correct?
-
-Provide your assessment in the following format:
-CORRECTNESS: [0-10]
-COMPLETENESS: [0-10]
-KEY_INSIGHTS: [Yes/No]
-ERRORS: [List any errors]
-OVERALL: [Correct/Incorrect/Partial]
-REASONING: [Brief explanation]"""
+{verification_system_prompt}
+"""
 
     try:
+        # Stage 1: Detailed verification
         response = client.with_options(timeout=300).chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are an expert mathematician and IMO judge."},
-                {"role": "user", "content": judge_prompt}
+                {"role": "system", "content": verification_system_prompt},
+                {"role": "user", "content": verification_prompt}
             ],
             max_tokens=30000,
-            temperature=0.1  # Low temperature for consistent judging
+            temperature=0.1
         )
 
-        judge_response = response.choices[0].message.content.strip()
+        verification_response = response.choices[0].message.content.strip()
 
-        # Parse the structured response
-        result = {
-            "judge_response": judge_response,
-            "correctness_score": 0.0,
-            "completeness_score": 0.0,
-            "has_key_insights": False,
-            "errors_found": [],
-            "overall_assessment": "unknown",
-            "judge_reasoning": "",
+        # Stage 2: Simple yes/no check on correctness
+        check_correctness_prompt = f"""Response in "yes" or "no". Is the following statement saying the solution is correct, or does not contain critical error or a major justification gap?
+
+{verification_response}"""
+
+        response2 = client.with_options(timeout=300).chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "user", "content": check_correctness_prompt}
+            ],
+            max_tokens=10,
+            temperature=0.1
+        )
+
+        correctness_check = response2.choices[0].message.content.strip().lower()
+        is_correct = "yes" in correctness_check
+
+        # Extract bug report if solution is incorrect
+        bug_report = ""
+        if not is_correct:
+            # Try to extract the detailed verification log
+            verification_log_match = re.search(r'### Detailed Verification Log ###\s*(.*)', verification_response, re.DOTALL)
+            if verification_log_match:
+                bug_report = verification_log_match.group(1).strip()
+            else:
+                bug_report = verification_response
+
+        return {
+            "judge_response": verification_response,
+            "correctness_check": correctness_check,
+            "is_correct": is_correct,
+            "bug_report": bug_report,
+            "correctness_score": 1.0 if is_correct else 0.0,
+            "completeness_score": 1.0 if is_correct else 0.0,
+            "has_key_insights": is_correct,
+            "errors_found": [bug_report] if bug_report else [],
+            "overall_assessment": "correct" if is_correct else "incorrect",
+            "judge_reasoning": verification_response,
             "success": True
         }
 
-        # Extract scores using regex
-        correctness_match = re.search(r'CORRECTNESS:\s*([0-9.]+)', judge_response)
-        if correctness_match:
-            result["correctness_score"] = float(correctness_match.group(1)) / 10.0
-
-        completeness_match = re.search(r'COMPLETENESS:\s*([0-9.]+)', judge_response)
-        if completeness_match:
-            result["completeness_score"] = float(completeness_match.group(1)) / 10.0
-
-        insights_match = re.search(r'KEY_INSIGHTS:\s*(Yes|No)', judge_response, re.IGNORECASE)
-        if insights_match:
-            result["has_key_insights"] = insights_match.group(1).lower() == "yes"
-
-        errors_match = re.search(r'ERRORS:\s*(.+?)(?=OVERALL:|$)', judge_response, re.DOTALL)
-        if errors_match:
-            errors_text = errors_match.group(1).strip()
-            if errors_text and "none" not in errors_text.lower():
-                result["errors_found"] = [errors_text]
-
-        overall_match = re.search(r'OVERALL:\s*(Correct|Incorrect|Partial)', judge_response, re.IGNORECASE)
-        if overall_match:
-            result["overall_assessment"] = overall_match.group(1).lower()
-
-        reasoning_match = re.search(r'REASONING:\s*(.+)', judge_response, re.DOTALL)
-        if reasoning_match:
-            result["judge_reasoning"] = reasoning_match.group(1).strip()
-
-        return result
-
     except Exception as e:
-        logger.error(f"Error in LLM judge verification: {e}")
+        logger.error(f"Error in IMO25 verification: {e}")
         return {
             "judge_response": f"Error: {str(e)}",
+            "correctness_check": "error",
+            "is_correct": False,
+            "bug_report": f"Verification error: {str(e)}",
             "correctness_score": 0.0,
             "completeness_score": 0.0,
             "has_key_insights": False,
@@ -328,109 +380,63 @@ def get_llm_response(problem: str, model: str, extra_body: dict = None, timeout:
 
 def evaluate_solution(problem_data: Dict, solution: str, model: str = "google/gemini-2.5-flash-lite") -> Dict[str, any]:
     """
-    Enhanced multi-layer evaluation of IMO solution using:
-    - Structural quality analysis (20%)
-    - Problem-specific insights verification (40%)
-    - LLM-as-judge verification (30%)
-    - Overall completeness (10%)
+    IMO25-style evaluation using rigorous two-stage verification system:
+    1. Detailed verification with comprehensive IMO grader prompt
+    2. Simple yes/no check on solution correctness
+
+    This eliminates self-judgment bias and provides more accurate assessment
     """
-    logger.info(f"Running enhanced evaluation for problem {problem_data['id']}")
+    logger.info(f"Running IMO25-style evaluation for problem {problem_data['id']}")
 
-    # Layer 1: Structural quality analysis (20% weight)
-    quality_analysis = extract_solution_quality(solution)
-    structural_score = quality_analysis["completeness_score"]
+    # Use IMO25's rigorous two-stage verification
+    imo25_verification = imo25_verify_solution(problem_data["problem"], solution, model)
 
-    # Layer 2: Problem-specific insights verification (40% weight)
-    insights_check = verify_problem_specific_insights(problem_data, solution)
-    insights_score = insights_check["insight_score"]
-
-    # Layer 3: LLM-as-judge verification (30% weight)
-    llm_verification = verify_solution_with_llm(problem_data["problem"], solution, model)
-    llm_score = 0.0
-    if llm_verification["success"]:
-        # Combine correctness and completeness from LLM judge
-        llm_score = (llm_verification["correctness_score"] + llm_verification["completeness_score"]) / 2.0
-
-    # Layer 4: Final answer extraction and verification
+    # Extract answer for compatibility with existing code
     answer_extraction = extract_final_answer(solution, problem_data["id"])
 
-    # Use calibrated scoring based on problem type and official answers
-    problem_type = problem_data.get("answer_type", "proof")
+    # Simple structural analysis for quality metrics
+    quality_analysis = extract_solution_quality(solution)
 
-    if problem_type in ["set", "number", "formula", "threshold"]:
-        # For problems with specific answers, heavily weight correct answer
-        if answer_extraction["official_answer_found"]:
-            answer_score = 1.0  # Perfect score for exact official answer
-        else:
-            answer_score = answer_extraction["confidence"] * 0.3  # Much lower for non-official
+    # In IMO25 system, correctness is binary based on verification
+    correctness_score = 1.0 if imo25_verification["is_correct"] else 0.0
 
-        # Adjust weights for problems with specific answers
-        weights = {
-            "structural": 0.10,
-            "insights": 0.30,
-            "llm_judge": 0.20,
-            "answer": 0.40  # Higher weight for exact answer match
-        }
-    else:
-        # For proof problems, weight insights and structure more heavily
-        answer_score = answer_extraction["confidence"]
-        weights = {
-            "structural": 0.25,
-            "insights": 0.35,
-            "llm_judge": 0.30,
-            "answer": 0.10
-        }
-
-    final_score = (
-        structural_score * weights["structural"] +
-        insights_score * weights["insights"] +
-        llm_score * weights["llm_judge"] +
-        answer_score * weights["answer"]
-    )
-
-    # Determine confidence based on agreement across layers
-    layer_scores = [structural_score, insights_score, llm_score, answer_score]
-    score_variance = sum((score - final_score) ** 2 for score in layer_scores) / len(layer_scores)
-
-    if final_score >= 0.8 and score_variance < 0.05:
-        confidence = "very_high"
-    elif final_score >= 0.7 and score_variance < 0.1:
+    # Confidence based on verification success and quality
+    if imo25_verification["is_correct"] and quality_analysis["completeness_score"] > 0.7:
         confidence = "high"
-    elif final_score >= 0.5 and score_variance < 0.15:
+    elif imo25_verification["is_correct"]:
         confidence = "medium"
     else:
         confidence = "low"
 
-    # Overall assessment
-    is_likely_correct = (
-        final_score >= 0.6 and
-        insights_score >= 0.5 and
-        (llm_verification["overall_assessment"] in ["correct", "partial"] if llm_verification["success"] else True)
-    )
-
     return {
-        "correctness_score": final_score,
-        "is_likely_correct": is_likely_correct,
+        "correctness_score": correctness_score,
+        "is_likely_correct": imo25_verification["is_correct"],
         "confidence": confidence,
 
-        # Detailed breakdown
+        # Detailed breakdown - simplified for IMO25 style
         "layer_scores": {
-            "structural_quality": structural_score,
-            "insights_verification": insights_score,
-            "llm_judge": llm_score,
-            "answer_extraction": answer_score
+            "structural_quality": quality_analysis["completeness_score"],
+            "insights_verification": 1.0 if imo25_verification["is_correct"] else 0.0,
+            "llm_judge": correctness_score,
+            "answer_extraction": answer_extraction["confidence"]
         },
-        "weights_used": weights,
-        "score_variance": score_variance,
+        "weights_used": {
+            "imo25_verification": 1.0  # Single source of truth
+        },
+        "score_variance": 0.0,  # No variance in binary assessment
 
         # Detailed component results
         "quality_analysis": quality_analysis,
-        "insights_check": insights_check,
-        "llm_verification": llm_verification,
+        "insights_check": {
+            "required_insights_found": 1 if imo25_verification["is_correct"] else 0,
+            "total_required_insights": 1,
+            "insight_score": 1.0 if imo25_verification["is_correct"] else 0.0
+        },
+        "llm_verification": imo25_verification,
         "answer_extraction": answer_extraction,
 
-        # Legacy compatibility
-        "evaluation_method": "enhanced_multi_layer"
+        # Method identifier
+        "evaluation_method": "imo25_two_stage"
     }
 
 def save_result(filename: str, result: Dict):
