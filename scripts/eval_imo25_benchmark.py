@@ -409,11 +409,24 @@ def evaluate_solution(problem_data: Dict, solution: str, model: str = "google/ge
         confidence = "low"
 
     return {
+        # Primary binary result - this is what matters
+        "is_correct": imo25_verification["is_correct"],
+        "verdict": "Correct" if imo25_verification["is_correct"] else "Incorrect",
+
+        # For compatibility with existing analysis code
         "correctness_score": correctness_score,
         "is_likely_correct": imo25_verification["is_correct"],
         "confidence": confidence,
 
-        # Detailed breakdown - simplified for IMO25 style
+        # Verification details for transparency
+        "verification_details": {
+            "stage1_analysis": imo25_verification["judge_response"],
+            "stage2_check": imo25_verification["correctness_check"],
+            "errors_found": imo25_verification["errors_found"],
+            "bug_report": imo25_verification["bug_report"] if imo25_verification["bug_report"] else None
+        },
+
+        # Legacy compatibility for existing analysis code
         "layer_scores": {
             "structural_quality": quality_analysis["completeness_score"],
             "insights_verification": 1.0 if imo25_verification["is_correct"] else 0.0,
@@ -425,7 +438,7 @@ def evaluate_solution(problem_data: Dict, solution: str, model: str = "google/ge
         },
         "score_variance": 0.0,  # No variance in binary assessment
 
-        # Detailed component results
+        # Simplified component results
         "quality_analysis": quality_analysis,
         "insights_check": {
             "required_insights_found": 1 if imo25_verification["is_correct"] else 0,
@@ -436,7 +449,7 @@ def evaluate_solution(problem_data: Dict, solution: str, model: str = "google/ge
         "answer_extraction": answer_extraction,
 
         # Method identifier
-        "evaluation_method": "imo25_two_stage"
+        "evaluation_method": "imo25_two_stage_binary"
     }
 
 def save_result(filename: str, result: Dict):
@@ -469,7 +482,7 @@ def analyze_results(results: List[Dict], approach_name: str = None):
         return
 
     total_problems = len(results)
-    likely_correct = sum(1 for r in results if r['evaluation']['is_likely_correct'])
+    likely_correct = sum(1 for r in results if r['evaluation']['is_correct'])
     high_confidence = sum(1 for r in results if r['evaluation']['confidence'] == 'high')
 
     avg_correctness = sum(r['evaluation']['correctness_score'] for r in results) / total_problems
@@ -497,7 +510,7 @@ def analyze_results(results: List[Dict], approach_name: str = None):
         if prob_type not in type_stats:
             type_stats[prob_type] = {'total': 0, 'correct': 0, 'scores': []}
         type_stats[prob_type]['total'] += 1
-        if result['evaluation']['is_likely_correct']:
+        if result['evaluation']['is_correct']:
             type_stats[prob_type]['correct'] += 1
         type_stats[prob_type]['scores'].append(result['evaluation']['correctness_score'])
 
@@ -512,12 +525,11 @@ def analyze_results(results: List[Dict], approach_name: str = None):
     for result in results:
         prob_id = result['problem_data']['id']
         prob_type = result['problem_data']['type']
-        score = result['evaluation']['correctness_score']
-        confidence = result['evaluation']['confidence']
         tokens = result['response']['reasoning_tokens']
-
-        status = "✓" if result['evaluation']['is_likely_correct'] else "✗"
-        print(f"Problem {prob_id} ({prob_type}): {status} Score: {score:.3f} ({confidence}) - {tokens:,} tokens")
+        is_correct = result['evaluation']['is_correct']
+        verdict = result['evaluation']['verdict']
+        status = "✓" if is_correct else "✗"
+        print(f"Problem {prob_id} ({prob_type}): {status} {verdict} - {tokens:,} tokens")
 
     # Quality analysis summary
     print(f"\nSolution Quality Analysis:")
