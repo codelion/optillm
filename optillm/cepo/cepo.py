@@ -225,7 +225,7 @@ def llm_call(
             - finish_reason: Why generation stopped.
             - completion_tokens: Number of tokens generated.
     """
-    retries = cepo_config.num_of_retries  # total attempts = retries + 1 initial call
+    retries = cepo_config.num_of_retries + 1  # total attempts = retries + 1 initial call
     for attempt in range(retries):
         try:
             response_object = client.chat.completions.create(
@@ -907,11 +907,11 @@ def majority_vote_math(completions, last_n_chars=100):
 
     counts = Counter(answer for _, answer in extracted_answer_map)
     majority_answer, count = counts.most_common(1)[0]
-    # TODO it may return all "None", we probably should handle this case
-    # Return one response whose extracted answer matches the majority
+
     for response, answer in extracted_answer_map:
         if answer == majority_answer:
             return response, count
+    return extracted_answer_map[0][0], 0
 
 
 def majority_vote_mcq(completions, last_n_chars=100):
@@ -922,10 +922,11 @@ def majority_vote_mcq(completions, last_n_chars=100):
 
     counts = Counter(answer for _, answer in extracted_answer_map)
     majority_answer, count = counts.most_common(1)[0]
-    # TODO it may return all "None", we probably should handle this case
+
     for response, answer in extracted_answer_map:
         if answer == majority_answer:
             return response, count
+    return extracted_answer_map[0][0], 0
         
 
 def rate_completions_majority(completions: list[str], last_n_chars: int = 150) -> tuple[str, int, dict]:
