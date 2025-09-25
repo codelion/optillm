@@ -30,7 +30,7 @@ class CepoConfig:
     planning_temperature_step4: float  # temperature for generator in step 4 of planning stage
     planning_max_tokens_step1: int  # maximum number of tokens in step 1 of planning stage
     planning_max_tokens_step2: int  # maximum number of tokens in step 2 of planning stage
-    planning_max_tokens_direct_resp: float  #  maximum number of tokens after step 2 if planning fails and answer directly
+    planning_max_tokens_direct_resp: float  # maximum number of tokens after step 2 if planning fails and answer directly
     planning_max_tokens_step3: int  # maximum number of tokens in step 3 of planning stage
     planning_max_tokens_step4: int  # maximum number of tokens in step 4 of planning stage
     use_plan_diversity: bool  # whether to use plan diversity
