@@ -736,7 +736,7 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
         }
         
         rating_response = client.chat.completions.create(**provider_request)
-        rating_response, _, completion_tokens = llm_call_reason_effort_fallback(
+        rating_response, _, completion_tokens_ = llm_call_reason_effort_fallback(
                 client=client,
                 provider_request=provider_request,
                 reasoning_effort_levels=["high", "medium"],
@@ -748,8 +748,7 @@ def rate_completions_absolute(system_prompt: str, initial_query: str, client: An
             response_dict = rating_response.model_dump() if hasattr(rating_response, 'model_dump') else rating_response
             optillm.conversation_logger.log_provider_call(request_id, provider_request, response_dict)
 
-        completion_tokens += rating_response.usage.completion_tokens
-        rating_response = rating_response.choices[0].message.content.strip()
+        completion_tokens += completion_tokens_
 
         cb_log[f"rating_response_{i}"] = rating_response
         if cepo_config.print_output:
