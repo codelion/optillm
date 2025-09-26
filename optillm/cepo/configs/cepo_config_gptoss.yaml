@@ -1,4 +1,4 @@
-bestofn_n: 1
+bestofn_n: 3
 bestofn_temperature: 0.6
 bestofn_max_tokens: 40960
 bestofn_rating_type: "absolute"
