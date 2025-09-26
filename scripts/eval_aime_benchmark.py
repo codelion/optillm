@@ -311,7 +311,7 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=30000,
+            max_tokens=64000,
             **kwargs
         )
         
@@ -932,9 +932,9 @@ if __name__ == "__main__":
             main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
                  test_time_compute=True, approach_name=approach_slug, extra_body=extra_body)
     else:
-        # Handle approach parameter
-        extra_body = {"optillm_approach": args.approach} if args.approach else None
-        approach_name = args.approach if args.approach else None
+        # Handle approach parameter - only set extra_body if approach is not "none"
+        extra_body = {"optillm_approach": args.approach} if args.approach and args.approach != "none" else None
+        approach_name = args.approach if args.approach and args.approach != "none" else None
 
         main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
              approach_name=approach_name, extra_body=extra_body)
