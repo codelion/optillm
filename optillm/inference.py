@@ -1029,7 +1029,7 @@ class ModelManager:
             logger.info(f"Using device: {device}")
             
             # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, token=os.getenv("HF_TOKEN"))
             
             # Base kwargs for model loading
             model_kwargs = {
@@ -1076,6 +1076,7 @@ class ModelManager:
             try:
                 model = AutoModelForCausalLM.from_pretrained(
                     model_id,
+                    token=os.getenv("HF_TOKEN"),
                     **model_kwargs
                 )
             except Exception as e:
@@ -1085,6 +1086,7 @@ class ModelManager:
                     model_kwargs.pop("attn_implementation")
                     model = AutoModelForCausalLM.from_pretrained(
                         model_id,
+                        token=os.getenv("HF_TOKEN"),
                         **model_kwargs
                     )
                 elif model_kwargs["torch_dtype"] == torch.float16:
@@ -1094,6 +1096,7 @@ class ModelManager:
                     model_kwargs["torch_dtype"] = torch.float32
                     model = AutoModelForCausalLM.from_pretrained(
                         model_id,
+                        token=os.getenv("HF_TOKEN"),
                         **model_kwargs
                     )
             
@@ -1134,7 +1137,7 @@ class LoRAManager:
             config = PeftConfig.from_pretrained(
                 adapter_id,
                 trust_remote_code=True,
-                use_auth_token=os.getenv("HF_TOKEN")
+                token=os.getenv("HF_TOKEN")
             )
             return True
         except Exception as e:
@@ -1159,7 +1162,7 @@ class LoRAManager:
                 config = PeftConfig.from_pretrained(
                     adapter_id,
                     trust_remote_code=True,
-                    use_auth_token=os.getenv("HF_TOKEN")
+                    token=os.getenv("HF_TOKEN")
                 )
                 
                 model = base_model
