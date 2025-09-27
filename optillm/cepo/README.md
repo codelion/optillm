@@ -23,6 +23,19 @@ The model reviews all generated solution proposals and their associated plans, i
 **Step 4**: Final Solution
 The model uses the refined plan from Step 3 to produce the final answer.
 
+## Example Usage
+
+Here’s an example of running Optillm using the CePO method for Qwen3 deployed with VLLM on port 8001:
+
+```bash
+OPENAI_API_KEY=serving-on-vllm \
+python optillm.py \
+  --base-url http://localhost:8001/v1 \
+  --approach cepo \
+  --port 8000 \
+  --cepo_config_file ./optillm/cepo/cepo_configs/cepo_qwen3.yaml
+```
+
 ## CePO Current Status
 
 This project is a work in progress, and the provided code is in an early experimental stage. While the proposed approach works well across the benchmarks we tested, further improvements can be achieved by task-specific customizations to prompts.
