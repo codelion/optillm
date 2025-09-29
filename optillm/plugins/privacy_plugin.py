@@ -3,9 +3,14 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, DeanonymizeEngine, OperatorConfig
 from presidio_anonymizer.operators import Operator, OperatorType
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 SLUG = "privacy"
+
+# Singleton instances for expensive resources
+_analyzer_engine: Optional[AnalyzerEngine] = None
+_anonymizer_engine: Optional[AnonymizerEngine] = None
+_model_downloaded: bool = False
 
 class InstanceCounterAnonymizer(Operator):
     """
@@ -67,11 +72,14 @@ class InstanceCounterAnonymizer(Operator):
         return OperatorType.Anonymize
 
 def download_model(model_name):
-    if not spacy.util.is_package(model_name):
-        print(f"Downloading {model_name} model...")
-        spacy.cli.download(model_name)
-    else:
-        print(f"{model_name} model already downloaded.")
+    global _model_downloaded
+    if not _model_downloaded:
+        if not spacy.util.is_package(model_name):
+            print(f"Downloading {model_name} model...")
+            spacy.cli.download(model_name)
+        else:
+            print(f"{model_name} model already downloaded.")
+        _model_downloaded = True
 
 def replace_entities(entity_map, text):
     # Create a reverse mapping of placeholders to entity names
@@ -92,17 +100,32 @@ def replace_entities(entity_map, text):
     
     return replaced_text
 
+def get_analyzer_engine() -> AnalyzerEngine:
+    """Get or create singleton AnalyzerEngine instance."""
+    global _analyzer_engine
+    if _analyzer_engine is None:
+        _analyzer_engine = AnalyzerEngine()
+    return _analyzer_engine
+
+def get_anonymizer_engine() -> AnonymizerEngine:
+    """Get or create singleton AnonymizerEngine instance."""
+    global _anonymizer_engine
+    if _anonymizer_engine is None:
+        _anonymizer_engine = AnonymizerEngine()
+        _anonymizer_engine.add_anonymizer(InstanceCounterAnonymizer)
+    return _anonymizer_engine
+
 def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str, int]:
     # Use the function
     model_name = "en_core_web_lg"
     download_model(model_name)
 
-    analyzer = AnalyzerEngine() 
+    # Use singleton instances
+    analyzer = get_analyzer_engine()
     analyzer_results = analyzer.analyze(text=initial_query, language="en")
 
-    # Create Anonymizer engine and add the custom anonymizer
-    anonymizer_engine = AnonymizerEngine()
-    anonymizer_engine.add_anonymizer(InstanceCounterAnonymizer)
+    # Use singleton anonymizer engine
+    anonymizer_engine = get_anonymizer_engine()
 
     # Create a mapping between entity types and counters
     entity_mapping = dict()
