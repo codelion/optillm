@@ -53,7 +53,7 @@ class MARSAgent:
 
         # Configure reasoning parameters - simplified with effort only
         reasoning_effort = self._get_reasoning_effort()
-        max_tokens = self.config['max_tokens']  # Fixed 30k
+        max_tokens = self.config['max_tokens']
 
         reasoning_config = {
             "effort": reasoning_effort
@@ -104,17 +104,14 @@ class MARSAgent:
 
             # Create agent solution object with enhanced metadata
             agent_solution = AgentSolution(
-                agent_id=self.agent_id,
-                temperature=self.temperature,
+                agent_id=str(self.agent_id),  # Convert to str for compatibility
                 solution=solution_text,
                 confidence=confidence,
                 reasoning_tokens=reasoning_tokens,
-                timestamp=datetime.now()
+                total_tokens=total_tokens,
+                solution_length=solution_length,
+                temperature=self.temperature
             )
-
-            # Add metadata to solution object
-            agent_solution.solution_length = solution_length
-            agent_solution.total_tokens = total_tokens
 
             logger.info(f"Agent {self.agent_id} generated solution with {reasoning_tokens} reasoning tokens")
             return agent_solution, reasoning_tokens
@@ -122,16 +119,16 @@ class MARSAgent:
         except Exception as e:
             logger.error(f"Agent {self.agent_id} error generating solution: {str(e)}")
             # Return empty solution with error indication
+            error_message = f"Error generating solution: {str(e)}"
             error_solution = AgentSolution(
-                agent_id=self.agent_id,
-                temperature=self.temperature,
-                solution=f"Error generating solution: {str(e)}",
+                agent_id=str(self.agent_id),  # Convert to str for compatibility
+                solution=error_message,
                 confidence=0.0,
                 reasoning_tokens=0,
-                timestamp=datetime.now()
+                total_tokens=0,
+                solution_length=len(error_message),
+                temperature=self.temperature
             )
-            error_solution.solution_length = len(error_solution.solution)
-            error_solution.total_tokens = 0
             return error_solution, 0
 
     def verify_solution(self, problem: str, solution: str, verifier_id: int, solution_agent_id: int, request_id: str = None) -> VerificationResult:
@@ -144,7 +141,7 @@ class MARSAgent:
         )
 
         # Use simplified verification with effort parameter
-        max_tokens = self.config['max_tokens']  # Fixed 30k
+        max_tokens = self.config['max_tokens']
 
         try:
             response = self.client.chat.completions.create(
@@ -204,7 +201,7 @@ class MARSAgent:
         )
 
         # Use simplified improvement with high effort
-        max_tokens = self.config['max_tokens']  # Fixed 30k
+        max_tokens = self.config['max_tokens']
 
         try:
             response = self.client.chat.completions.create(

@@ -13,6 +13,8 @@ from optillm import conversation_logger
 from .workspace import MARSWorkspace, AgentSolution
 from .agent import MARSAgent
 from .verifier import MARSVerifier
+from .aggregator import MARSAggregator
+from .strategy_network import StrategyNetwork
 from .prompts import SYNTHESIS_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -24,10 +26,19 @@ DEFAULT_CONFIG = {
     'verification_passes_required': 2,  # Balanced for 5-iteration efficiency
     'consensus_threshold': 2,  # Keep at 2 for 3-agent setup
     'min_verified_solutions': 1,  # Keep minimal requirement
-    'max_tokens': 30000,  # Fixed 30k token budget for all calls
+    'max_tokens': 64000,  # Increased default token budget for complex reasoning
     'max_verification_attempts': 3,
     'early_termination': True,
-    'use_reasoning_api': True
+    'use_reasoning_api': True,
+    # RSA-inspired aggregation parameters
+    'enable_aggregation': True,  # Enable recursive self-aggregation
+    'population_size': 6,  # N parameter: maintain larger population for diversity
+    'aggregation_size': 3,  # K parameter: number of solutions to aggregate
+    'aggregation_loops': 3,  # T parameter: number of aggregation iterations
+    # Strategy Network parameters for cross-agent insight sharing
+    'enable_strategy_network': True,  # Enable cross-agent strategy sharing
+    'strategy_extraction_enabled': True,  # Extract reasoning strategies from solutions
+    'cross_agent_enhancement': True,  # Generate enhanced solutions using peer strategies
 }
 
 def multi_agent_reasoning_system(
@@ -39,11 +50,11 @@ def multi_agent_reasoning_system(
     request_id: str = None
 ) -> Tuple[str, int]:
     """
-    Main MARS function implementing multi-agent mathematical reasoning with parallel execution
+    Main MARS function implementing multi-agent reasoning with parallel execution
 
     Args:
         system_prompt: System-level instructions
-        initial_query: The mathematical problem to solve
+        initial_query: The problem or task to solve
         client: OpenAI-compatible client for API calls
         model: Model identifier (should support OpenRouter reasoning API)
         request_id: Optional request ID for conversation logging
@@ -106,8 +117,38 @@ async def _run_mars_parallel(
             )
             total_reasoning_tokens += exploration_tokens
 
+            # Phase 2a: RSA-inspired Aggregation (if enabled)
+            if config.get('enable_aggregation', True):
+                logger.info("Phase 2a: RSA-inspired Solution Aggregation")
+                aggregator = MARSAggregator(client, model, config)
+                aggregation_tokens, aggregation_summary = await aggregator.run_aggregation_loops(
+                    workspace, request_id, executor
+                )
+                total_reasoning_tokens += aggregation_tokens
+                logger.info(f"Aggregation complete: {aggregation_summary}")
+
+            # Phase 2b: Cross-Agent Strategy Sharing (if enabled)
+            if config.get('enable_strategy_network', True):
+                logger.info("Phase 2b: Cross-Agent Strategy Network")
+                strategy_network = StrategyNetwork(client, model, config)
+
+                # Extract reasoning strategies from agent solutions
+                if config.get('strategy_extraction_enabled', True):
+                    extracted_strategies = await strategy_network.extract_strategies_from_solutions(
+                        workspace, request_id, executor
+                    )
+
+                    # Share strategies across agents and generate enhanced solutions
+                    if config.get('cross_agent_enhancement', True) and extracted_strategies:
+                        strategy_sharing_summary = await strategy_network.share_strategies_across_agents(
+                            workspace, extracted_strategies, request_id, executor
+                        )
+
+                        strategy_insights = strategy_network.get_strategy_insights_summary()
+                        logger.info(f"Strategy network complete: {strategy_insights}")
+
             # Phase 3: Verification System (parallel)
-            logger.info("Phase 2: Verification System")
+            logger.info("Phase 3: Verification System")
             verifier = MARSVerifier(agents, workspace, config)
             verification_summary = await verifier.verify_solutions_parallel(request_id, executor)
 
@@ -115,7 +156,7 @@ async def _run_mars_parallel(
             iteration_count = 0
             while workspace.should_continue_iteration() and iteration_count < config['max_iterations']:
                 iteration_count += 1
-                logger.info(f"Phase 3: Iterative Improvement - Iteration {iteration_count}")
+                logger.info(f"Phase 4: Iterative Improvement - Iteration {iteration_count}")
 
                 # Improve unverified solutions (parallel)
                 improvement_summary = await verifier.iterative_improvement_parallel(request_id, executor)
@@ -132,7 +173,7 @@ async def _run_mars_parallel(
                 workspace.iteration_count = iteration_count
 
         # Phase 5: Final Synthesis (sequential - needs all results)
-        logger.info("Phase 4: Final Synthesis")
+        logger.info("Phase 5: Final Synthesis")
         final_solution, synthesis_tokens = _synthesize_final_solution(
             workspace, client, model, config, request_id
         )
@@ -231,8 +272,60 @@ def _synthesize_final_solution(
         logger.info(f"Using verified solution from agent {best_solution.agent_id}")
         return best_solution.solution, 0
 
-    # If no verified solution, attempt synthesis
-    logger.info("No verified solutions found, attempting synthesis")
+    # If no verified solution, try numerical voting first
+    logger.info("No verified solutions found, attempting numerical voting")
+
+    # Try to extract numerical answers from all solutions
+    import re
+    from collections import Counter
+
+    numerical_answers = []
+    for solution in workspace.solutions:
+        # Look for boxed answers: \boxed{123}
+        boxed_match = re.search(r'\\boxed\{(\d+)\}', solution.solution)
+        if boxed_match:
+            try:
+                answer = int(boxed_match.group(1))
+                numerical_answers.append((answer, solution))
+                continue
+            except ValueError:
+                pass
+
+        # Look for final numerical answers at the end
+        lines = solution.solution.strip().split('\n')
+        for line in reversed(lines[-5:]):  # Check last 5 lines
+            # Look for patterns like "answer is 123" or just "123" at the end
+            number_match = re.search(r'\b(\d+)\b\s*\.?\s*$', line.strip())
+            if number_match:
+                try:
+                    answer = int(number_match.group(1))
+                    # Only accept if it's a reasonable AIME answer (1-999)
+                    if 1 <= answer <= 999:
+                        numerical_answers.append((answer, solution))
+                        break
+                except ValueError:
+                    pass
+
+    # Check for majority vote
+    if len(numerical_answers) >= 2:
+        answer_counts = Counter([ans for ans, _ in numerical_answers])
+        most_common = answer_counts.most_common(1)[0]
+        answer, count = most_common
+
+        # If 2+ agents agree on the same number, use that
+        if count >= 2:
+            # Find the solution with highest confidence among those with the winning answer
+            matching_solutions = [sol for ans, sol in numerical_answers if ans == answer]
+            best_solution = max(matching_solutions, key=lambda s: s.confidence)
+
+            logger.info(f"VOTING: Using majority vote answer {answer} ({count}/{len(numerical_answers)} agents agreed)")
+            logger.info(f"VOTING: Selected solution from agent {best_solution.agent_id} with confidence {best_solution.confidence:.2f}")
+
+            # Return the solution with the winning answer (no reasoning tokens since no new API call)
+            return best_solution.solution, 0
+
+    # If no consensus, fall back to synthesis
+    logger.info("No numerical consensus found, attempting synthesis")
 
     synthesis_data = workspace.get_synthesis_input()
 

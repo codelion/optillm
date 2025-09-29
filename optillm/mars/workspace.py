@@ -12,15 +12,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentSolution:
     """Represents a solution attempt by an agent"""
-    agent_id: int
-    temperature: float
+    agent_id: str  # Changed to str to support aggregated agent IDs like "agg_123456"
     solution: str
     confidence: float
     reasoning_tokens: int
-    timestamp: datetime
-    verification_results: List[Dict] = field(default_factory=list)
+    total_tokens: int
+    solution_length: int
     is_verified: bool = False
     verification_score: float = 0.0
+    temperature: float = 0.7  # Default temperature
+    timestamp: datetime = field(default_factory=datetime.now)
+    verification_results: List[Dict] = field(default_factory=list)
 
 @dataclass
 class VerificationResult:
@@ -67,10 +69,11 @@ class MARSWorkspace:
         # Extract agent_id from solution_id (format: "agent_X_iter_Y")
         if verification.solution_id.startswith("agent_"):
             try:
-                agent_id = int(verification.solution_id.split("_")[1])
+                agent_id_str = verification.solution_id.split("_")[1]
 
+                # Handle both integer and string agent_ids for backward compatibility
                 for solution in self.solutions:
-                    if solution.agent_id == agent_id:
+                    if str(solution.agent_id) == agent_id_str:
                         solution.verification_results.append({
                             'assessment': verification.assessment,
                             'confidence': verification.confidence,
