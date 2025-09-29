@@ -21,6 +21,8 @@ import traceback
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
+from mcp.client.websocket import websocket_client
 import mcp.types as types
 from mcp.shared.exceptions import McpError
 
@@ -116,19 +118,47 @@ def find_executable(cmd: str) -> Optional[str]:
 @dataclass
 class ServerConfig:
     """Configuration for a single MCP server"""
-    command: str
-    args: List[str]
-    env: Dict[str, str]
+    # Transport type: "stdio" (default), "sse", or "websocket"
+    transport: str = "stdio"
+
+    # For stdio transport
+    command: Optional[str] = None
+    args: List[str] = None
+
+    # For remote transports (SSE/WebSocket)
+    url: Optional[str] = None
+    headers: Dict[str, str] = None
+
+    # Common fields
+    env: Dict[str, str] = None
     description: Optional[str] = None
-    
+
+    # Timeout settings
+    timeout: float = 5.0
+    sse_read_timeout: float = 300.0
+
+    def __post_init__(self):
+        """Initialize default values for mutable fields"""
+        if self.args is None:
+            self.args = []
+        if self.headers is None:
+            self.headers = {}
+        if self.env is None:
+            self.env = {}
+
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> 'ServerConfig':
         """Create ServerConfig from a dictionary"""
         return cls(
-            command=config.get("command", ""),
+            transport=config.get("transport", "stdio"),
+            command=config.get("command"),
             args=config.get("args", []),
+            url=config.get("url"),
+            headers=config.get("headers", {}),
             env=config.get("env", {}),
-            description=config.get("description")
+            description=config.get("description"),
+            timeout=config.get("timeout", 5.0),
+            sse_read_timeout=config.get("sse_read_timeout", 300.0)
         )
 
 class MCPConfigManager:
@@ -230,7 +260,7 @@ class LoggingClientSession(ClientSession):
 
 class MCPServer:
     """Represents a connection to an MCP server"""
-    
+
     def __init__(self, server_name: str, config: ServerConfig):
         self.server_name = server_name
         self.config = config
@@ -241,34 +271,155 @@ class MCPServer:
         self.has_tools_capability = False
         self.has_resources_capability = False
         self.has_prompts_capability = False
-    
-    async def connect_and_discover(self) -> bool:
-        """Connect to the server and discover capabilities using proper context management"""
-        logger.info(f"Connecting to MCP server: {self.server_name}")
+
+    async def connect_stdio(self, session: LoggingClientSession) -> bool:
+        """Connect to server using stdio transport and discover capabilities"""
+        try:
+            logger.info(f"Connected to server: {self.server_name}")
+
+            # Initialize session
+            logger.debug(f"Initializing MCP session for {self.server_name}")
+            result = await session.initialize()
+            logger.info(f"Server {self.server_name} initialized with capabilities: {result.capabilities}")
+            logger.debug(f"Full initialization result: {result}")
+
+            # Check which capabilities the server supports
+            server_capabilities = result.capabilities
+
+            # Discover tools if supported
+            if hasattr(server_capabilities, "tools"):
+                self.has_tools_capability = True
+                logger.info(f"Discovering tools for {self.server_name}")
+                try:
+                    tools_result = await session.list_tools()
+                    self.tools = tools_result.tools
+                    logger.info(f"Found {len(self.tools)} tools")
+                    logger.debug(f"Tools details: {[t.name for t in self.tools]}")
+                except McpError as e:
+                    logger.warning(f"Failed to list tools: {e}")
+
+            # Discover resources if supported
+            if hasattr(server_capabilities, "resources"):
+                self.has_resources_capability = True
+                logger.info(f"Discovering resources for {self.server_name}")
+                try:
+                    resources_result = await session.list_resources()
+                    self.resources = resources_result.resources
+                    logger.info(f"Found {len(self.resources)} resources")
+                    logger.debug(f"Resources details: {[r.uri for r in self.resources]}")
+                except McpError as e:
+                    logger.warning(f"Failed to list resources: {e}")
+
+            # Discover prompts if supported
+            if hasattr(server_capabilities, "prompts"):
+                self.has_prompts_capability = True
+                logger.info(f"Discovering prompts for {self.server_name}")
+                try:
+                    prompts_result = await session.list_prompts()
+                    self.prompts = prompts_result.prompts
+                    logger.info(f"Found {len(self.prompts)} prompts")
+                    logger.debug(f"Prompts details: {[p.name for p in self.prompts]}")
+                except McpError as e:
+                    logger.warning(f"Failed to list prompts: {e}")
+
+            logger.info(f"Server {self.server_name} capabilities: "
+                       f"{len(self.tools)} tools, {len(self.resources)} resources, "
+                       f"{len(self.prompts)} prompts")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error during stdio session: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def connect_sse(self) -> bool:
+        """Connect to server using SSE transport and discover capabilities"""
+        logger.info(f"Connecting to SSE server: {self.server_name}")
+        logger.debug(f"SSE URL: {self.config.url}")
+        logger.debug(f"Headers: {self.config.headers}")
+
+        if not self.config.url:
+            logger.error(f"SSE transport requires URL for server {self.server_name}")
+            return False
+
+        try:
+            # Expand environment variables in headers
+            expanded_headers = {}
+            for key, value in self.config.headers.items():
+                if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+                    env_var = value[2:-1]
+                    expanded_value = os.environ.get(env_var)
+                    if expanded_value:
+                        expanded_headers[key] = expanded_value
+                    else:
+                        logger.warning(f"Environment variable {env_var} not found for header {key}")
+                else:
+                    expanded_headers[key] = value
+
+            async with sse_client(
+                url=self.config.url,
+                headers=expanded_headers,
+                timeout=self.config.timeout,
+                sse_read_timeout=self.config.sse_read_timeout
+            ) as (read_stream, write_stream):
+                async with LoggingClientSession(read_stream, write_stream) as session:
+                    return await self.connect_stdio(session)
+
+        except Exception as e:
+            logger.error(f"Error connecting to SSE server {self.server_name}: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def connect_websocket(self) -> bool:
+        """Connect to server using WebSocket transport and discover capabilities"""
+        logger.info(f"Connecting to WebSocket server: {self.server_name}")
+        logger.debug(f"WebSocket URL: {self.config.url}")
+
+        if not self.config.url:
+            logger.error(f"WebSocket transport requires URL for server {self.server_name}")
+            return False
+
+        try:
+            async with websocket_client(self.config.url) as (read_stream, write_stream):
+                async with LoggingClientSession(read_stream, write_stream) as session:
+                    return await self.connect_stdio(session)
+
+        except Exception as e:
+            logger.error(f"Error connecting to WebSocket server {self.server_name}: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def connect_stdio_native(self) -> bool:
+        """Connect using stdio transport with local executable"""
         logger.debug(f"Server configuration: {vars(self.config)}")
-        
+
+        # Validate stdio configuration
+        if not self.config.command:
+            logger.error(f"stdio transport requires command for server {self.server_name}")
+            return False
+
         # Find the full path to the command
         full_command = find_executable(self.config.command)
         if not full_command:
             logger.error(f"Failed to find executable for command: {self.config.command}")
             return False
-            
+
         # Create environment with PATH included
         merged_env = os.environ.copy()
         if self.config.env:
             merged_env.update(self.config.env)
-        
+
         logger.debug(f"Using command: {full_command}")
         logger.debug(f"Arguments: {self.config.args}")
         logger.debug(f"Environment: {self.config.env}")
-        
+
         # Create server parameters
         server_params = StdioServerParameters(
             command=full_command,
             args=self.config.args,
             env=merged_env
         )
-        
+
         try:
             # Start the server separately to see its output
             process = await asyncio.create_subprocess_exec(
@@ -278,7 +429,7 @@ class MCPServer:
                 stderr=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE
             )
-            
+
             # Log startup message from stderr
             async def log_stderr():
                 while True:
@@ -287,7 +438,7 @@ class MCPServer:
                         break
                     stderr_text = line.decode().strip()
                     logger.info(f"Server {self.server_name} stderr: {stderr_text}")
-                    
+
             # Log stdout too for debugging
             async def log_stdout():
                 while True:
@@ -296,75 +447,52 @@ class MCPServer:
                         break
                     stdout_text = line.decode().strip()
                     logger.debug(f"Server {self.server_name} stdout: {stdout_text}")
-            
+
             # Start logging tasks
             asyncio.create_task(log_stderr())
             asyncio.create_task(log_stdout())
-            
+
             # Wait a bit for the server to start up
             logger.debug(f"Waiting for server to start up...")
             await asyncio.sleep(2)
-            
+
             # Use the MCP client with proper context management
             logger.debug(f"Establishing MCP client connection to {self.server_name}")
             async with stdio_client(server_params) as (read_stream, write_stream):
                 logger.debug(f"Connection established, creating session")
                 # Use our logging session instead of the regular one
                 async with LoggingClientSession(read_stream, write_stream) as session:
-                    logger.info(f"Connected to server: {self.server_name}")
-                    
-                    # Initialize session
-                    logger.debug(f"Initializing MCP session for {self.server_name}")
-                    result = await session.initialize()
-                    logger.info(f"Server {self.server_name} initialized with capabilities: {result.capabilities}")
-                    logger.debug(f"Full initialization result: {result}")
-                    
-                    # Check which capabilities the server supports
-                    server_capabilities = result.capabilities
-                    
-                    # Discover tools if supported
-                    if hasattr(server_capabilities, "tools"):
-                        self.has_tools_capability = True
-                        logger.info(f"Discovering tools for {self.server_name}")
-                        try:
-                            tools_result = await session.list_tools()
-                            self.tools = tools_result.tools
-                            logger.info(f"Found {len(self.tools)} tools")
-                            logger.debug(f"Tools details: {[t.name for t in self.tools]}")
-                        except McpError as e:
-                            logger.warning(f"Failed to list tools: {e}")
-                    
-                    # Discover resources if supported
-                    if hasattr(server_capabilities, "resources"):
-                        self.has_resources_capability = True
-                        logger.info(f"Discovering resources for {self.server_name}")
-                        try:
-                            resources_result = await session.list_resources()
-                            self.resources = resources_result.resources
-                            logger.info(f"Found {len(self.resources)} resources")
-                            logger.debug(f"Resources details: {[r.uri for r in self.resources]}")
-                        except McpError as e:
-                            logger.warning(f"Failed to list resources: {e}")
-                    
-                    # Discover prompts if supported
-                    if hasattr(server_capabilities, "prompts"):
-                        self.has_prompts_capability = True
-                        logger.info(f"Discovering prompts for {self.server_name}")
-                        try:
-                            prompts_result = await session.list_prompts()
-                            self.prompts = prompts_result.prompts
-                            logger.info(f"Found {len(self.prompts)} prompts")
-                            logger.debug(f"Prompts details: {[p.name for p in self.prompts]}")
-                        except McpError as e:
-                            logger.warning(f"Failed to list prompts: {e}")
-                    
-                    logger.info(f"Server {self.server_name} capabilities: "
-                               f"{len(self.tools)} tools, {len(self.resources)} resources, "
-                               f"{len(self.prompts)} prompts")
-            
-            self.connected = True
-            return True
-            
+                    return await self.connect_stdio(session)
+
+        except Exception as e:
+            logger.error(f"Error connecting to MCP server {self.server_name}: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def connect_and_discover(self) -> bool:
+        """Connect to the server and discover capabilities using appropriate transport"""
+        logger.info(f"Connecting to MCP server: {self.server_name} using {self.config.transport} transport")
+
+        # Route to appropriate transport method
+        try:
+            if self.config.transport == "stdio":
+                success = await self.connect_stdio_native()
+            elif self.config.transport == "sse":
+                success = await self.connect_sse()
+            elif self.config.transport == "websocket":
+                success = await self.connect_websocket()
+            else:
+                logger.error(f"Unsupported transport type: {self.config.transport}")
+                return False
+
+            if success:
+                self.connected = True
+                logger.info(f"Successfully connected to {self.server_name} via {self.config.transport}")
+            else:
+                logger.error(f"Failed to connect to {self.server_name} via {self.config.transport}")
+
+            return success
+
         except Exception as e:
             logger.error(f"Error connecting to MCP server {self.server_name}: {e}")
             logger.error(traceback.format_exc())
@@ -496,87 +624,173 @@ class MCPServerManager:
             
         return "\n".join(description_parts)
 
+async def execute_tool_with_session(session: LoggingClientSession, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute a tool using an existing session"""
+    try:
+        # Initialize the session
+        await session.initialize()
+
+        # Call the tool and get the result
+        logger.info(f"Calling tool {tool_name} with arguments: {arguments}")
+        result = await session.call_tool(tool_name, arguments)
+
+        # Process the result
+        content_results = []
+        for content in result.content:
+            if content.type == "text":
+                content_results.append({
+                    "type": "text",
+                    "text": content.text
+                })
+                logger.debug(f"Tool result (text): {content.text[:100]}...")
+            elif content.type == "image":
+                content_results.append({
+                    "type": "image",
+                    "data": content.data,
+                    "mimeType": content.mimeType
+                })
+                logger.debug(f"Tool result (image): {content.mimeType}")
+
+        return {
+            "result": content_results,
+            "is_error": result.isError
+        }
+
+    except Exception as e:
+        logger.error(f"Error executing tool {tool_name}: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": f"Error executing tool: {str(e)}"}
+
 async def execute_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """
     Execute a tool on an MCP server
-    
+
     This function creates a fresh connection for each tool execution to ensure reliability.
     """
     logger.info(f"Executing tool {tool_name} on server {server_name} with arguments: {arguments}")
-    
+
     # Load configuration
     config_manager = MCPConfigManager()
     if not config_manager.load_config():
         return {"error": "Failed to load MCP configuration"}
-    
+
     # Get server configuration
     server_config = config_manager.servers.get(server_name)
     if not server_config:
         return {"error": f"Server {server_name} not found in configuration"}
-    
+
+    # Log the tool call in detail
+    logger.debug(f"Tool call details:")
+    logger.debug(f"  Server: {server_name}")
+    logger.debug(f"  Tool: {tool_name}")
+    logger.debug(f"  Arguments: {json.dumps(arguments, indent=2)}")
+    logger.debug(f"  Transport: {server_config.transport}")
+
+    try:
+        # Route to appropriate transport
+        if server_config.transport == "stdio":
+            return await execute_tool_stdio(server_config, tool_name, arguments)
+        elif server_config.transport == "sse":
+            return await execute_tool_sse(server_config, tool_name, arguments)
+        elif server_config.transport == "websocket":
+            return await execute_tool_websocket(server_config, tool_name, arguments)
+        else:
+            return {"error": f"Unsupported transport type: {server_config.transport}"}
+
+    except Exception as e:
+        logger.error(f"Error executing tool {tool_name} on server {server_name}: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": f"Error executing tool: {str(e)}"}
+
+async def execute_tool_stdio(server_config: ServerConfig, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute tool using stdio transport"""
+    if not server_config.command:
+        return {"error": "stdio transport requires command"}
+
     # Find executable
     full_command = find_executable(server_config.command)
     if not full_command:
         return {"error": f"Failed to find executable for command: {server_config.command}"}
-    
+
     # Create environment with PATH included
     merged_env = os.environ.copy()
     if server_config.env:
         merged_env.update(server_config.env)
-    
+
     # Create server parameters
     server_params = StdioServerParameters(
         command=full_command,
         args=server_config.args,
         env=merged_env
     )
-    
+
+    logger.debug(f"  Command: {full_command}")
+    logger.debug(f"  Args: {server_config.args}")
+
     try:
-        # Log the tool call in detail
-        logger.debug(f"Tool call details:")
-        logger.debug(f"  Server: {server_name}")
-        logger.debug(f"  Tool: {tool_name}")
-        logger.debug(f"  Arguments: {json.dumps(arguments, indent=2)}")
-        logger.debug(f"  Command: {full_command}")
-        logger.debug(f"  Args: {server_config.args}")
-        
         # Use the MCP client with proper context management
         async with stdio_client(server_params) as (read_stream, write_stream):
             # Use our logging session
             async with LoggingClientSession(read_stream, write_stream) as session:
-                # Initialize the session
-                await session.initialize()
-                
-                # Call the tool and get the result
-                logger.info(f"Calling tool {tool_name} with arguments: {arguments}")
-                result = await session.call_tool(tool_name, arguments)
-                
-                # Process the result
-                content_results = []
-                for content in result.content:
-                    if content.type == "text":
-                        content_results.append({
-                            "type": "text",
-                            "text": content.text
-                        })
-                        logger.debug(f"Tool result (text): {content.text[:100]}...")
-                    elif content.type == "image":
-                        content_results.append({
-                            "type": "image",
-                            "data": content.data,
-                            "mimeType": content.mimeType
-                        })
-                        logger.debug(f"Tool result (image): {content.mimeType}")
-                
-                return {
-                    "result": content_results,
-                    "is_error": result.isError
-                }
-                
+                return await execute_tool_with_session(session, tool_name, arguments)
+
     except Exception as e:
-        logger.error(f"Error executing tool {tool_name} on server {server_name}: {e}")
+        logger.error(f"Error with stdio tool execution: {e}")
         logger.error(traceback.format_exc())
-        return {"error": f"Error executing tool: {str(e)}"}
+        return {"error": f"Error executing tool via stdio: {str(e)}"}
+
+async def execute_tool_sse(server_config: ServerConfig, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute tool using SSE transport"""
+    if not server_config.url:
+        return {"error": "SSE transport requires URL"}
+
+    try:
+        # Expand environment variables in headers
+        expanded_headers = {}
+        for key, value in server_config.headers.items():
+            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+                env_var = value[2:-1]
+                expanded_value = os.environ.get(env_var)
+                if expanded_value:
+                    expanded_headers[key] = expanded_value
+                else:
+                    logger.warning(f"Environment variable {env_var} not found for header {key}")
+            else:
+                expanded_headers[key] = value
+
+        logger.debug(f"  URL: {server_config.url}")
+        logger.debug(f"  Headers: {list(expanded_headers.keys())}")
+
+        async with sse_client(
+            url=server_config.url,
+            headers=expanded_headers,
+            timeout=server_config.timeout,
+            sse_read_timeout=server_config.sse_read_timeout
+        ) as (read_stream, write_stream):
+            async with LoggingClientSession(read_stream, write_stream) as session:
+                return await execute_tool_with_session(session, tool_name, arguments)
+
+    except Exception as e:
+        logger.error(f"Error with SSE tool execution: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": f"Error executing tool via SSE: {str(e)}"}
+
+async def execute_tool_websocket(server_config: ServerConfig, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute tool using WebSocket transport"""
+    if not server_config.url:
+        return {"error": "WebSocket transport requires URL"}
+
+    try:
+        logger.debug(f"  URL: {server_config.url}")
+
+        async with websocket_client(server_config.url) as (read_stream, write_stream):
+            async with LoggingClientSession(read_stream, write_stream) as session:
+                return await execute_tool_with_session(session, tool_name, arguments)
+
+    except Exception as e:
+        logger.error(f"Error with WebSocket tool execution: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": f"Error executing tool via WebSocket: {str(e)}"}
 
 async def run(system_prompt: str, initial_query: str, client, model: str) -> Tuple[str, int]:
     """
