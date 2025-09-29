@@ -339,6 +339,11 @@ response = client.chat.completions.create(
 
 The Model Context Protocol (MCP) plugin enables OptiLLM to connect with MCP servers, bringing external tools, resources, and prompts into the context of language models. This allows for powerful integrations with filesystem access, database queries, API connections, and more.
 
+OptiLLM supports both **local** and **remote** MCP servers through multiple transport methods:
+- **stdio**: Local servers (traditional)
+- **SSE**: Remote servers via Server-Sent Events
+- **WebSocket**: Remote servers via WebSocket connections
+
 #### What is MCP?
 
 The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open protocol standard that allows LLMs to securely access tools and data sources through a standardized interface. MCP servers can provide:
@@ -351,12 +356,16 @@ The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open 
 
 ##### Setting up MCP Config
 
+> **Note on Backwards Compatibility**: Existing MCP configurations will continue to work unchanged. The `transport` field defaults to "stdio" when not specified, maintaining full backwards compatibility with existing setups.
+
 1. Create a configuration file at `~/.optillm/mcp_config.json` with the following structure:
 
+**Local Server (stdio) - Traditional Method:**
 ```json
 {
   "mcpServers": {
     "filesystem": {
+      "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
@@ -364,46 +373,169 @@ The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is an open 
         "/path/to/allowed/directory1",
         "/path/to/allowed/directory2"
       ],
-      "env": {}
+      "env": {},
+      "description": "Local filesystem access"
     }
   },
   "log_level": "INFO"
 }
 ```
 
-Each server entry in `mcpServers` consists of:
+**Legacy Format (still works):**
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/directory"],
+      "env": {}
+    }
+  }
+}
+```
 
-- **Server name**: A unique identifier for the server (e.g., "filesystem")
+**Remote Server (SSE) - New Feature:**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "sse",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}",
+        "Accept": "text/event-stream"
+      },
+      "timeout": 30.0,
+      "sse_read_timeout": 300.0,
+      "description": "GitHub MCP server for repository access"
+    }
+  },
+  "log_level": "INFO"
+}
+```
+
+**Remote Server (WebSocket) - New Feature:**
+```json
+{
+  "mcpServers": {
+    "remote-ws": {
+      "transport": "websocket",
+      "url": "wss://api.example.com/mcp",
+      "description": "Remote WebSocket MCP server"
+    }
+  },
+  "log_level": "INFO"
+}
+```
+
+**Mixed Configuration (Local + Remote):**
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/docs"],
+      "description": "Local filesystem access"
+    },
+    "github": {
+      "transport": "sse",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}"
+      },
+      "description": "GitHub MCP server"
+    },
+    "remote-api": {
+      "transport": "websocket",
+      "url": "wss://api.company.com/mcp",
+      "description": "Company internal MCP server"
+    }
+  },
+  "log_level": "INFO"
+}
+```
+
+##### Configuration Parameters
+
+**Common Parameters:**
+- **Server name**: A unique identifier for the server (e.g., "filesystem", "github")
+- **transport**: Transport method - "stdio" (default), "sse", or "websocket"
+- **description** (optional): Description of the server's functionality
+- **timeout** (optional): Connection timeout in seconds (default: 5.0)
+
+**stdio Transport (Local Servers):**
 - **command**: The executable to run the server
 - **args**: Command-line arguments for the server
 - **env**: Environment variables for the server process
-- **description** (optional): Description of the server's functionality
+
+**sse Transport (Server-Sent Events):**
+- **url**: The SSE endpoint URL
+- **headers** (optional): HTTP headers for authentication
+- **sse_read_timeout** (optional): SSE read timeout in seconds (default: 300.0)
+
+**websocket Transport (WebSocket):**
+- **url**: The WebSocket endpoint URL
+
+**Environment Variable Expansion:**
+Headers and other string values support environment variable expansion using `${VARIABLE_NAME}` syntax. This is especially useful for API keys:
+```json
+{
+  "headers": {
+    "Authorization": "Bearer ${GITHUB_TOKEN}",
+    "X-API-Key": "${MY_API_KEY}"
+  }
+}
+```
 
 #### Available MCP Servers
 
-You can use any of the [official MCP servers](https://modelcontextprotocol.io/examples) or third-party servers. Some popular options include:
+OptiLLM supports both local and remote MCP servers:
+
+##### Local MCP Servers (stdio transport)
+
+You can use any of the [official MCP servers](https://modelcontextprotocol.io/examples) or third-party servers that run as local processes:
 
 - **Filesystem**: `@modelcontextprotocol/server-filesystem` - File operations
 - **Git**: `mcp-server-git` - Git repository operations
 - **SQLite**: `@modelcontextprotocol/server-sqlite` - SQLite database access
 - **Brave Search**: `@modelcontextprotocol/server-brave-search` - Web search capabilities
 
-Example configuration for multiple servers:
+##### Remote MCP Servers (SSE/WebSocket transport)
+
+Remote servers provide centralized access without requiring local installation:
+
+- **GitHub MCP Server**: `https://api.githubcopilot.com/mcp` - Repository management, issue tracking, and code analysis
+- **Third-party servers**: Any MCP server that supports SSE or WebSocket protocols
+
+##### Example: Comprehensive Configuration
 
 ```json
 {
   "mcpServers": {
     "filesystem": {
+      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/documents"],
-      "env": {}
+      "description": "Local file system access"
     },
     "search": {
+      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-brave-search"],
       "env": {
         "BRAVE_API_KEY": "your-api-key-here"
-      }
+      },
+      "description": "Web search capabilities"
+    },
+    "github": {
+      "transport": "sse",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}",
+        "Accept": "text/event-stream"
+      },
+      "description": "GitHub repository and issue management"
     }
   },
   "log_level": "INFO"
@@ -429,10 +561,17 @@ The plugin enhances the system prompt with MCP capabilities so the model knows w
 
 Here are some examples of queries that will engage MCP tools:
 
+**Local Server Examples:**
 - "List all the Python files in my documents directory" (Filesystem)
 - "What are the recent commits in my Git repository?" (Git)
 - "Search for the latest information about renewable energy" (Search)
 - "Query my database for all users who registered this month" (Database)
+
+**Remote Server Examples:**
+- "Show me the open issues in my GitHub repository" (GitHub MCP)
+- "Create a new branch for the feature I'm working on" (GitHub MCP)
+- "What are the most recent pull requests that need review?" (GitHub MCP)
+- "Get the file contents from my remote repository" (GitHub MCP)
 
 #### Troubleshooting
 
@@ -447,13 +586,35 @@ Check this log file for connection issues, tool execution errors, and other diag
 
 ##### Common Issues
 
+**Local Server Issues (stdio transport):**
+
 1. **Command not found**: Make sure the server executable is available in your PATH, or use an absolute path in the configuration.
 
-2. **Connection failed**: Verify the server is properly configured and any required API keys are provided.
+2. **Access denied**: For filesystem operations, ensure the paths specified in the configuration are accessible to the process.
 
-3. **Method not found**: Some servers don't implement all MCP capabilities (tools, resources, prompts). Verify which capabilities the server supports.
+**Remote Server Issues (SSE/WebSocket transport):**
 
-4. **Access denied**: For filesystem operations, ensure the paths specified in the configuration are accessible to the process.
+3. **Connection timeout**: Remote servers may take longer to connect. Increase the `timeout` value in your configuration.
+
+4. **Authentication failed**: Verify your API keys and tokens are correct. For GitHub MCP server, ensure your `GITHUB_TOKEN` environment variable is set with appropriate permissions.
+
+5. **Network errors**: Check your internet connection and verify the server URL is accessible.
+
+6. **Environment variable not found**: If using `${VARIABLE_NAME}` syntax, ensure the environment variables are set before starting OptILLM.
+
+**General Issues:**
+
+7. **Method not found**: Some servers don't implement all MCP capabilities (tools, resources, prompts). Verify which capabilities the server supports.
+
+8. **Transport not supported**: Ensure you're using a supported transport: "stdio", "sse", or "websocket".
+
+**Example: Testing GitHub MCP Connection**
+
+To test if your GitHub MCP server configuration is working:
+
+1. Set your GitHub token: `export GITHUB_TOKEN="your-github-token"`
+2. Start OptILLM and check the logs at `~/.optillm/logs/mcp_plugin.log`
+3. Look for connection success messages and discovered capabilities
 
 ## Available parameters
 
