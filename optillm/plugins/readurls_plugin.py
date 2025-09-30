@@ -1,10 +1,10 @@
 import re
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import requests
 import os
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
-from optillm import __version__
+from optillm import __version__, server_config
 
 SLUG = "readurls"
 
@@ -24,13 +24,27 @@ def extract_urls(text: str) -> List[str]:
     
     return cleaned_urls
 
-def fetch_webpage_content(url: str, max_length: int = 100000) -> str:
+def fetch_webpage_content(url: str, max_length: int = 100000, verify_ssl: Optional[bool] = None, cert_path: Optional[str] = None) -> str:
     try:
         headers = {
             'User-Agent': f'optillm/{__version__} (https://github.com/codelion/optillm)'
         }
-        
-        response = requests.get(url, headers=headers, timeout=10)
+
+        # Use SSL configuration from server_config if not explicitly provided
+        if verify_ssl is None:
+            verify_ssl = server_config.get('ssl_verify', True)
+        if cert_path is None:
+            cert_path = server_config.get('ssl_cert_path', '')
+
+        # Determine verify parameter for requests
+        if not verify_ssl:
+            verify = False
+        elif cert_path:
+            verify = cert_path
+        else:
+            verify = True
+
+        response = requests.get(url, headers=headers, timeout=10, verify=verify)
         response.raise_for_status()
         
         # Make a soup 

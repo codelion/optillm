@@ -120,6 +120,32 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## 🔒 SSL Configuration
+
+OptILLM supports SSL certificate verification configuration for working with self-signed certificates or corporate proxies.
+
+**Disable SSL verification (development only):**
+```bash
+# Command line
+optillm --no-ssl-verify
+
+# Environment variable
+export OPTILLM_SSL_VERIFY=false
+optillm
+```
+
+**Use custom CA certificate:**
+```bash
+# Command line
+optillm --ssl-cert-path /path/to/ca-bundle.crt
+
+# Environment variable
+export OPTILLM_SSL_CERT_PATH=/path/to/ca-bundle.crt
+optillm
+```
+
+⚠️ **Security Note**: Disabling SSL verification is insecure and should only be used in development. For production environments with custom CAs, use `--ssl-cert-path` instead. See [SSL_CONFIGURATION.md](SSL_CONFIGURATION.md) for details.
+
 ## Implemented techniques
 
 | Approach                             | Slug               | Description                                                                                    |
