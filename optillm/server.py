@@ -59,7 +59,24 @@ request_batcher = None
 conversation_logger = None
 
 def get_config():
+    import httpx
+
     API_KEY = None
+
+    # Create httpx client with SSL configuration
+    ssl_verify = server_config.get('ssl_verify', True)
+    ssl_cert_path = server_config.get('ssl_cert_path', '')
+
+    # Determine SSL verification setting
+    if not ssl_verify:
+        logger.warning("SSL certificate verification is DISABLED. This is insecure and should only be used for development.")
+        http_client = httpx.Client(verify=False)
+    elif ssl_cert_path:
+        logger.info(f"Using custom CA certificate bundle: {ssl_cert_path}")
+        http_client = httpx.Client(verify=ssl_cert_path)
+    else:
+        http_client = httpx.Client(verify=True)
+
     if os.environ.get("OPTILLM_API_KEY"):
         # Use local inference engine
         from optillm.inference import create_inference_client
@@ -70,9 +87,9 @@ def get_config():
         API_KEY = os.environ.get("CEREBRAS_API_KEY")
         base_url = server_config['base_url']
         if base_url != "":
-            default_client = Cerebras(api_key=API_KEY, base_url=base_url)
+            default_client = Cerebras(api_key=API_KEY, base_url=base_url, http_client=http_client)
         else:
-            default_client = Cerebras(api_key=API_KEY)
+            default_client = Cerebras(api_key=API_KEY, http_client=http_client)
     elif os.environ.get("OPENAI_API_KEY"):
         API_KEY = os.environ.get("OPENAI_API_KEY")
         base_url = server_config['base_url']
@@ -91,6 +108,7 @@ def get_config():
                 api_key=API_KEY,
                 api_version=API_VERSION,
                 azure_endpoint=AZURE_ENDPOINT,
+                http_client=http_client
             )
         else:
             from azure.identity import DefaultAzureCredential, get_bearer_token_provider
@@ -99,7 +117,8 @@ def get_config():
             default_client = AzureOpenAI(
                 api_version=API_VERSION,
                 azure_endpoint=AZURE_ENDPOINT,
-                azure_ad_token_provider=token_provider
+                azure_ad_token_provider=token_provider,
+                http_client=http_client
             )
     else:
         # Import the LiteLLM wrapper
@@ -157,7 +176,7 @@ def count_reasoning_tokens(text: str, tokenizer=None) -> int:
 
 # Server configuration
 server_config = {
-    'approach': 'none', 
+    'approach': 'none',
     'mcts_simulations': 2,
     'mcts_exploration': 0.2,
     'mcts_depth': 1,
@@ -172,6 +191,8 @@ server_config = {
     'return_full_response': False,
     'port': 8000,
     'log': 'info',
+    'ssl_verify': True,
+    'ssl_cert_path': '',
 }
 
 # List of known approaches
@@ -984,7 +1005,19 @@ def parse_args():
     base_url_default = os.environ.get("OPTILLM_BASE_URL", "")
     parser.add_argument("--base-url", "--base_url", dest="base_url", type=str, default=base_url_default,
                         help="Base url for OpenAI compatible endpoint")
-    
+
+    # SSL configuration arguments
+    ssl_verify_default = os.environ.get("OPTILLM_SSL_VERIFY", "true").lower() in ("true", "1", "yes")
+    parser.add_argument("--ssl-verify", dest="ssl_verify", action="store_true" if ssl_verify_default else "store_false",
+                        default=ssl_verify_default,
+                        help="Enable SSL certificate verification (default: True)")
+    parser.add_argument("--no-ssl-verify", dest="ssl_verify", action="store_false",
+                        help="Disable SSL certificate verification")
+
+    ssl_cert_path_default = os.environ.get("OPTILLM_SSL_CERT_PATH", "")
+    parser.add_argument("--ssl-cert-path", dest="ssl_cert_path", type=str, default=ssl_cert_path_default,
+                        help="Path to custom CA certificate bundle for SSL verification")
+
     # Use the function to get the default path
     default_config_path = get_config_path()
 
