@@ -105,6 +105,9 @@ def get_analyzer_engine() -> AnalyzerEngine:
     global _analyzer_engine
     if _analyzer_engine is None:
         _analyzer_engine = AnalyzerEngine()
+        # Pre-warm the analyzer to load all recognizers once during initialization
+        # This prevents recognizers from being reloaded on each analyze() call
+        _analyzer_engine.analyze(text="warm up", language="en")
     return _analyzer_engine
 
 def get_anonymizer_engine() -> AnonymizerEngine:
