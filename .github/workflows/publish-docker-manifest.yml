@@ -1,11 +1,13 @@
 name: Docker Multi-arch Manifests
 on:
   workflow_run:
-    workflows: 
+    workflows:
       - "Docker Proxy AMD64"
       - "Docker Proxy ARM64"
       - "Docker Full AMD64"
       - "Docker Full ARM64"
+      - "Docker Offline AMD64"
+      - "Docker Offline ARM64"
     types: [completed]
 
 jobs:
@@ -23,9 +25,11 @@ jobs:
           script: |
             const workflows = [
               "Docker Proxy AMD64",
-              "Docker Proxy ARM64", 
+              "Docker Proxy ARM64",
               "Docker Full AMD64",
-              "Docker Full ARM64"
+              "Docker Full ARM64",
+              "Docker Offline AMD64",
+              "Docker Offline ARM64"
             ];
             
             const runId = context.payload.workflow_run.id;
@@ -107,17 +111,35 @@ jobs:
       - name: Create full multi-arch manifest
         run: |
           VERSION="${{ needs.check-builds.outputs.version }}"
-          
+
           # Create versioned full manifest
           docker manifest create ghcr.io/${{ github.repository }}:${VERSION} \
             ghcr.io/${{ github.repository }}:${VERSION}-amd64 \
             ghcr.io/${{ github.repository }}:${VERSION}-arm64
-          
+
           docker manifest push ghcr.io/${{ github.repository }}:${VERSION}
-          
+
           # Create latest full manifest
           docker manifest create ghcr.io/${{ github.repository }}:latest \
             ghcr.io/${{ github.repository }}:latest-amd64 \
             ghcr.io/${{ github.repository }}:latest-arm64
-          
+
           docker manifest push ghcr.io/${{ github.repository }}:latest
+
+      - name: Create offline multi-arch manifest
+        run: |
+          VERSION="${{ needs.check-builds.outputs.version }}"
+
+          # Create versioned offline manifest
+          docker manifest create ghcr.io/${{ github.repository }}:${VERSION}-offline \
+            ghcr.io/${{ github.repository }}:${VERSION}-offline-amd64 \
+            ghcr.io/${{ github.repository }}:${VERSION}-offline-arm64
+
+          docker manifest push ghcr.io/${{ github.repository }}:${VERSION}-offline
+
+          # Create latest offline manifest
+          docker manifest create ghcr.io/${{ github.repository }}:latest-offline \
+            ghcr.io/${{ github.repository }}:latest-offline-amd64 \
+            ghcr.io/${{ github.repository }}:latest-offline-arm64
+
+          docker manifest push ghcr.io/${{ github.repository }}:latest-offline
