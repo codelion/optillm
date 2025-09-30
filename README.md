@@ -102,10 +102,18 @@ docker run -p 8000:8000 ghcr.io/codelion/optillm:latest
 2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
 ```
 
-To use optillm without local inference and only as a proxy you can add the `-proxy` suffix.
+**Available Docker image variants:**
+
+- **Full image** (`latest`): Includes all dependencies for local inference and plugins
+- **Proxy-only** (`latest-proxy`): Lightweight image without local inference capabilities
+- **Offline** (`latest-offline`): Self-contained image with pre-downloaded models (spaCy) for fully offline operation
 
 ```bash
+# Proxy-only (smallest)
 docker pull ghcr.io/codelion/optillm:latest-proxy
+
+# Offline (largest, includes pre-downloaded models)
+docker pull ghcr.io/codelion/optillm:latest-offline
 ```
 
 ### Install from source
@@ -119,6 +127,32 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+## 🔒 SSL Configuration
+
+OptILLM supports SSL certificate verification configuration for working with self-signed certificates or corporate proxies.
+
+**Disable SSL verification (development only):**
+```bash
+# Command line
+optillm --no-ssl-verify
+
+# Environment variable
+export OPTILLM_SSL_VERIFY=false
+optillm
+```
+
+**Use custom CA certificate:**
+```bash
+# Command line
+optillm --ssl-cert-path /path/to/ca-bundle.crt
+
+# Environment variable
+export OPTILLM_SSL_CERT_PATH=/path/to/ca-bundle.crt
+optillm
+```
+
+⚠️ **Security Note**: Disabling SSL verification is insecure and should only be used in development. For production environments with custom CAs, use `--ssl-cert-path` instead. See [SSL_CONFIGURATION.md](SSL_CONFIGURATION.md) for details.
 
 ## Implemented techniques
 

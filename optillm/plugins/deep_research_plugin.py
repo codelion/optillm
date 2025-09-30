@@ -66,6 +66,9 @@ class DeepResearchClientWrapper:
                             )
                         else:
                             # OpenAI or AzureOpenAI
+                            # Get existing http_client to preserve SSL settings
+                            existing_http_client = getattr(self.parent.client, '_client', None)
+
                             if 'Azure' in self.parent.client.__class__.__name__:
                                 from openai import AzureOpenAI
                                 # AzureOpenAI has different parameters
@@ -75,7 +78,8 @@ class DeepResearchClientWrapper:
                                     azure_endpoint=getattr(self.parent.client, 'azure_endpoint', None),
                                     azure_ad_token_provider=getattr(self.parent.client, 'azure_ad_token_provider', None),
                                     timeout=self.parent.timeout,
-                                    max_retries=self.parent.max_retries
+                                    max_retries=self.parent.max_retries,
+                                    http_client=existing_http_client
                                 )
                             else:
                                 from openai import OpenAI
@@ -83,7 +87,8 @@ class DeepResearchClientWrapper:
                                     api_key=self.parent.client.api_key,
                                     base_url=getattr(self.parent.client, 'base_url', None),
                                     timeout=self.parent.timeout,
-                                    max_retries=self.parent.max_retries
+                                    max_retries=self.parent.max_retries,
+                                    http_client=existing_http_client
                                 )
                         return custom_client.chat.completions.create(**kwargs)
                     except Exception as e:
