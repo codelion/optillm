@@ -14,6 +14,11 @@ from datetime import datetime
 from openai import OpenAI
 from tqdm import tqdm
 
+# Add sys path to import optillm modules
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from optillm.utils.answer_extraction import extract_answer
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -101,68 +106,35 @@ def extract_final_answer(solution: str, problem_id: int) -> Dict[str, any]:
 
 def extract_answer_from_solution(solution: str, problem_id: int) -> str:
     """
-    Extract the final answer from a solution based on problem type
+    Extract the final answer from a solution using unified answer extraction
     """
-    solution_lower = solution.lower()
+    # Use unified answer extraction with IMO problem context
+    extracted_answer = extract_answer(
+        solution,
+        problem_type="imo",
+        problem_id=problem_id
+    )
 
-    if problem_id == 1:
-        # Look for the set {0, 1, 2, 3} or individual mentions
-        if '{0, 1, 2, 3}' in solution or '\\{0, 1, 2, 3\\}' in solution:
-            return "{0, 1, 2, 3}"
+    if extracted_answer is None:
+        return None
 
-        # Check if it concludes with k can be 0, 1, 2, 3
-        if all(f'k can be {i}' in solution_lower or f'k = {i}' in solution for i in [0, 1, 2, 3]):
-            return "{0, 1, 2, 3}"
-
-        # Check the specific pattern from our solution: "k can be 0, 1, or 3"
-        if 'k can be 0, 1, or 3' in solution_lower:
-            return "{0, 1, 3}"  # Partial match
-
-    elif problem_id == 2:
-        # Geometry - look for tangent
-        if 'tangent' in solution_lower:
-            return "tangent"
-
-    elif problem_id == 3:
-        # Look for c = 4
-        c_match = re.search(r'c\s*=\s*4', solution)
-        if c_match:
-            return "c = 4"
-
-        # Also check for "constant is 4"
-        if 'constant is 4' in solution_lower:
-            return "c = 4"
-
-    elif problem_id == 4:
-        # Look for a_1 = 6 or a_1 = 18
-        found_values = []
-        if 'a_1 = 6' in solution or 'a₁ = 6' in solution:
-            found_values.append("6")
-        if 'a_1 = 18' in solution or 'a₁ = 18' in solution:
-            found_values.append("18")
-
-        if found_values:
-            return ", ".join(found_values)
-
-        # Check for the general form 2·3^k pattern which gives 6, 18, ...
-        if '2 · 3^k' in solution or '2 \\cdot 3^k' in solution:
-            return "2·3^k form"  # Partial match
-
-    elif problem_id == 5:
-        # Game theory - look for lambda conditions
-        if 'lambda < 1' in solution_lower or 'λ < 1' in solution_lower:
-            return "λ < 1"
-
-        # Check for the specific condition in our solution
-        if 'bazza has a winning strategy if' in solution_lower and ('√2/2' in solution or 'sqrt(2)/2' in solution):
-            return "λ < √2/2"  # √2/2 ≈ 0.707 < 1, so this is correct
-
-    elif problem_id == 6:
-        # Look for 4048
-        if '4048' in solution:
-            return "4048"
-
-    return None
+    # Convert extracted answer to string format expected by evaluation
+    if isinstance(extracted_answer, set):
+        # Convert set to string format: {0, 1, 2, 3}
+        sorted_elements = sorted(list(extracted_answer))
+        return "{" + ", ".join(map(str, sorted_elements)) + "}"
+    elif isinstance(extracted_answer, (int, float)):
+        # For numeric answers like Problem 3 (c = 4) or Problem 6 (4048)
+        if problem_id == 3:
+            return f"c = {int(extracted_answer)}"
+        else:
+            return str(int(extracted_answer))
+    elif isinstance(extracted_answer, str):
+        # String answers like formulas, expressions, etc.
+        return extracted_answer
+    else:
+        # Convert other types to string
+        return str(extracted_answer)
 
 
 def check_answer_correctness(problem_id: int, extracted_answer: str) -> bool:

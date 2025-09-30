@@ -14,6 +14,11 @@ from tqdm import tqdm
 import statistics
 from collections import defaultdict
 
+# Add sys path to import optillm modules
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from optillm.utils.answer_extraction import extract_answer as unified_extract_answer
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,49 +89,33 @@ def load_dataset_by_year(year: int) -> list[dict]:
 
 def extract_answer(response: str) -> Optional[int]:
     """
-    Extract the numerical answer from a math solution response.
-    Handles various formats of boxed answers and falls back to last number if needed.
+    Extract the numerical answer from a math solution response using unified extraction.
+    AIME problems expect integer answers between 0 and 999.
     """
     if not response:
         return None
-        
-    # Clean the response
-    response = ' '.join(response.split())
-    
-    patterns = [
-        r'\$n=\\boxed{(\d+)}\$',
-        r'\\\[\\boxed{(\d+)}\\\]',
-        r'\\\[\\boxed{(\d+)}\.\\\]',
-        r'\\boxed{(\d+)}',
-        r'\$\\boxed{(\d+)}\$',
-        r'boxed{(\d+)}',
-        r'\\boxed\s*{\s*(\d+)\s*}',
-        r'\bboxed\s*{\s*(\d+)\s*}',
-        r'final answer is[^\d]*(\d+)',
-        r'answer is[^\d]*(\d+)',
-        r'answer:[^\d]*(\d+)',
-        r'= ?(\d+)$'
-    ]
-    
-    for pattern in patterns:
-        matches = re.finditer(pattern, response, re.IGNORECASE)
-        last_match = None
-        for match in matches:
-            last_match = match
-            
-        if last_match:
-            try:
-                return int(last_match.group(1))
-            except (ValueError, IndexError):
-                continue
-    
-    numbers = re.findall(r'(\d+)', response)
-    if numbers:
-        try:
-            return int(numbers[-1])
-        except ValueError:
-            pass
-            
+
+    # Use unified answer extraction with AIME problem context
+    extracted_answer = unified_extract_answer(
+        response,
+        problem_type="aime",
+        problem_id=None
+    )
+
+    if extracted_answer is None:
+        return None
+
+    # Convert to integer if needed - AIME answers are always integers
+    if isinstance(extracted_answer, (int, float)):
+        answer = int(extracted_answer)
+        # AIME answers are typically 0-999
+        if 0 <= answer <= 999:
+            return answer
+    elif isinstance(extracted_answer, str) and extracted_answer.isdigit():
+        answer = int(extracted_answer)
+        if 0 <= answer <= 999:
+            return answer
+
     return None
 
 def analyze_thinking(response: str) -> Dict:

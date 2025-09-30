@@ -7,8 +7,12 @@ import logging
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+import time
+import re
+from collections import Counter
 import optillm
 from optillm import conversation_logger
+from optillm.utils.answer_extraction import extract_answer
 
 from .workspace import MARSWorkspace, AgentSolution
 from .agent import MARSAgent
@@ -75,7 +79,10 @@ async def _run_mars_parallel(
     request_id: str = None
 ) -> Tuple[str, int]:
     """Async implementation of MARS with parallel execution"""
-    logger.info(f"Starting MARS with model: {model}")
+    start_time = time.time()
+
+    logger.info(f"🚀 MARS INITIALIZATION - Starting MARS with model: {model}")
+    logger.info(f"📝 PROBLEM: {initial_query[:200]}{'...' if len(initial_query) > 200 else ''}")
 
     # Initialize configuration
     config = DEFAULT_CONFIG.copy()
@@ -83,9 +90,14 @@ async def _run_mars_parallel(
     # Override max_tokens from request_config if provided
     if request_config and 'max_tokens' in request_config:
         config['max_tokens'] = request_config['max_tokens']
-        logger.info(f"Using max_tokens from request: {config['max_tokens']}")
+        logger.info(f"⚙️  CONFIG: Using max_tokens from request: {config['max_tokens']}")
     else:
-        logger.info(f"Using default max_tokens: {config['max_tokens']}")
+        logger.info(f"⚙️  CONFIG: Using default max_tokens: {config['max_tokens']}")
+
+    # Log complete configuration
+    logger.info(f"⚙️  CONFIG: Full MARS configuration:")
+    for key, value in config.items():
+        logger.info(f"⚙️  CONFIG:   {key}: {value}")
 
     total_reasoning_tokens = 0
 
@@ -99,37 +111,51 @@ async def _run_mars_parallel(
     # Initialize workspace for collaboration
     workspace = MARSWorkspace(initial_query, config)
 
+    # Initialize timing tracking
+    phase_times = {}
+
     try:
         # Phase 1: Initialize Agents
         agents = []
+        temperatures = []
         for i in range(config['num_agents']):
             agent = MARSAgent(i, client, model, config)
             agents.append(agent)
+            temperatures.append(agent.temperature)
 
-        logger.info(f"Initialized {len(agents)} agents with diverse temperatures")
+        logger.info(f"🤖 AGENTS: Initialized {len(agents)} agents:")
+        for i, temp in enumerate(temperatures):
+            effort = agents[i]._get_reasoning_effort()
+            logger.info(f"🤖 AGENTS:   Agent {i}: temp={temp}, effort={effort}, max_tokens={config['max_tokens']}")
 
         # Create thread pool executor for parallel API calls
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Phase 2: Multi-Agent Exploration (parallel)
-            logger.info("Phase 1: Multi-Agent Exploration")
+            phase_start = time.time()
+            logger.info(f"📊 PHASE 1: Multi-Agent Exploration - Starting parallel generation with {config['num_agents']} agents")
             exploration_tokens = await _run_exploration_phase_parallel(
                 agents, workspace, request_id, executor
             )
             total_reasoning_tokens += exploration_tokens
+            phase_times['exploration'] = time.time() - phase_start
+            logger.info(f"📊 PHASE 1: Completed in {phase_times['exploration']:.2f}s - Generated {len(workspace.solutions)} solutions, {exploration_tokens} reasoning tokens")
 
             # Phase 2a: RSA-inspired Aggregation (if enabled)
             if config.get('enable_aggregation', True):
-                logger.info("Phase 2a: RSA-inspired Solution Aggregation")
+                phase_start = time.time()
+                logger.info(f"📊 PHASE 2a: RSA-inspired Solution Aggregation")
                 aggregator = MARSAggregator(client, model, config)
                 aggregation_tokens, aggregation_summary = await aggregator.run_aggregation_loops(
                     workspace, request_id, executor
                 )
                 total_reasoning_tokens += aggregation_tokens
-                logger.info(f"Aggregation complete: {aggregation_summary}")
+                phase_times['aggregation'] = time.time() - phase_start
+                logger.info(f"📊 PHASE 2a: Completed in {phase_times['aggregation']:.2f}s - {aggregation_summary}, {aggregation_tokens} reasoning tokens")
 
             # Phase 2b: Cross-Agent Strategy Sharing (if enabled)
             if config.get('enable_strategy_network', True):
-                logger.info("Phase 2b: Cross-Agent Strategy Network")
+                phase_start = time.time()
+                logger.info(f"📊 PHASE 2b: Cross-Agent Strategy Network")
                 strategy_network = StrategyNetwork(client, model, config)
 
                 # Extract reasoning strategies from agent solutions
@@ -145,18 +171,24 @@ async def _run_mars_parallel(
                         )
 
                         strategy_insights = strategy_network.get_strategy_insights_summary()
-                        logger.info(f"Strategy network complete: {strategy_insights}")
+                        phase_times['strategy_network'] = time.time() - phase_start
+                        logger.info(f"📊 PHASE 2b: Completed in {phase_times['strategy_network']:.2f}s - {strategy_insights}")
 
             # Phase 3: Verification System (parallel)
-            logger.info("Phase 3: Verification System")
+            phase_start = time.time()
+            logger.info(f"📊 PHASE 3: Verification System - Verifying {len(workspace.solutions)} solutions")
             verifier = MARSVerifier(agents, workspace, config)
             verification_summary = await verifier.verify_solutions_parallel(request_id, executor)
+            phase_times['verification'] = time.time() - phase_start
+            logger.info(f"📊 PHASE 3: Completed in {phase_times['verification']:.2f}s - {verification_summary}")
 
             # Phase 4: Iterative Improvement (if needed)
             iteration_count = 0
+            improvement_start = time.time()
             while workspace.should_continue_iteration() and iteration_count < config['max_iterations']:
                 iteration_count += 1
-                logger.info(f"Phase 4: Iterative Improvement - Iteration {iteration_count}")
+                iter_start = time.time()
+                logger.info(f"📊 PHASE 4: Iterative Improvement - Iteration {iteration_count}/{config['max_iterations']}")
 
                 # Improve unverified solutions (parallel)
                 improvement_summary = await verifier.iterative_improvement_parallel(request_id, executor)
@@ -165,27 +197,52 @@ async def _run_mars_parallel(
                 # Re-verify improved solutions (parallel)
                 verification_summary = await verifier.verify_solutions_parallel(request_id, executor)
 
+                iter_time = time.time() - iter_start
+                logger.info(f"📊 PHASE 4: Iteration {iteration_count} completed in {iter_time:.2f}s - {improvement_summary}")
+
                 # Check for early termination
                 if config['early_termination'] and workspace.has_consensus():
-                    logger.info("Early termination: consensus reached")
+                    logger.info(f"🎯 EARLY TERMINATION: Consensus reached after {iteration_count} iterations")
                     break
 
                 workspace.iteration_count = iteration_count
 
+            if iteration_count > 0:
+                phase_times['improvement'] = time.time() - improvement_start
+                logger.info(f"📊 PHASE 4: Total improvement time: {phase_times['improvement']:.2f}s")
+
         # Phase 5: Final Synthesis (sequential - needs all results)
-        logger.info("Phase 5: Final Synthesis")
+        phase_start = time.time()
+        logger.info(f"📊 PHASE 5: Final Synthesis - Processing {len(workspace.solutions)} solutions")
+
+        # Log solution overview before synthesis
+        _log_solution_overview(workspace)
+
         final_solution, synthesis_tokens = _synthesize_final_solution(
             workspace, client, model, config, request_id
         )
         total_reasoning_tokens += synthesis_tokens
+        phase_times['synthesis'] = time.time() - phase_start
+        logger.info(f"📊 PHASE 5: Completed in {phase_times['synthesis']:.2f}s - Generated {len(final_solution)} char solution, {synthesis_tokens} reasoning tokens")
 
         # Set final solution in workspace
         workspace.set_final_solution(final_solution)
 
-        # Log summary
+        # Log comprehensive summary
+        total_time = time.time() - start_time
         summary = workspace.get_summary()
-        logger.info(f"MARS completed: {summary['verified_solutions']}/{summary['total_solutions']} solutions verified")
-        logger.info(f"Total reasoning tokens: {total_reasoning_tokens}")
+
+        logger.info(f"🏁 MARS COMPLETION SUMMARY:")
+        logger.info(f"🏁   Total execution time: {total_time:.2f}s")
+        logger.info(f"🏁   Solutions: {summary['verified_solutions']}/{summary['total_solutions']} verified")
+        logger.info(f"🏁   Total reasoning tokens: {total_reasoning_tokens}")
+        logger.info(f"🏁   Final solution length: {len(final_solution)} characters")
+
+        # Log phase timing breakdown
+        logger.info(f"🏁 TIMING BREAKDOWN:")
+        for phase, duration in phase_times.items():
+            percentage = (duration / total_time) * 100
+            logger.info(f"🏁   {phase}: {duration:.2f}s ({percentage:.1f}%)")
 
         return final_solution, total_reasoning_tokens
 
@@ -273,44 +330,62 @@ def _synthesize_final_solution(
         return best_solution.solution, 0
 
     # If no verified solution, try numerical voting first
-    logger.info("No verified solutions found, attempting numerical voting")
+    logger.info(f"🗳️  VOTING: No verified solutions found, attempting numerical voting on {len(workspace.solutions)} solutions")
 
-    # Try to extract numerical answers from all solutions
-    import re
-    from collections import Counter
-
+    # Enhanced answer extraction using unified math-verify extraction
     numerical_answers = []
-    for solution in workspace.solutions:
-        # Look for boxed answers: \boxed{123}
-        boxed_match = re.search(r'\\boxed\{(\d+)\}', solution.solution)
-        if boxed_match:
-            try:
-                answer = int(boxed_match.group(1))
-                numerical_answers.append((answer, solution))
-                continue
-            except ValueError:
-                pass
+    extracted_answers_info = []  # Track all extracted answers for synthesis
+    logger.info(f"🗳️  VOTING: Starting unified answer extraction from {len(workspace.solutions)} solutions")
 
-        # Look for final numerical answers at the end
-        lines = solution.solution.strip().split('\n')
-        for line in reversed(lines[-5:]):  # Check last 5 lines
-            # Look for patterns like "answer is 123" or just "123" at the end
-            number_match = re.search(r'\b(\d+)\b\s*\.?\s*$', line.strip())
-            if number_match:
-                try:
-                    answer = int(number_match.group(1))
-                    # Only accept if it's a reasonable AIME answer (1-999)
-                    if 1 <= answer <= 999:
-                        numerical_answers.append((answer, solution))
-                        break
-                except ValueError:
-                    pass
+    for i, solution in enumerate(workspace.solutions):
+        # Use unified answer extraction with problem context
+        extracted_answer = extract_answer(
+            solution.solution,
+            problem_type="imo",  # Assume IMO context for now
+            problem_id=None  # Could be enhanced to detect problem ID
+        )
+
+        if extracted_answer is not None:
+            logger.info(f"🗳️  VOTING: Agent {solution.agent_id} extracted answer '{extracted_answer}' via unified extraction (confidence: {solution.confidence:.2f})")
+
+            # Handle both numeric and non-numeric answers
+            if isinstance(extracted_answer, (int, float)):
+                # Numeric answer - add to numerical voting
+                numerical_answers.append((int(extracted_answer), solution))
+                extracted_answers_info.append((str(int(extracted_answer)), solution, "unified_numeric"))
+            elif isinstance(extracted_answer, str):
+                # Non-numeric answer (formulas, sets, etc.) - store for synthesis
+                extracted_answers_info.append((extracted_answer, solution, "unified_formula"))
+                logger.info(f"🗳️  VOTING: Non-numeric answer stored for synthesis: '{extracted_answer}'")
+            elif isinstance(extracted_answer, set):
+                # Set answers (e.g., for Problem 1) - convert to string for synthesis
+                set_str = "{" + ", ".join(map(str, sorted(extracted_answer))) + "}"
+                extracted_answers_info.append((set_str, solution, "unified_set"))
+                logger.info(f"🗳️  VOTING: Set answer stored for synthesis: '{set_str}'")
+            else:
+                # Other types - convert to string
+                extracted_answers_info.append((str(extracted_answer), solution, "unified_other"))
+                logger.info(f"🗳️  VOTING: Other answer type stored for synthesis: '{extracted_answer}'")
+        else:
+            logger.info(f"🗳️  VOTING: Agent {solution.agent_id} - no answer extracted via unified extraction (confidence: {solution.confidence:.2f})")
+
+    # Store extracted answers for synthesis use
+    workspace._extracted_answers_info = getattr(workspace, '_extracted_answers_info', []) + extracted_answers_info
 
     # Check for majority vote
+    logger.info(f"🗳️  VOTING: Extracted {len(numerical_answers)} numerical answers from {len(workspace.solutions)} solutions")
+
     if len(numerical_answers) >= 2:
         answer_counts = Counter([ans for ans, _ in numerical_answers])
-        most_common = answer_counts.most_common(1)[0]
-        answer, count = most_common
+        most_common_answers = answer_counts.most_common()
+
+        logger.info(f"🗳️  VOTING: Answer distribution:")
+        for answer, count in most_common_answers:
+            percentage = (count / len(numerical_answers)) * 100
+            agents_with_answer = [sol.agent_id for ans, sol in numerical_answers if ans == answer]
+            logger.info(f"🗳️  VOTING:   Answer {answer}: {count}/{len(numerical_answers)} votes ({percentage:.1f}%) - Agents: {agents_with_answer}")
+
+        answer, count = most_common_answers[0]
 
         # If 2+ agents agree on the same number, use that
         if count >= 2:
@@ -318,31 +393,68 @@ def _synthesize_final_solution(
             matching_solutions = [sol for ans, sol in numerical_answers if ans == answer]
             best_solution = max(matching_solutions, key=lambda s: s.confidence)
 
-            logger.info(f"VOTING: Using majority vote answer {answer} ({count}/{len(numerical_answers)} agents agreed)")
-            logger.info(f"VOTING: Selected solution from agent {best_solution.agent_id} with confidence {best_solution.confidence:.2f}")
+            logger.info(f"🎆 VOTING SUCCESS: Using majority vote answer {answer} ({count}/{len(numerical_answers)} agents agreed)")
+            logger.info(f"🎆 VOTING SUCCESS: Selected solution from agent {best_solution.agent_id} with confidence {best_solution.confidence:.2f}")
+            logger.info(f"🎆 VOTING SUCCESS: Solution length: {len(best_solution.solution)} chars")
 
             # Return the solution with the winning answer (no reasoning tokens since no new API call)
             return best_solution.solution, 0
+        else:
+            logger.info(f"🗳️  VOTING: No consensus - best answer {answer} only has {count} vote(s), need 2+")
+    else:
+        logger.info(f"🗳️  VOTING: Insufficient numerical answers for voting ({len(numerical_answers)} < 2)")
 
-    # If no consensus, fall back to synthesis
-    logger.info("No numerical consensus found, attempting synthesis")
+    # If no consensus, fall back to synthesis with answer preservation
+    logger.info(f"🤔 VOTING FALLBACK: No numerical consensus found, falling back to answer-preserving synthesis")
+
+    # Log extracted answers for synthesis guidance
+    all_extracted = getattr(workspace, '_extracted_answers_info', [])
+    if all_extracted:
+        logger.info(f"🔍 EXTRACTED ANSWERS SUMMARY: Found {len(all_extracted)} extracted answers:")
+        for answer, solution, method in all_extracted:
+            logger.info(f"🔍 EXTRACTED ANSWERS SUMMARY:   '{answer}' from Agent {solution.agent_id} via {method}")
+    else:
+        logger.info(f"🔍 EXTRACTED ANSWERS SUMMARY: No extracted answers found")
 
     synthesis_data = workspace.get_synthesis_input()
 
+    # Log synthesis input details
+    input_chars = sum(len(sol_data['solution']) for sol_data in synthesis_data['solutions'])
+    logger.info(f"🤝 SYNTHESIS INPUT: Processing {len(synthesis_data['solutions'])} solutions")
+    logger.info(f"🤝 SYNTHESIS INPUT: Total input characters: {input_chars:,}")
+    logger.info(f"🤝 SYNTHESIS INPUT: Verification summary: {synthesis_data['verification_summary']}")
+
     # Prepare synthesis prompt
     agent_solutions_text = ""
-    for i, sol_data in enumerate(synthesis_data['solutions'][:3]):  # Limit to top 3
+    solutions_used = synthesis_data['solutions'][:3]  # Limit to top 3
+    logger.info(f"🤝 SYNTHESIS INPUT: Using top {len(solutions_used)} solutions for synthesis:")
+
+    for i, sol_data in enumerate(solutions_used):
+        logger.info(f"🤝 SYNTHESIS INPUT:   Solution {i+1}: Agent {sol_data['agent_id']}, {len(sol_data['solution']):,} chars, confidence {sol_data['confidence']:.2f}")
         agent_solutions_text += f"\nAgent {sol_data['agent_id']} (confidence: {sol_data['confidence']:.2f}):\n"
         agent_solutions_text += sol_data['solution']
         agent_solutions_text += "\n" + "="*50 + "\n"
 
+    synthesis_input_chars = len(agent_solutions_text)
     verification_text = f"Verification Summary: {synthesis_data['verification_summary']}"
+
+    logger.info(f"🤝 SYNTHESIS INPUT: Final synthesis prompt: {synthesis_input_chars:,} characters")
+
+    # Enhanced synthesis prompt with extracted answers
+    extracted_answers_text = ""
+    all_extracted = getattr(workspace, '_extracted_answers_info', [])
+    if all_extracted:
+        extracted_answers_text = "\n\nEXTRACTED ANSWERS FROM AGENTS:\n"
+        for answer, solution, method in all_extracted:
+            extracted_answers_text += f"- Agent {solution.agent_id}: '{answer}' (via {method})\n"
+        extracted_answers_text += "\nIMPORTANT: If multiple agents extracted the same answer, prioritize it in your synthesis.\n"
+        extracted_answers_text += "Ensure the final answer is clearly formatted and matches the expected answer format.\n"
 
     synthesis_prompt = SYNTHESIS_PROMPT.format(
         problem=workspace.problem,
         agent_solutions=agent_solutions_text,
         verification_results=verification_text
-    )
+    ) + extracted_answers_text
 
     try:
         # Use simplified synthesis with effort parameter
@@ -383,6 +495,11 @@ def _synthesize_final_solution(
 
         final_solution = response.choices[0].message.content.strip()
 
+        # Calculate synthesis compression ratio
+        output_chars = len(final_solution)
+        compression_ratio = (output_chars / synthesis_input_chars) * 100 if synthesis_input_chars > 0 else 0
+        logger.info(f"🤝 SYNTHESIS PROCESSING: Input: {synthesis_input_chars:,} chars → Output: {output_chars:,} chars ({compression_ratio:.1f}% retention)")
+
         # Extract reasoning tokens from correct nested structure (matching agent.py fix)
         reasoning_tokens = 0
         total_tokens = 0
@@ -396,20 +513,54 @@ def _synthesize_final_solution(
                 reasoning_tokens = getattr(response.usage, 'reasoning_tokens', 0)
 
         # ENHANCED LOGGING: Log synthesis details
-        logger.info(f"Synthesis complete:")
-        logger.info(f"  - Synthesis solution length: {len(final_solution)} characters")
-        logger.info(f"  - Reasoning tokens: {reasoning_tokens}")
-        logger.info(f"  - Total tokens: {total_tokens}")
-        logger.info(f"  - Final solution preview: {final_solution[:200]}...")
+        logger.info(f"🤝 SYNTHESIS SUCCESS: Synthesis completed")
+        logger.info(f"🤝 SYNTHESIS SUCCESS:   Output solution length: {len(final_solution)} characters")
+        logger.info(f"🤝 SYNTHESIS SUCCESS:   Reasoning tokens: {reasoning_tokens}")
+        logger.info(f"🤝 SYNTHESIS SUCCESS:   Total tokens: {total_tokens}")
+        logger.info(f"🤝 SYNTHESIS SUCCESS:   Solution preview: {final_solution[:200]}...")
         return final_solution, reasoning_tokens
 
     except Exception as e:
-        logger.error(f"Synthesis failed: {str(e)}")
+        logger.error(f"🚨 SYNTHESIS ERROR: Synthesis failed: {str(e)}")
 
         # Fallback: return the solution with highest verification score
         if workspace.solutions:
             fallback_solution = max(workspace.solutions, key=lambda s: s.verification_score)
-            logger.info(f"Using fallback solution from agent {fallback_solution.agent_id}")
+            logger.info(f"🚑 SYNTHESIS FALLBACK: Using fallback solution from agent {fallback_solution.agent_id}")
+            logger.info(f"🚑 SYNTHESIS FALLBACK: Solution length: {len(fallback_solution.solution):,} chars, score: {fallback_solution.verification_score:.2f}")
             return fallback_solution.solution, 0
 
+        logger.error(f"🚨 SYNTHESIS ERROR: No solutions available for fallback")
         return "Unable to generate solution due to synthesis failure.", 0
+
+def _log_solution_overview(workspace: MARSWorkspace):
+    """Log comprehensive overview of all solutions before synthesis"""
+    logger.info(f"📋 SOLUTION OVERVIEW: Analyzing {len(workspace.solutions)} solutions before synthesis")
+
+    # Overall statistics
+    total_chars = sum(len(sol.solution) for sol in workspace.solutions)
+    avg_chars = total_chars / len(workspace.solutions) if workspace.solutions else 0
+    verified_solutions = workspace.get_verified_solutions()
+
+    logger.info(f"📋 SOLUTION OVERVIEW: Statistics:")
+    logger.info(f"📋 SOLUTION OVERVIEW:   Total solutions: {len(workspace.solutions)}")
+    logger.info(f"📋 SOLUTION OVERVIEW:   Verified solutions: {len(verified_solutions)}")
+    logger.info(f"📋 SOLUTION OVERVIEW:   Total characters: {total_chars:,}")
+    logger.info(f"📋 SOLUTION OVERVIEW:   Average length: {avg_chars:.0f} chars")
+
+    # Individual solution details
+    for i, solution in enumerate(workspace.solutions):
+        status = "✅ VERIFIED" if solution.is_verified else "❌ UNVERIFIED"
+        logger.info(f"📋 SOLUTION OVERVIEW: Solution {i+1} (Agent {solution.agent_id}):")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Status: {status}")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Length: {len(solution.solution):,} chars")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Confidence: {solution.confidence:.2f}")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Verification score: {solution.verification_score:.2f}")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Reasoning tokens: {solution.reasoning_tokens:,}")
+        logger.info(f"📋 SOLUTION OVERVIEW:   Temperature: {solution.temperature}")
+
+        # Show solution preview
+        preview = solution.solution[:300].replace('\n', ' ').strip()
+        if len(solution.solution) > 300:
+            preview += "..."
+        logger.info(f"📋 SOLUTION OVERVIEW:   Preview: {preview}")

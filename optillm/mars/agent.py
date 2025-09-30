@@ -42,7 +42,10 @@ class MARSAgent:
 
     def generate_solution(self, problem: str, request_id: str = None) -> Tuple[AgentSolution, int]:
         """Generate a solution for the given problem using reasoning API"""
-        logger.info(f"Agent {self.agent_id} generating solution with temperature {self.temperature}")
+        import time
+        start_time = time.time()
+        logger.info(f"🤖 AGENT {self.agent_id}: Starting solution generation (temp: {self.temperature}, effort: {self._get_reasoning_effort()})")
+        logger.info(f"🤖 AGENT {self.agent_id}: Problem length: {len(problem)} characters")
 
         # Prepare the prompt
         exploration_prompt = AGENT_EXPLORATION_PROMPT.format(
@@ -54,6 +57,7 @@ class MARSAgent:
         # Configure reasoning parameters - simplified with effort only
         reasoning_effort = self._get_reasoning_effort()
         max_tokens = self.config['max_tokens']
+        logger.info(f"🤖 AGENT {self.agent_id}: Using max_tokens={max_tokens}, reasoning_effort={reasoning_effort}")
 
         reasoning_config = {
             "effort": reasoning_effort
@@ -61,6 +65,8 @@ class MARSAgent:
 
         try:
             # Make API call with reasoning via extra_body for OpenRouter compatibility
+            api_start = time.time()
+            logger.info(f"🤖 AGENT {self.agent_id}: Making API call to {self.model}...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -74,15 +80,23 @@ class MARSAgent:
                     "reasoning": reasoning_config
                 }
             )
+            api_duration = time.time() - api_start
+            logger.info(f"🤖 AGENT {self.agent_id}: API call completed in {api_duration:.2f}s")
 
             solution_text = response.choices[0].message.content.strip()
 
             # ENHANCED LOGGING: Log solution details
             solution_length = len(solution_text)
+            word_count = len(solution_text.split())
+            has_boxed = "\\boxed{" in solution_text
+            has_proof_words = any(word in solution_text.lower() for word in ['therefore', 'thus', 'proof', 'qed'])
 
-            logger.info(f"Agent {self.agent_id} solution details:")
-            logger.info(f"  - Length: {solution_length} characters")
-            logger.info(f"  - Last 100 chars: ...{solution_text[-100:] if solution_length > 100 else solution_text}")
+            logger.info(f"🤖 AGENT {self.agent_id}: Solution analysis:")
+            logger.info(f"  📝 Length: {solution_length:,} chars, {word_count:,} words")
+            logger.info(f"  📦 Has boxed answer: {has_boxed}")
+            logger.info(f"  🔍 Has proof indicators: {has_proof_words}")
+            logger.info(f"  📄 Preview: {solution_text[:200]}{'...' if len(solution_text) > 200 else ''}")
+            logger.info(f"  📄 Last 100 chars: ...{solution_text[-100:] if solution_length > 100 else solution_text}")
 
             # Extract reasoning tokens from the correct nested structure
             reasoning_tokens = 0
@@ -97,10 +111,12 @@ class MARSAgent:
                 if reasoning_tokens == 0:
                     reasoning_tokens = getattr(response.usage, 'reasoning_tokens', 0)
 
-            logger.info(f"Agent {self.agent_id} token usage: reasoning={reasoning_tokens}, total={total_tokens}")
+            reasoning_ratio = (reasoning_tokens / total_tokens * 100) if total_tokens > 0 else 0
+            logger.info(f"🤖 AGENT {self.agent_id}: Token usage: reasoning={reasoning_tokens:,}, total={total_tokens:,} ({reasoning_ratio:.1f}% reasoning)")
 
             # Extract confidence from solution (heuristic based on response characteristics)
             confidence = self._estimate_confidence(solution_text)
+            logger.info(f"🤖 AGENT {self.agent_id}: Estimated confidence: {confidence:.3f}")
 
             # Create agent solution object with enhanced metadata
             agent_solution = AgentSolution(
@@ -113,11 +129,14 @@ class MARSAgent:
                 temperature=self.temperature
             )
 
-            logger.info(f"Agent {self.agent_id} generated solution with {reasoning_tokens} reasoning tokens")
+            total_duration = time.time() - start_time
+            logger.info(f"🤖 AGENT {self.agent_id}: ✅ Solution generated in {total_duration:.2f}s (API: {api_duration:.2f}s, processing: {total_duration-api_duration:.2f}s)")
             return agent_solution, reasoning_tokens
 
         except Exception as e:
-            logger.error(f"Agent {self.agent_id} error generating solution: {str(e)}")
+            error_duration = time.time() - start_time
+            logger.error(f"🤖 AGENT {self.agent_id}: ❌ Error generating solution after {error_duration:.2f}s: {str(e)}")
+            logger.error(f"🤖 AGENT {self.agent_id}: Model: {self.model}, Temperature: {self.temperature}, Max tokens: {max_tokens}")
             # Return empty solution with error indication
             error_message = f"Error generating solution: {str(e)}"
             error_solution = AgentSolution(
@@ -133,7 +152,10 @@ class MARSAgent:
 
     def verify_solution(self, problem: str, solution: str, verifier_id: int, solution_agent_id: int, request_id: str = None) -> VerificationResult:
         """Verify a solution using mathematical reasoning"""
-        logger.info(f"Agent {self.agent_id} verifying solution (verifier_id: {verifier_id})")
+        import time
+        start_time = time.time()
+        logger.info(f"🔍 VERIFIER {self.agent_id}: Starting verification (target: Agent {solution_agent_id}, verifier_id: {verifier_id})")
+        logger.info(f"🔍 VERIFIER {self.agent_id}: Solution length: {len(solution):,} chars")
 
         verification_prompt = VERIFICATION_PROMPT.format(
             problem=problem,
@@ -144,6 +166,8 @@ class MARSAgent:
         max_tokens = self.config['max_tokens']
 
         try:
+            api_start = time.time()
+            logger.info(f"🔍 VERIFIER {self.agent_id}: Making verification API call...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -159,13 +183,19 @@ class MARSAgent:
                     }
                 }
             )
+            api_duration = time.time() - api_start
+            logger.info(f"🔍 VERIFIER {self.agent_id}: Verification API call completed in {api_duration:.2f}s")
 
             verification_text = response.choices[0].message.content.strip()
 
             # Parse verification result
             assessment, confidence, issues, suggestions = self._parse_verification(verification_text)
+            logger.info(f"🔍 VERIFIER {self.agent_id}: Assessment: {assessment}, Confidence: {confidence:.3f}")
+            logger.info(f"🔍 VERIFIER {self.agent_id}: Issues found: {len(issues)}, Suggestions: {len(suggestions)}")
+            if issues:
+                logger.info(f"🔍 VERIFIER {self.agent_id}: Key issues: {issues[:2]}")
 
-            return VerificationResult(
+            result = VerificationResult(
                 verifier_id=verifier_id,
                 solution_id=f"agent_{solution_agent_id}_iter_0",  # Use the solution's agent_id
                 assessment=assessment,
@@ -176,8 +206,13 @@ class MARSAgent:
                 timestamp=datetime.now()
             )
 
+            total_duration = time.time() - start_time
+            logger.info(f"🔍 VERIFIER {self.agent_id}: ✅ Verification completed in {total_duration:.2f}s")
+            return result
+
         except Exception as e:
-            logger.error(f"Agent {self.agent_id} error in verification: {str(e)}")
+            error_duration = time.time() - start_time
+            logger.error(f"🔍 VERIFIER {self.agent_id}: ❌ Verification error after {error_duration:.2f}s: {str(e)}")
             return VerificationResult(
                 verifier_id=verifier_id,
                 solution_id=f"agent_{solution_agent_id}_iter_0",
@@ -191,7 +226,11 @@ class MARSAgent:
 
     def improve_solution(self, problem: str, current_solution: str, feedback: str, issues: list, request_id: str = None) -> Tuple[str, int]:
         """Improve a solution based on verification feedback"""
-        logger.info(f"Agent {self.agent_id} improving solution based on feedback")
+        import time
+        start_time = time.time()
+        logger.info(f"🔧 IMPROVER {self.agent_id}: Starting solution improvement")
+        logger.info(f"🔧 IMPROVER {self.agent_id}: Current solution: {len(current_solution):,} chars")
+        logger.info(f"🔧 IMPROVER {self.agent_id}: Issues to address: {len(issues)}")
 
         improvement_prompt = IMPROVEMENT_PROMPT.format(
             problem=problem,
@@ -204,6 +243,8 @@ class MARSAgent:
         max_tokens = self.config['max_tokens']
 
         try:
+            api_start = time.time()
+            logger.info(f"🔧 IMPROVER {self.agent_id}: Making improvement API call...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -219,40 +260,61 @@ class MARSAgent:
                     }
                 }
             )
+            api_duration = time.time() - api_start
+            logger.info(f"🔧 IMPROVER {self.agent_id}: Improvement API call completed in {api_duration:.2f}s")
 
             improved_solution = response.choices[0].message.content.strip()
             reasoning_tokens = getattr(response.usage, 'reasoning_tokens', 0)
 
-            logger.info(f"Agent {self.agent_id} improved solution with {reasoning_tokens} reasoning tokens")
+            # Log improvement analysis
+            length_change = len(improved_solution) - len(current_solution)
+            logger.info(f"🔧 IMPROVER {self.agent_id}: Solution length change: {length_change:+,} chars")
+            logger.info(f"🔧 IMPROVER {self.agent_id}: Improved solution preview: {improved_solution[:200]}{'...' if len(improved_solution) > 200 else ''}")
+
+            total_duration = time.time() - start_time
+            logger.info(f"🔧 IMPROVER {self.agent_id}: ✅ Solution improved in {total_duration:.2f}s with {reasoning_tokens:,} reasoning tokens")
             return improved_solution, reasoning_tokens
 
         except Exception as e:
-            logger.error(f"Agent {self.agent_id} error improving solution: {str(e)}")
+            error_duration = time.time() - start_time
+            logger.error(f"🔧 IMPROVER {self.agent_id}: ❌ Improvement error after {error_duration:.2f}s: {str(e)}")
+            logger.warning(f"🔧 IMPROVER {self.agent_id}: Returning original solution due to error")
             return current_solution, 0  # Return original solution if improvement fails
 
     def _estimate_confidence(self, solution: str) -> float:
         """Estimate confidence based on solution characteristics"""
         confidence = 0.5  # Base confidence
+        confidence_factors = []
 
         # Check for mathematical rigor indicators
         if "\\boxed{" in solution:
             confidence += 0.2
+            confidence_factors.append("boxed_answer")
         if "therefore" in solution.lower() or "thus" in solution.lower():
             confidence += 0.1
+            confidence_factors.append("logical_connectors")
         if "proof" in solution.lower():
             confidence += 0.1
+            confidence_factors.append("proof_structure")
         if len(solution.split()) > 200:  # Detailed solutions tend to be more confident
             confidence += 0.1
+            confidence_factors.append("detailed_solution")
         if "let" in solution.lower() and "assume" in solution.lower():
             confidence += 0.1
+            confidence_factors.append("formal_approach")
 
         # Check for uncertainty indicators
+        uncertainty_factors = []
         if "might" in solution.lower() or "possibly" in solution.lower():
             confidence -= 0.1
+            uncertainty_factors.append("hedging_language")
         if "unsure" in solution.lower() or "not sure" in solution.lower():
             confidence -= 0.2
+            uncertainty_factors.append("explicit_uncertainty")
 
-        return max(0.1, min(1.0, confidence))
+        final_confidence = max(0.1, min(1.0, confidence))
+        logger.debug(f"🤖 AGENT {self.agent_id}: Confidence factors: +{confidence_factors}, -{uncertainty_factors} → {final_confidence:.3f}")
+        return final_confidence
 
     def _parse_verification(self, verification_text: str) -> Tuple[str, float, list, list]:
         """Parse verification result to extract structured information"""
