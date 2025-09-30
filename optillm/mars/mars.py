@@ -45,6 +45,24 @@ DEFAULT_CONFIG = {
     'cross_agent_enhancement': True,  # Generate enhanced solutions using peer strategies
 }
 
+# Lightweight MARS configuration for coding benchmarks (faster, simpler)
+LIGHTWEIGHT_CONFIG = {
+    'num_agents': 2,  # Reduced from 3
+    'max_iterations': 2,  # Reduced from 5 for speed
+    'verification_passes_required': 1,  # Reduced from 2
+    'consensus_threshold': 1,  # Adjusted for 2-agent setup
+    'min_verified_solutions': 1,
+    'max_tokens': 4000,  # Much smaller for coding
+    'max_verification_attempts': 2,  # Reduced from 3
+    'early_termination': True,
+    'use_reasoning_api': True,
+    # Disable expensive features for coding
+    'enable_aggregation': False,  # Skip RSA aggregation
+    'enable_strategy_network': False,  # Skip strategy network
+    'strategy_extraction_enabled': False,
+    'cross_agent_enhancement': False,
+}
+
 def multi_agent_reasoning_system(
     system_prompt: str,
     initial_query: str,
@@ -84,8 +102,12 @@ async def _run_mars_parallel(
     logger.info(f"🚀 MARS INITIALIZATION - Starting MARS with model: {model}")
     logger.info(f"📝 PROBLEM: {initial_query[:200]}{'...' if len(initial_query) > 200 else ''}")
 
-    # Initialize configuration
-    config = DEFAULT_CONFIG.copy()
+    # Initialize configuration - use lightweight config for coding if max_tokens <= 4000
+    use_lightweight = request_config and request_config.get('max_tokens', 64000) <= 4000
+    config = LIGHTWEIGHT_CONFIG.copy() if use_lightweight else DEFAULT_CONFIG.copy()
+
+    if use_lightweight:
+        logger.info(f"⚡ CONFIG: Using LIGHTWEIGHT MARS config for coding (fast mode)")
 
     # Override max_tokens from request_config if provided
     if request_config and 'max_tokens' in request_config:
