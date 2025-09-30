@@ -102,10 +102,18 @@ docker run -p 8000:8000 ghcr.io/codelion/optillm:latest
 2024-10-22 07:45:06,293 - INFO - Starting server with approach: auto
 ```
 
-To use optillm without local inference and only as a proxy you can add the `-proxy` suffix.
+**Available Docker image variants:**
+
+- **Full image** (`latest`): Includes all dependencies for local inference and plugins
+- **Proxy-only** (`latest-proxy`): Lightweight image without local inference capabilities
+- **Offline** (`latest-offline`): Self-contained image with pre-downloaded models (spaCy) for fully offline operation
 
 ```bash
+# Proxy-only (smallest)
 docker pull ghcr.io/codelion/optillm:latest-proxy
+
+# Offline (largest, includes pre-downloaded models)
+docker pull ghcr.io/codelion/optillm:latest-offline
 ```
 
 ### Install from source
