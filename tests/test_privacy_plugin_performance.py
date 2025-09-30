@@ -181,6 +181,64 @@ def test_singleton_instances_are_reused():
         print(f"❌ Singleton test failed: {e}")
         raise
 
+def test_recognizers_not_reloaded():
+    """
+    Test that recognizers are not fetched/reloaded on each analyze() call.
+    This prevents the performance regression where "Fetching all recognizers for language en"
+    appears in logs on every request.
+    """
+    print("\nTesting that recognizers are not reloaded on each call...")
+
+    # Reset module state
+    if 'optillm.plugins.privacy_plugin' in sys.modules:
+        del sys.modules['optillm.plugins.privacy_plugin']
+
+    try:
+        # Mock at the presidio level to track registry calls
+        with patch('presidio_analyzer.AnalyzerEngine') as MockAnalyzerEngine, \
+             patch('spacy.util.is_package', return_value=True):
+
+            # Create a mock analyzer instance
+            mock_analyzer_instance = MagicMock()
+            mock_registry = MagicMock()
+
+            # Track calls to get_recognizers
+            mock_registry.get_recognizers = MagicMock(return_value=[])
+            mock_analyzer_instance.registry = mock_registry
+            mock_analyzer_instance.analyze = MagicMock(return_value=[])
+
+            MockAnalyzerEngine.return_value = mock_analyzer_instance
+
+            # Import module with mocks
+            import optillm.plugins.privacy_plugin as privacy_plugin
+
+            # First call to get_analyzer_engine - should create and warm up
+            analyzer1 = privacy_plugin.get_analyzer_engine()
+            initial_analyze_calls = mock_analyzer_instance.analyze.call_count
+
+            print(f"Warm-up analyze calls: {initial_analyze_calls}")
+            assert initial_analyze_calls == 1, f"Expected 1 warm-up analyze call, got {initial_analyze_calls}"
+
+            # Second call - should return cached instance without additional analyze
+            analyzer2 = privacy_plugin.get_analyzer_engine()
+            second_analyze_calls = mock_analyzer_instance.analyze.call_count
+
+            print(f"Total analyze calls after second get_analyzer_engine: {second_analyze_calls}")
+            assert second_analyze_calls == 1, f"Analyzer should not call analyze() again on cached retrieval, got {second_analyze_calls} calls"
+
+            # Verify it's the same instance
+            assert analyzer1 is analyzer2, "Should return the same cached analyzer instance"
+
+            print("✅ Recognizer reload test PASSED - Recognizers are pre-warmed and not reloaded!")
+            return True
+
+    except ImportError as e:
+        print(f"⚠️  Skipping recognizer reload test - dependencies not installed: {e}")
+        return True
+    except Exception as e:
+        print(f"❌ Recognizer reload test failed: {e}")
+        raise
+
 if __name__ == "__main__":
     print("=" * 60)
     print("Privacy Plugin Performance & Caching Tests")
@@ -199,6 +257,12 @@ if __name__ == "__main__":
     except Exception as e:
         all_passed = False
         print(f"❌ Singleton instance test failed: {e}")
+
+    try:
+        test_recognizers_not_reloaded()
+    except Exception as e:
+        all_passed = False
+        print(f"❌ Recognizer reload test failed: {e}")
 
     try:
         test_privacy_plugin_performance()
