@@ -348,22 +348,36 @@ def _synthesize_final_solution(
         if extracted_answer is not None:
             logger.info(f"🗳️  VOTING: Agent {solution.agent_id} extracted answer '{extracted_answer}' via unified extraction (confidence: {solution.confidence:.2f})")
 
-            # Handle both numeric and non-numeric answers
-            if isinstance(extracted_answer, (int, float)):
-                # Numeric answer - add to numerical voting
-                numerical_answers.append((int(extracted_answer), solution))
-                extracted_answers_info.append((str(int(extracted_answer)), solution, "unified_numeric"))
-            elif isinstance(extracted_answer, str):
-                # Non-numeric answer (formulas, sets, etc.) - store for synthesis
-                extracted_answers_info.append((extracted_answer, solution, "unified_formula"))
-                logger.info(f"🗳️  VOTING: Non-numeric answer stored for synthesis: '{extracted_answer}'")
-            elif isinstance(extracted_answer, set):
-                # Set answers (e.g., for Problem 1) - convert to string for synthesis
-                set_str = "{" + ", ".join(map(str, sorted(extracted_answer))) + "}"
-                extracted_answers_info.append((set_str, solution, "unified_set"))
-                logger.info(f"🗳️  VOTING: Set answer stored for synthesis: '{set_str}'")
+            # Math-verify returns a list of all possible matches
+            # Iterate through list to find first valid answer
+            answers_to_process = []
+            if isinstance(extracted_answer, list):
+                answers_to_process = extracted_answer
             else:
-                # Other types - convert to string
+                answers_to_process = [extracted_answer]
+
+            # Process each answer in the list
+            for ans in answers_to_process:
+                # Handle both numeric and non-numeric answers
+                if isinstance(ans, (int, float)):
+                    # Numeric answer - add to numerical voting
+                    numerical_answers.append((int(ans), solution))
+                    extracted_answers_info.append((str(int(ans)), solution, "unified_numeric"))
+                    break  # Use first numeric answer found
+                elif isinstance(ans, str) and ans.strip():
+                    # Non-numeric answer (formulas, sets, etc.) - store for synthesis
+                    extracted_answers_info.append((ans, solution, "unified_formula"))
+                    logger.info(f"🗳️  VOTING: Non-numeric answer stored for synthesis: '{ans}'")
+                    break  # Use first valid string
+                elif isinstance(ans, set):
+                    # Set answers (e.g., for Problem 1) - convert to string for synthesis
+                    set_str = "{" + ", ".join(map(str, sorted(ans))) + "}"
+                    extracted_answers_info.append((set_str, solution, "unified_set"))
+                    logger.info(f"🗳️  VOTING: Set answer stored for synthesis: '{set_str}'")
+                    break  # Use first set found
+
+            # If no valid answer found after iterating list, log as other type
+            if not any(isinstance(ans, (int, float, str, set)) for ans in answers_to_process if isinstance(ans, str) and ans.strip()):
                 extracted_answers_info.append((str(extracted_answer), solution, "unified_other"))
                 logger.info(f"🗳️  VOTING: Other answer type stored for synthesis: '{extracted_answer}'")
         else:

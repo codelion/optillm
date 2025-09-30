@@ -105,6 +105,20 @@ def extract_answer(response: str) -> Optional[int]:
     if extracted_answer is None:
         return None
 
+    # Math-verify returns a list of all possible matches
+    # Check if extracted_answer is a list and find first valid integer
+    if isinstance(extracted_answer, list):
+        for item in extracted_answer:
+            if isinstance(item, (int, float)):
+                answer = int(item)
+                if 0 <= answer <= 999:
+                    return answer
+            elif isinstance(item, str) and item.isdigit():
+                answer = int(item)
+                if 0 <= answer <= 999:
+                    return answer
+        return None
+
     # Convert to integer if needed - AIME answers are always integers
     if isinstance(extracted_answer, (int, float)):
         answer = int(extracted_answer)

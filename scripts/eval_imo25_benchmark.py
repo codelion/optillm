@@ -118,6 +118,25 @@ def extract_answer_from_solution(solution: str, problem_id: int) -> str:
     if extracted_answer is None:
         return None
 
+    # Math-verify returns a list of all possible matches
+    # Iterate through list to find first valid format for this problem
+    if isinstance(extracted_answer, list):
+        for item in extracted_answer:
+            # Try each type conversion
+            if isinstance(item, set):
+                sorted_elements = sorted(list(item))
+                return "{" + ", ".join(map(str, sorted_elements)) + "}"
+            elif isinstance(item, (int, float)):
+                if problem_id == 3:
+                    return f"c = {int(item)}"
+                else:
+                    return str(int(item))
+            elif isinstance(item, str) and item.strip():
+                # Skip empty strings, return first non-empty string
+                return item
+        # If no valid item found in list, convert list to string
+        return str(extracted_answer)
+
     # Convert extracted answer to string format expected by evaluation
     if isinstance(extracted_answer, set):
         # Convert set to string format: {0, 1, 2, 3}
