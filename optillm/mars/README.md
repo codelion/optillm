@@ -144,6 +144,7 @@ MARS is designed to excel on challenging mathematical benchmarks:
 
 - **IMO (International Mathematical Olympiad)**: Complex proof-based problems
 - **AIME (American Invitational Mathematics Examination)**: Numerical competition problems
+- **LiveCodeBench**: Competitive programming challenges
 - **Mathematical reasoning tasks**: General problem-solving capabilities
 
 ### Performance Metrics
@@ -151,6 +152,75 @@ MARS is designed to excel on challenging mathematical benchmarks:
 - **Verification Rate**: Percentage of solutions passing 5-pass threshold
 - **Reasoning Efficiency**: Tokens used per correct solution
 - **Consensus Quality**: Agreement between verified solutions
+
+## Benchmark Results
+
+### Gemini 2.5 Flash Lite Preview Model
+
+Evaluation results using `google/gemini-2.5-flash-lite-preview-09-2025` via OpenRouter:
+
+| Benchmark | Approach | Problems | Correct | Accuracy | Notes |
+|-----------|----------|----------|---------|----------|-------|
+| **AIME 2025** | Baseline | 30 | 13 | 43.3% | Pass@1, max_tokens=4000 |
+| **AIME 2025** | MARS | 30 | 22 | 73.3% | **+9 problems (+30pp)** |
+| **IMO 2025** | Baseline | 6 | 3 | 50.0% | Problems 2, 4 & 5 correct |
+| **IMO 2025** | MARS (w/ thinking) | 6 | 0 | 0.0% | Thinking tags hid proofs |
+| **IMO 2025** | MARS (fixed) | 6 | TBD | TBD% | Proof visibility fixes needed |
+| **LiveCodeBench v5/v6** | Baseline | 105 | 41 | 39.05% | Code generation, pass@1 |
+| **LiveCodeBench v5/v6** | MARS + Thinking | 105 | 53 | 50.48% | **+12 problems (+29.3%)** |
+
+### Key Findings
+
+#### AIME 2025: Significant Accuracy Improvement
+- **Results**: 22/30 problems solved (73.3%) vs baseline 13/30 (43.3%)
+- **Improvement**: +9 problems (+69.2% relative improvement), +30.0 percentage points
+- **Key Success Factor**: Multi-agent collaboration with verification effectively solves numerical competition problems
+- **Approach**: 5 agents with diverse temperatures, iterative verification and refinement
+
+#### LiveCodeBench: Strong Performance with Thinking Tags
+- **Results**: 53/105 problems solved (50.48%) vs baseline 41/105 (39.05%)
+- **Improvement**: +12 problems (+29.3% relative improvement), +11.43 percentage points
+- **Code Extraction**: 87/105 (82.9%) vs baseline 54/105 (51.4%) - **+61.1% improvement**
+- **Key Success Factor**: Thinking tags beneficial for code generation - allows agents to reason through logic before writing code
+- **Multi-agent benefit**: Different temperature agents explore varied solution approaches
+
+#### IMO 2025 Proof-Based Problems
+- **Initial Challenge**: MARS scored lower than baseline (0/6 vs 3/6, baseline solved problems 2, 4, 5)
+- **Root Cause**: Thinking tags hid 80-85% of proof content from evaluator - proofs inside `<think>` tags not visible
+- **Solution**: Disable thinking tags for proof-based problems via `mars_config`
+- **Status**: Re-evaluation needed with proof visibility fixes
+- **Key Lesson**: Thinking tags are **problem-type dependent** - helpful for code/numerical, harmful for proofs
+
+#### Configuration for IMO Problems
+```python
+extra_body = {
+    "optillm_approach": "mars",
+    "mars_config": {
+        "use_thinking_tags": False,        # Full proof visibility
+        "answer_extraction_mode": "none"   # Proofs are the answer
+    }
+}
+```
+
+#### Lessons Learned
+1. **MARS excels at numerical competition problems**: +69.2% relative improvement on AIME 2025 (43.3% → 73.3%)
+2. **Thinking tags are problem-type dependent**:
+   - ✅ **Enable for code generation**: +29.3% improvement on LiveCodeBench
+   - ✅ **Enable for numerical problems**: Multi-agent reasoning effective on AIME
+   - ❌ **Disable for mathematical proofs**: Hides critical reasoning from evaluators
+3. **Answer extraction** must be disabled for proof-based problems - the proof IS the answer
+4. **Multi-agent diversity** provides significant value - different temperature agents explore complementary approaches
+5. **Code extraction rate** is a leading indicator - MARS achieved 82.9% vs baseline 51.4% (+61.1%)
+
+### Completed Evaluations (google/gemini-2.5-flash-lite-preview-09-2025)
+- ✅ **AIME 2025**: Baseline 13/30 (43.3%) → MARS 22/30 (73.3%) **+30pp improvement**
+- ✅ **IMO 2025**: Baseline 3/6 (50.0%), MARS with thinking tags 0/6 (0.0% - proofs hidden)
+- ✅ **LiveCodeBench v5/v6**: Baseline 41/105 (39.05%) → MARS 53/105 (50.48%) **+11.43pp improvement**
+
+### Ongoing Work
+- 🔄 IMO 2025 MARS re-evaluation with proof visibility fixes (disable thinking tags)
+
+*All evaluations use pass@1 accuracy metric.*
 
 ## Implementation Details
 

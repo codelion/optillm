@@ -74,7 +74,7 @@ Your task:
 4. Ensure logical rigor and completeness
 5. Provide a clear, well-structured final answer
 6. CRITICAL: If multiple agents extracted the same numerical answer, prioritize that answer in your synthesis
-7. Format your final answer clearly (use \\boxed{answer} for mathematical answers when appropriate)
+7. Format your final answer clearly (use \\boxed{{answer}} for mathematical answers when appropriate)
 
 Important: Preserve the depth and detail needed for complex problems. Do not over-condense - maintain all critical reasoning steps and justifications. If agents have extracted specific numerical answers, ensure these are preserved and clearly formatted in your final response.
 
