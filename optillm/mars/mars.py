@@ -20,6 +20,10 @@ from .verifier import MARSVerifier
 from .aggregator import MARSAggregator
 from .strategy_network import StrategyNetwork
 from .prompts import SYNTHESIS_PROMPT
+from .answer_extraction import (
+    extract_clean_answer,
+    wrap_with_thinking_tags,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,9 @@ DEFAULT_CONFIG = {
     'enable_strategy_network': True,  # Enable cross-agent strategy sharing
     'strategy_extraction_enabled': True,  # Extract reasoning strategies from solutions
     'cross_agent_enhancement': True,  # Generate enhanced solutions using peer strategies
+    # Thinking tags for clean answer extraction
+    'use_thinking_tags': True,  # Wrap reasoning in <think></think> tags
+    'answer_extraction_mode': 'auto',  # 'auto', 'code', 'math', or 'none'
 }
 
 # Lightweight MARS configuration for coding benchmarks (faster, simpler)
@@ -61,6 +68,9 @@ LIGHTWEIGHT_CONFIG = {
     'enable_strategy_network': False,  # Skip strategy network
     'strategy_extraction_enabled': False,
     'cross_agent_enhancement': False,
+    # Thinking tags for clean answer extraction
+    'use_thinking_tags': True,  # Wrap reasoning in <think></think> tags
+    'answer_extraction_mode': 'auto',  # 'auto', 'code', 'math', or 'none'
 }
 
 def multi_agent_reasoning_system(
@@ -266,7 +276,26 @@ async def _run_mars_parallel(
             percentage = (duration / total_time) * 100
             logger.info(f"🏁   {phase}: {duration:.2f}s ({percentage:.1f}%)")
 
-        return final_solution, total_reasoning_tokens
+        # Apply thinking tags if enabled
+        if config.get('use_thinking_tags', True):
+            logger.info(f"📝 ANSWER EXTRACTION: Extracting clean answer with mode '{config.get('answer_extraction_mode', 'auto')}'")
+
+            # Extract clean answer from synthesis output
+            clean_answer = extract_clean_answer(
+                final_solution,
+                mode=config.get('answer_extraction_mode', 'auto')
+            )
+
+            logger.info(f"📝 ANSWER EXTRACTION: Extracted {len(clean_answer)} char answer from {len(final_solution)} char synthesis")
+
+            # Wrap reasoning in thinking tags
+            formatted_output = wrap_with_thinking_tags(final_solution, clean_answer)
+
+            logger.info(f"📝 ANSWER EXTRACTION: Final output: {len(formatted_output)} chars (with thinking tags)")
+            return formatted_output, total_reasoning_tokens
+        else:
+            logger.info(f"📝 ANSWER EXTRACTION: Thinking tags disabled, returning raw synthesis")
+            return final_solution, total_reasoning_tokens
 
     except Exception as e:
         logger.error(f"MARS execution failed: {str(e)}")
