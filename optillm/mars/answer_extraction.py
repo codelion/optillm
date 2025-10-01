@@ -128,7 +128,12 @@ def extract_generic_answer(text: str) -> str:
     """
     Extract answer for generic (non-code, non-math) problems
     Returns the last paragraph or sentence as the final answer
+    For proof-based problems, may return the full text if no clear answer section exists
     """
+    # Check if this looks like a proof problem (geometry, proofs, etc.)
+    proof_indicators = ['proof', 'QED', 'proven', 'demonstrate', 'show that', 'prove that']
+    is_proof = any(indicator.lower() in text.lower() for indicator in proof_indicators)
+
     # Try to find conclusion markers
     conclusion_markers = [
         'In conclusion',
@@ -148,11 +153,25 @@ def extract_generic_answer(text: str) -> str:
                 answer = parts[1].strip()
                 # Get first sentence/paragraph after marker
                 first_para = answer.split('\n\n')[0].strip()
-                logger.info(f"📝 EXTRACTION: Found answer after '{marker}' ({len(first_para)} chars)")
-                return first_para
+                if len(first_para) > 20:  # Ensure it's substantial
+                    logger.info(f"📝 EXTRACTION: Found answer after '{marker}' ({len(first_para)} chars)")
+                    return first_para
 
-    # Fallback: Return last paragraph
+    # For proof problems, return more context (last 2-3 paragraphs or full text if short)
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+
+    if is_proof and paragraphs:
+        # For proofs, include conclusion paragraphs (last 2-3 paragraphs)
+        if len(paragraphs) >= 3:
+            conclusion_text = '\n\n'.join(paragraphs[-3:])
+            logger.info(f"📝 EXTRACTION: Proof detected, using last 3 paragraphs ({len(conclusion_text)} chars)")
+            return conclusion_text
+        else:
+            # Short proof, return full text
+            logger.info(f"📝 EXTRACTION: Short proof detected, returning full text ({len(text)} chars)")
+            return text
+
+    # For non-proof problems, return last paragraph
     if paragraphs:
         final_para = paragraphs[-1]
         logger.info(f"📝 EXTRACTION: Using last paragraph ({len(final_para)} chars)")

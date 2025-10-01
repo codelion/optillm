@@ -119,7 +119,13 @@ async def _run_mars_parallel(
     if use_lightweight:
         logger.info(f"⚡ CONFIG: Using LIGHTWEIGHT MARS config for coding (fast mode)")
 
-    # Override max_tokens from request_config if provided
+    # Override with mars_config if provided
+    if request_config and 'mars_config' in request_config:
+        mars_config = request_config['mars_config']
+        config.update(mars_config)
+        logger.info(f"⚙️  CONFIG: Applied mars_config overrides: {list(mars_config.keys())}")
+
+    # Override max_tokens from request_config if provided (backward compatibility)
     if request_config and 'max_tokens' in request_config:
         config['max_tokens'] = request_config['max_tokens']
         logger.info(f"⚙️  CONFIG: Using max_tokens from request: {config['max_tokens']}")
@@ -278,21 +284,27 @@ async def _run_mars_parallel(
 
         # Apply thinking tags if enabled
         if config.get('use_thinking_tags', True):
-            logger.info(f"📝 ANSWER EXTRACTION: Extracting clean answer with mode '{config.get('answer_extraction_mode', 'auto')}'")
+            try:
+                logger.info(f"📝 ANSWER EXTRACTION: Extracting clean answer with mode '{config.get('answer_extraction_mode', 'auto')}'")
 
-            # Extract clean answer from synthesis output
-            clean_answer = extract_clean_answer(
-                final_solution,
-                mode=config.get('answer_extraction_mode', 'auto')
-            )
+                # Extract clean answer from synthesis output
+                clean_answer = extract_clean_answer(
+                    final_solution,
+                    mode=config.get('answer_extraction_mode', 'auto')
+                )
 
-            logger.info(f"📝 ANSWER EXTRACTION: Extracted {len(clean_answer)} char answer from {len(final_solution)} char synthesis")
+                logger.info(f"📝 ANSWER EXTRACTION: Extracted {len(clean_answer)} char answer from {len(final_solution)} char synthesis")
 
-            # Wrap reasoning in thinking tags
-            formatted_output = wrap_with_thinking_tags(final_solution, clean_answer)
+                # Wrap reasoning in thinking tags
+                formatted_output = wrap_with_thinking_tags(final_solution, clean_answer)
 
-            logger.info(f"📝 ANSWER EXTRACTION: Final output: {len(formatted_output)} chars (with thinking tags)")
-            return formatted_output, total_reasoning_tokens
+                logger.info(f"📝 ANSWER EXTRACTION: Final output: {len(formatted_output)} chars (with thinking tags)")
+                return formatted_output, total_reasoning_tokens
+            except Exception as extract_error:
+                # If answer extraction fails, fall back to raw synthesis
+                logger.warning(f"⚠️  ANSWER EXTRACTION FAILED: {str(extract_error)}")
+                logger.warning(f"⚠️  Falling back to raw synthesis output ({len(final_solution)} chars)")
+                return final_solution, total_reasoning_tokens
         else:
             logger.info(f"📝 ANSWER EXTRACTION: Thinking tags disabled, returning raw synthesis")
             return final_solution, total_reasoning_tokens

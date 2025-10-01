@@ -78,6 +78,14 @@ Your task:
 
 Important: Preserve the depth and detail needed for complex problems. Do not over-condense - maintain all critical reasoning steps and justifications. If agents have extracted specific numerical answers, ensure these are preserved and clearly formatted in your final response.
 
+**CRITICAL FOR PROOF-BASED PROBLEMS (geometry, number theory, etc.):**
+- The final solution MUST be COMPLETE and SELF-CONTAINED
+- Include ALL lemmas, theorems, and intermediate results WITH FULL JUSTIFICATIONS
+- Do NOT reference earlier work or assume prior knowledge
+- Every step must be explicitly proven or justified
+- Do NOT abbreviate proofs or say "as shown above" - repeat all necessary reasoning
+- The evaluator will ONLY see your final solution, so it must stand alone
+
 Create the most robust and well-reasoned solution possible, drawing from the collective intelligence of all agents."""
 
 IMPROVEMENT_PROMPT = """You are tasked with improving a solution based on verification feedback.

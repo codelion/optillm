@@ -712,7 +712,19 @@ def main():
     print(f"Results will be saved to: {results_file}")
 
     # Prepare extra_body for approach
-    extra_body = {"optillm_approach": args.approach} if args.approach != "none" else None
+    # Special handling for MARS on IMO problems: disable thinking tags for proofs
+    if args.approach == "mars":
+        extra_body = {
+            "optillm_approach": "mars",
+            "mars_config": {
+                "use_thinking_tags": False,  # IMO proofs need full visibility to evaluator
+                "answer_extraction_mode": "none"  # Don't extract - proofs ARE the answer
+            }
+        }
+    elif args.approach != "none":
+        extra_body = {"optillm_approach": args.approach}
+    else:
+        extra_body = None
 
     # Evaluate each problem
     for problem_data in tqdm(problems_to_evaluate, desc="Solving IMO problems"):
