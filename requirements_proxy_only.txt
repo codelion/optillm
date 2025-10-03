@@ -9,3 +9,4 @@ numpy
 networkx
 z3-solver
 sympy
+math_verify

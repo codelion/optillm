@@ -32,6 +32,7 @@ from optillm.plansearch import plansearch
 from optillm.leap import leap
 from optillm.reread import re2_approach
 from optillm.cepo.cepo import cepo, CepoConfig, init_cepo_config
+from optillm.mars import multi_agent_reasoning_system
 from optillm.batching import RequestBatcher, BatchingError
 from optillm.conversation_logger import ConversationLogger
 import optillm.conversation_logger
@@ -93,9 +94,11 @@ def get_config():
         API_KEY = os.environ.get("OPENAI_API_KEY")
         base_url = server_config['base_url']
         if base_url != "":
-            default_client = OpenAI(api_key=API_KEY, base_url=base_url, http_client=http_client)
+            default_client = OpenAI(api_key=API_KEY, base_url=base_url)
+            logger.info(f"Created OpenAI client with base_url: {base_url}")
         else:
-            default_client = OpenAI(api_key=API_KEY, http_client=http_client)
+            default_client = OpenAI(api_key=API_KEY)
+            logger.info("Created OpenAI client without base_url")
     elif os.environ.get("AZURE_OPENAI_API_KEY"):
         API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
         API_VERSION = os.environ.get("AZURE_API_VERSION")
@@ -121,6 +124,8 @@ def get_config():
         # Import the LiteLLM wrapper
         from optillm.litellm_wrapper import LiteLLMWrapper
         default_client = LiteLLMWrapper()
+        logger.info("Created LiteLLMWrapper as fallback")
+    logger.info(f"Client type: {type(default_client)}")
     return default_client, API_KEY
 
 def count_reasoning_tokens(text: str, tokenizer=None) -> int:
@@ -191,8 +196,8 @@ server_config = {
 }
 
 # List of known approaches
-known_approaches = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency", 
-                   "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2", "cepo"]
+known_approaches = ["none", "mcts", "bon", "moa", "rto", "z3", "self_consistency",
+                   "pvg", "rstar", "cot_reflection", "plansearch", "leap", "re2", "cepo", "mars"]
 
 plugin_approaches = {}
 
@@ -437,7 +442,9 @@ def execute_single_approach(approach, system_prompt, initial_query, client, mode
         elif approach == 're2':
             return re2_approach(system_prompt, initial_query, client, model, n=server_config['n'], request_id=request_id)
         elif approach == 'cepo':
-            return cepo(system_prompt, initial_query, client, model, cepo_config, request_id)            
+            return cepo(system_prompt, initial_query, client, model, cepo_config, request_id)
+        elif approach == 'mars':
+            return multi_agent_reasoning_system(system_prompt, initial_query, client, model, request_config=request_config, request_id=request_id)
     elif approach in plugin_approaches:
         # Check if the plugin accepts request_config
         plugin_func = plugin_approaches[approach]

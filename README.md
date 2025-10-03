@@ -72,6 +72,7 @@ OptiLLM delivers measurable improvements across diverse benchmarks:
 
 | Technique | Base Model | Improvement | Benchmark |
 |-----------|------------|-------------|-----------|
+| **MARS** | Gemini 2.5 Flash Lite | **+30.0 points** | AIME 2025 (43.3→73.3) |
 | **CePO** | Llama 3.3 70B | **+18.6 points** | Math-L5 (51.0→69.6) |
 | **AutoThink** | DeepSeek-R1-1.5B | **+9.34 points** | GPQA-Diamond (21.72→31.06) |
 | **LongCePO** | Llama 3.3 70B | **+13.6 points** | InfiniteBench (58.0→71.6) |
@@ -158,6 +159,7 @@ optillm
 
 | Approach                             | Slug               | Description                                                                                    |
 | ------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
+| [MARS (Multi-Agent Reasoning System)](optillm/mars) | `mars`             | Multi-agent reasoning with diverse temperature exploration, cross-verification, and iterative improvement |
 | [Cerebras Planning and Optimization](optillm/cepo)   | `cepo`             | Combines Best of N, Chain-of-Thought, Self-Reflection, Self-Improvement, and various prompting techniques |
 | CoT with Reflection                  | `cot_reflection`   | Implements chain-of-thought reasoning with \<thinking\>, \<reflection> and \<output> sections |
 | PlanSearch                           | `plansearch`       | Implements a search algorithm over candidate plans for solving a problem in natural language   |
@@ -746,6 +748,20 @@ Authorization: Bearer your_secret_api_key
 ```
 
 ## SOTA results on benchmarks with optillm
+
+### MARS on AIME 2025, IMO 2025, and LiveCodeBench (Oct 2025)
+
+| Benchmark | Approach | Problems | Correct | Accuracy | Improvement |
+|-----------|----------|----------|---------|----------|-------------|
+| **AIME 2025** | Baseline | 30 | 13 | 43.3% | - |
+| **AIME 2025** | **MARS** | 30 | **22** | **73.3%** | **+30.0pp (+69.2%)** |
+| **IMO 2025** | Baseline | 6 | 1 | 16.7% | - |
+| **IMO 2025** | **MARS** | 6 | **2** | **33.3%** | **+16.7pp (+100%)** |
+| **LiveCodeBench v5/v6** | Baseline | 105 | 41 | 39.05% | - |
+| **LiveCodeBench v5/v6** | **MARS** | 105 | **53** | **50.48%** | **+11.43pp (+29.3%)** |
+
+Model: google/gemini-2.5-flash-lite-preview-09-2025 via OpenRouter
+Configuration: 3 agents, 2-pass verification, thinking tags disabled for proofs
 
 ### AutoThink on GPQA-Diamond & MMLU-Pro (May 2025)
 

@@ -14,6 +14,11 @@ from tqdm import tqdm
 import statistics
 from collections import defaultdict
 
+# Add sys path to import optillm modules
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from optillm.utils.answer_extraction import extract_answer as unified_extract_answer
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Initialize OpenAI client
 # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-client = OpenAI(api_key="optillm", base_url="http://localhost:8000/v1")
+client = OpenAI(api_key="optillm", base_url="http://localhost:8001/v1")
 
 SYSTEM_PROMPT = '''You are solving AIME (American Invitational Mathematics Examination) problems.
 
@@ -45,7 +50,7 @@ THOUGHT_TRANSITIONS = [
 
 def load_2024_dataset() -> list[dict]:
     """
-    Load the dataset of problems.
+    Load the 2024 dataset of problems.
     Returns:
         list[dict]: The dataset of problems.
     """
@@ -56,51 +61,75 @@ def load_2024_dataset() -> list[dict]:
     assert len(dataset) == 30, f"Expected 30 problems after filtering by 2024, but found {len(dataset)}"
     return dataset
 
+def load_2025_dataset() -> list[dict]:
+    """
+    Load the 2025 dataset of problems from math-ai/aime25.
+    Returns:
+        list[dict]: The dataset of problems.
+    """
+    dataset = load_dataset("math-ai/aime25")
+    # The AIME 2025 dataset has 30 problems in the "test" split
+    dataset = dataset["test"]
+    logging.debug(f"Loaded AIME 2025 dataset size: {len(dataset)}.")
+    assert len(dataset) == 30, f"Expected 30 problems in AIME 2025, but found {len(dataset)}"
+    return dataset
+
+def load_dataset_by_year(year: int) -> list[dict]:
+    """
+    Load dataset by year (2024 or 2025).
+    Returns:
+        list[dict]: The dataset of problems.
+    """
+    if year == 2024:
+        return load_2024_dataset()
+    elif year == 2025:
+        return load_2025_dataset()
+    else:
+        raise ValueError(f"Unsupported year: {year}. Only 2024 and 2025 are supported.")
+
 def extract_answer(response: str) -> Optional[int]:
     """
-    Extract the numerical answer from a math solution response.
-    Handles various formats of boxed answers and falls back to last number if needed.
+    Extract the numerical answer from a math solution response using unified extraction.
+    AIME problems expect integer answers between 0 and 999.
     """
     if not response:
         return None
-        
-    # Clean the response
-    response = ' '.join(response.split())
-    
-    patterns = [
-        r'\$n=\\boxed{(\d+)}\$',
-        r'\\\[\\boxed{(\d+)}\\\]',
-        r'\\\[\\boxed{(\d+)}\.\\\]',
-        r'\\boxed{(\d+)}',
-        r'\$\\boxed{(\d+)}\$',
-        r'boxed{(\d+)}',
-        r'\\boxed\s*{\s*(\d+)\s*}',
-        r'\bboxed\s*{\s*(\d+)\s*}',
-        r'final answer is[^\d]*(\d+)',
-        r'answer is[^\d]*(\d+)',
-        r'answer:[^\d]*(\d+)',
-        r'= ?(\d+)$'
-    ]
-    
-    for pattern in patterns:
-        matches = re.finditer(pattern, response, re.IGNORECASE)
-        last_match = None
-        for match in matches:
-            last_match = match
-            
-        if last_match:
-            try:
-                return int(last_match.group(1))
-            except (ValueError, IndexError):
-                continue
-    
-    numbers = re.findall(r'(\d+)', response)
-    if numbers:
-        try:
-            return int(numbers[-1])
-        except ValueError:
-            pass
-            
+
+    # Use unified answer extraction with AIME problem context
+    extracted_answer = unified_extract_answer(
+        response,
+        problem_type="aime",
+        problem_id=None
+    )
+
+    if extracted_answer is None:
+        return None
+
+    # Math-verify returns a list of all possible matches
+    # Check if extracted_answer is a list and find first valid integer
+    if isinstance(extracted_answer, list):
+        for item in extracted_answer:
+            if isinstance(item, (int, float)):
+                answer = int(item)
+                if 0 <= answer <= 999:
+                    return answer
+            elif isinstance(item, str) and item.isdigit():
+                answer = int(item)
+                if 0 <= answer <= 999:
+                    return answer
+        return None
+
+    # Convert to integer if needed - AIME answers are always integers
+    if isinstance(extracted_answer, (int, float)):
+        answer = int(extracted_answer)
+        # AIME answers are typically 0-999
+        if 0 <= answer <= 999:
+            return answer
+    elif isinstance(extracted_answer, str) and extracted_answer.isdigit():
+        answer = int(extracted_answer)
+        if 0 <= answer <= 999:
+            return answer
+
     return None
 
 def analyze_thinking(response: str) -> Dict:
@@ -280,12 +309,12 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
         if extra_body:
             kwargs["extra_body"] = extra_body
         
-        response = client.with_options(timeout=1000.0).chat.completions.create(
+        response = client.with_options(timeout=6000.0).chat.completions.create(
             model=model,
             messages=[
                 {"role": "user", "content": SYSTEM_PROMPT + problem}
             ],
-            max_tokens=8192,
+            max_tokens=64000,
             **kwargs
         )
         
@@ -329,7 +358,10 @@ def get_llm_response(problem: str, model: str, analyze_logits: bool = False, ext
         
     except Exception as e:
         logger.error(f"Error getting LLM response: {e}")
-        return ""
+        logger.error(f"Error type: {type(e).__name__}")
+        if "timeout" in str(e).lower():
+            logger.error("API call timed out - consider increasing timeout for complex approaches like MARS")
+        raise e  # Re-raise instead of silently returning empty string
 
 def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = False, analyze_logits: bool = False, extra_body: dict = None) -> List[Dict]:
     """
@@ -349,7 +381,20 @@ def make_n_attempts(problem: str, model: str, n: int, analyze_thoughts: bool = F
     remaining_attempts = n
     
     while remaining_attempts > 0:
-        response = get_llm_response(problem, model, analyze_logits, extra_body)
+        try:
+            response = get_llm_response(problem, model, analyze_logits, extra_body)
+        except Exception as e:
+            logger.error(f"Failed to get response for attempt {n - remaining_attempts + 1}: {e}")
+            # Create a failed attempt record
+            attempt_data = {
+                "attempt_number": len(attempts) + 1,
+                "response": f"ERROR: {str(e)}",
+                "predicted_answer": None,
+                "error": str(e)
+            }
+            attempts.append(attempt_data)
+            remaining_attempts -= 1
+            continue
         
         # If response is already formatted as attempts
         if isinstance(response, list):
@@ -772,23 +817,25 @@ def save_raw_response(filename: str, problem_id: int, response_data: Dict):
     
     return response_id
 
-def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_logits: bool = False, test_time_compute: bool = False, approach_name: str = None, extra_body: dict = None):
+def main(model: str, n_attempts: int, year: int = 2024, analyze_thoughts: bool = False, analyze_logits: bool = False, test_time_compute: bool = False, approach_name: str = None, extra_body: dict = None):
     """Main evaluation function that handles gaps in processed indexes."""
     os.makedirs("results", exist_ok=True)
-    
+
     # Create suffix based on analysis flags
     suffix_parts = []
+    if year != 2024:
+        suffix_parts.append(f"aime{year}")
     if analyze_thoughts:
         suffix_parts.append("thought_analysis")
     if analyze_logits:
         suffix_parts.append("logit_analysis")
     if approach_name:
         suffix_parts.append(approach_name)
-    
+
     suffix = "_" + "_".join(suffix_parts) if suffix_parts else ""
     results_file = f"results/evaluation_results_{model.replace('/', '_')}_pass_at_{n_attempts}{suffix}.json"
-      
-    dataset = load_2024_dataset()
+
+    dataset = load_dataset_by_year(year)
     existing_results = load_existing_results(results_file)
     
     # Create a set of already processed indexes for efficient lookup
@@ -802,11 +849,24 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
             
         problem_text = item['problem']
         correct_answer = int(item['answer'])
-        
+
+        print(f"\n🔬 Processing Problem {id}: {problem_text[:100]}...")
+        print(f"   Expected answer: {correct_answer}")
+        if extra_body and 'optillm_approach' in extra_body:
+            print(f"   Using approach: {extra_body['optillm_approach']}")
+
         # Make n attempts for each problem
         attempts = make_n_attempts(problem_text, model, n_attempts, analyze_thoughts, analyze_logits, extra_body)
         is_correct, first_correct = evaluate_pass_at_n(attempts, correct_answer)
-        
+
+        # Report result
+        predicted_answers = [attempt.get('predicted_answer') for attempt in attempts]
+        print(f"   Predicted: {predicted_answers}")
+        if is_correct:
+            print(f"   ✅ CORRECT!")
+        else:
+            print(f"   ❌ Incorrect")
+
         result = {
             "index": id,
             "problem": problem_text,
@@ -821,9 +881,11 @@ def main(model: str, n_attempts: int, analyze_thoughts: bool = False, analyze_lo
     analyze_results(final_results, n_attempts, analyze_thoughts, analyze_logits)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME 2024 problems")
+    parser = argparse.ArgumentParser(description="Evaluate LLM performance on AIME problems")
     parser.add_argument("--model", type=str, required=True, help="OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)")
     parser.add_argument("--n", type=int, default=1, help="Number of attempts per problem (for pass@n evaluation)")
+    parser.add_argument("--year", type=int, default=2024, choices=[2024, 2025], help="AIME year to evaluate (2024 or 2025)")
+    parser.add_argument("--approach", type=str, help="OptILLM approach to use (e.g., mars, moa, bon)")
     parser.add_argument("--analyze-thoughts", action="store_true", help="Analyze thinking patterns in responses")
     parser.add_argument("--analyze-logits", action="store_true", help="Analyze token probability distributions")
     parser.add_argument("--test-time-compute", action="store_true", help="Evaluate test-time compute scaling approaches")
@@ -870,7 +932,12 @@ if __name__ == "__main__":
             print(f"Extra body: {extra_body}")
             print(f"{'=' * 80}\n")
             
-            main(args.model, args.n, args.analyze_thoughts, args.analyze_logits, 
+            main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
                  test_time_compute=True, approach_name=approach_slug, extra_body=extra_body)
     else:
-        main(args.model, args.n, args.analyze_thoughts, args.analyze_logits)
+        # Handle approach parameter - only set extra_body if approach is not "none"
+        extra_body = {"optillm_approach": args.approach} if args.approach and args.approach != "none" else None
+        approach_name = args.approach if args.approach and args.approach != "none" else None
+
+        main(args.model, args.n, args.year, args.analyze_thoughts, args.analyze_logits,
+             approach_name=approach_name, extra_body=extra_body)
