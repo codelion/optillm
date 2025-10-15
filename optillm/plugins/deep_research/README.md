@@ -6,13 +6,16 @@ The Deep Research plugin implements the **Test-Time Diffusion Deep Researcher (T
 
 ## Algorithm Overview
 
-The TTD-DR algorithm treats research as a **diffusion process** with iterative refinement through denoising and retrieval. Unlike traditional search approaches that return raw results, TTD-DR performs:
+The TTD-DR algorithm treats research as a **diffusion process** with iterative refinement through denoising and retrieval. Unlike traditional search approaches that return raw results, this implementation performs:
 
-1. **Query Decomposition** - Breaks complex queries into focused sub-questions
-2. **Iterative Search** - Performs multiple rounds of web search based on identified gaps
-3. **Content Synthesis** - Uses advanced memory processing for unbounded context
-4. **Completeness Evaluation** - Automatically assesses research quality and identifies missing aspects
-5. **Report Generation** - Produces structured, academic-quality reports with proper citations
+1. **Preliminary Draft Generation** - Creates an initial "updatable skeleton" from LLM internal knowledge
+2. **Initial Query Decomposition** - Breaks complex queries into focused sub-questions
+3. **Gap Analysis** - Identifies areas in the draft needing external research
+4. **Iterative Denoising** - Performs multiple rounds of gap-targeted search and draft refinement
+5. **Quality-Guided Termination** - Automatically assesses draft quality to determine when research is complete
+6. **Report Finalization** - Produces structured, academic-quality reports with proper citations
+
+**Note:** This is a simplified implementation of the TTD-DR paper. Some advanced features like component-wise self-evolutionary optimization and memory-based synthesis are not yet implemented.
 
 ## Architecture
 
@@ -34,10 +37,12 @@ The core implementation of the TTD-DR algorithm with the following key methods:
 - **`decompose_query()`** - Implements query planning phase
 - **`perform_web_search()`** - Orchestrates web search using individual queries to avoid truncation
 - **`extract_and_fetch_urls()`** - Extracts sources and fetches content
-- **`synthesize_with_memory()`** - Processes unbounded context with citations
-- **`evaluate_completeness()`** - Assesses research gaps
-- **`generate_structured_report()`** - Creates academic-quality reports
-- **`research()`** - Main research loop implementing TTD-DR
+- **`analyze_draft_gaps()`** - Analyzes current draft to identify gaps and areas needing research
+- **`perform_gap_targeted_search()`** - Performs targeted searches based on identified gaps
+- **`denoise_draft_with_retrieval()`** - Core denoising step integrating retrieved information with current draft
+- **`evaluate_draft_quality()`** - Evaluates quality improvement of current draft vs previous iteration
+- **`finalize_research_report()`** - Applies final polishing to the research report
+- **`research()`** - Main research loop implementing TTD-DR diffusion process
 
 #### 2. Plugin Interface (`deep_research_plugin.py`)
 
@@ -53,16 +58,20 @@ def run(system_prompt: str, initial_query: str, client, model: str, request_conf
 
 ```mermaid
 graph TD
-    A[Initial Query] --> B[Query Decomposition]
-    B --> C[Web Search]
-    C --> D[Content Extraction]
-    D --> E[Memory Synthesis]
-    E --> F[Completeness Evaluation]
-    F --> G{Complete?}
-    G -->|No| H[Generate Focused Queries]
-    H --> C
-    G -->|Yes| I[Generate Structured Report]
-    I --> J[Final Report with Citations]
+    A[Initial Query] --> B[Generate Preliminary Draft]
+    B --> C[Initial Query Decomposition]
+    C --> D[Initial Web Search]
+    D --> E[Register Initial Sources]
+    E --> F[Analyze Draft Gaps]
+    F --> G[Gap-Targeted Search]
+    G --> H[Content Extraction]
+    H --> I[Denoise Draft with Retrieved Info]
+    I --> J[Evaluate Draft Quality]
+    J --> K{Quality Threshold Met?}
+    K -->|No| F
+    K -->|Yes| L[Finalize Research Report]
+    L --> M[Add References & Metadata]
+    M --> N[Final Report with Citations]
 ```
 
 ### Citation System
@@ -105,7 +114,6 @@ The Deep Research plugin requires these OptiLLM plugins:
 
 - **`web_search`** - Chrome-based Google search automation
 - **`readurls`** - Content extraction from URLs
-- **`memory`** - Unbounded context processing and synthesis
 
 ## Usage Examples
 
@@ -205,22 +213,25 @@ The implementation follows the TTD-DR paper's quality criteria:
 | Feature | Simple Search | Deep Research (TTD-DR) |
 |---------|---------------|------------------------|
 | Query Processing | Single query | Multi-query decomposition |
-| Iteration | Single pass | Multiple refinement cycles |
-| Content Synthesis | Raw results | Comprehensive analysis |
-| Gap Detection | None | Automatic completeness evaluation |
+| Iteration | Single pass | Multiple denoising cycles |
+| Draft Evolution | None | Preliminary draft with iterative refinement |
+| Gap Detection | None | Automatic draft gap analysis |
+| Search Strategy | Broad search | Gap-targeted focused search |
 | Citations | Manual | Automatic with tracking |
 | Report Format | Unstructured | Academic report structure |
-| Context Handling | Limited | Unbounded via memory plugin |
+| Quality Evaluation | None | Quality-guided termination |
 
 ## Future Enhancements
 
-Potential improvements aligned with research directions:
+Potential improvements aligned with the TTD-DR paper and research directions:
 
-1. **Parallel Processing** - Concurrent search execution
-2. **Domain Specialization** - Field-specific research strategies
-3. **Multimedia Integration** - Image and video content analysis
-4. **Real-time Updates** - Live research monitoring and updates
-5. **Collaborative Research** - Multi-agent research coordination
+1. **Component-wise Self-Evolutionary Optimization** - Implement fitness-based evolution of search, synthesis, and integration components as described in the paper
+2. **Memory-based Synthesis** - Integrate memory plugin for unbounded context processing
+3. **Parallel Processing** - Concurrent search execution
+4. **Domain Specialization** - Field-specific research strategies
+5. **Multimedia Integration** - Image and video content analysis
+6. **Real-time Updates** - Live research monitoring and updates
+7. **Collaborative Research** - Multi-agent research coordination
 
 ## Troubleshooting
 

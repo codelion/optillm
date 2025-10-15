@@ -16,7 +16,6 @@ from datetime import datetime
 from collections import defaultdict
 from optillm.plugins.web_search_plugin import run as web_search_run, BrowserSessionManager
 from optillm.plugins.readurls_plugin import run as readurls_run
-from optillm.plugins.memory_plugin import run as memory_run
 from optillm.plugins.deep_research.session_state import get_session_manager, close_session
 import uuid
 
@@ -136,6 +135,62 @@ def cleanup_placeholder_tags(text: str) -> str:
     return result
 
 
+def validate_citation_usage(text: str, total_citations: int) -> Dict[str, Any]:
+    """
+    Validate that citations are actually used in the report text.
+
+    Checks which citation numbers appear in the body text and warns about
+    unused citations that are only in the references section.
+
+    Args:
+        text: The full report text including references
+        total_citations: Total number of citations available
+
+    Returns:
+        Dict with validation results including used/unused citation counts
+    """
+    if not text:
+        return {
+            "citations_used": 0,
+            "citations_total": total_citations,
+            "usage_percentage": 0.0,
+            "unused_citations": list(range(1, total_citations + 1)),
+            "warning": "Empty report text"
+        }
+
+    # Find all citation references in the body text (before References section)
+    body_text = text.split("## References")[0] if "## References" in text else text
+
+    # Extract all citation numbers from body text using regex
+    citations_in_body = set()
+    citation_pattern = r'\[(\d+)\]'
+    for match in re.finditer(citation_pattern, body_text):
+        citation_num = int(match.group(1))
+        citations_in_body.add(citation_num)
+
+    # Calculate unused citations
+    all_citations = set(range(1, total_citations + 1))
+    unused_citations = sorted(all_citations - citations_in_body)
+
+    usage_percentage = (len(citations_in_body) / total_citations * 100) if total_citations > 0 else 0
+
+    result = {
+        "citations_used": len(citations_in_body),
+        "citations_total": total_citations,
+        "usage_percentage": usage_percentage,
+        "unused_citations": unused_citations,
+        "used_citations": sorted(citations_in_body)
+    }
+
+    # Add warnings if citation usage is low
+    if usage_percentage < 30:
+        result["warning"] = f"Very low citation usage ({usage_percentage:.1f}%). Most sources are not cited in the text."
+    elif usage_percentage < 50:
+        result["warning"] = f"Low citation usage ({usage_percentage:.1f}%). Many sources are not cited in the text."
+
+    return result
+
+
 def validate_report_completeness(text: str) -> Dict[str, Any]:
     """
     Validate that the research report is complete and ready for publication.
@@ -217,11 +272,21 @@ def validate_report_completeness(text: str) -> Dict[str, Any]:
 
 class DeepResearcher:
     """
-    Implementation of Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
-    
-    This class implements the paper's approach of treating research as a diffusion process
-    with iterative refinement through denoising and retrieval.
-    
+    Simplified implementation of Test-Time Diffusion Deep Researcher (TTD-DR) algorithm
+
+    This class implements the core concepts from the TTD-DR paper: treating research as a
+    diffusion process with iterative refinement through denoising and retrieval.
+
+    Implemented features:
+    - Preliminary draft generation (updatable skeleton)
+    - Gap analysis and draft-guided search
+    - Iterative denoising through retrieval
+    - Quality-guided termination
+
+    Not yet implemented (future work):
+    - Component-wise self-evolutionary optimization (fitness tracking exists but not used)
+    - Memory-based synthesis for unbounded context
+
     Based on: https://arxiv.org/abs/2507.16075v1
     """
     
@@ -233,11 +298,7 @@ class DeepResearcher:
         self.session_id = str(uuid.uuid4())  # Unique session ID for this research
         self.session_manager = None  # Will be set when research starts
         self.research_state = {
-            "queries": [],
-            "sources": [],
-            "content": [],
-            "synthesis": "",
-            "iteration": 0
+            "iteration": 0  # Track current iteration for metadata
         }
         self.total_tokens = 0
         self.citations = {}  # Map citation number to source info
@@ -483,45 +544,6 @@ For more detailed information on specific aspects of {original_query}, additiona
         except Exception as e:
             return f"URL fetching failed: {str(e)}", []
     
-    def synthesize_with_memory(self, system_prompt: str, query: str, content: str, sources: List[Dict]) -> Tuple[str, int]:
-        """
-        Use memory plugin to synthesize information from collected content with citations
-        """
-        # Add citation instructions to the synthesis request
-        citation_prompt = f"""
-        IMPORTANT CITATION INSTRUCTIONS:
-        1. Use numbered citations [1], [2], etc. to reference specific sources
-        2. Place citations immediately after the relevant fact or quote
-        3. Multiple citations can be used together like [1,3,5]
-        4. Every major claim, statistic, or specific finding MUST have a citation
-        5. When quoting directly, use quotation marks and cite immediately after
-        
-        Available sources for citation:
-        """
-        
-        # Register sources for citations, avoiding duplicates
-        url_to_citation = {}  # Track which URLs already have citations
-        
-        for source in sources:
-            if 'url' in source:
-                url = source['url']
-                # Check if this URL already has a citation
-                if url not in url_to_citation:
-                    self.citation_counter += 1
-                    self.citations[self.citation_counter] = source
-                    url_to_citation[url] = self.citation_counter
-                    citation_prompt += f"\n[{self.citation_counter}] {source.get('title', 'Untitled')} - {url}"
-        
-        # Format content for memory plugin with citation instructions
-        memory_input = f"{citation_prompt}\n\n{content}\n\nQuery: {query}\n\nRemember to cite all sources using [1], [2], etc. format throughout your synthesis."
-        
-        try:
-            synthesis, tokens = memory_run(system_prompt, memory_input, self.client, self.model)
-            # Clean reasoning tags from synthesis response
-            synthesis = clean_reasoning_tags(synthesis)
-            return synthesis, tokens
-        except Exception as e:
-            return f"Memory synthesis failed: {str(e)}", 0
     
     def evaluate_completeness(self, system_prompt: str, query: str, current_synthesis: str) -> Tuple[bool, List[str]]:
         """
@@ -783,29 +805,47 @@ For more detailed information on specific aspects of {original_query}, additiona
         Core denoising step: integrate retrieved information with current draft
         This is the heart of the diffusion process
         """
+        # Build citation context from currently available sources
+        citation_context = "\n\n**AVAILABLE CITATIONS (USE THESE!):**\n"
+        for num, source in self.citations.items():
+            citation_context += f"[{num}] {source.get('title', 'Untitled')} - {source.get('url', 'No URL')}\n"
+
         denoising_prompt = f"""
         You are performing a denoising step in a research diffusion process.
-        
+
         TASK: Integrate new retrieved information with the existing draft to reduce "noise" (gaps, inaccuracies, incompleteness).
-        
+
         Original Query: {original_query}
-        
+
         Current Draft:
         {current_draft}
-        
+
         New Retrieved Information:
         {retrieval_content}
-        
+        {citation_context}
+
+        CRITICAL CITATION REQUIREMENTS:
+        1. EVERY factual claim, statistic, finding, or piece of evidence MUST be cited using [1], [2], etc.
+        2. Multiple related claims from the same source can share a citation [3]
+        3. Claims from different sources should have multiple citations like [1,4,7]
+        4. Direct quotes MUST have citations immediately after the closing quote
+        5. When integrating new information, ALWAYS add appropriate citations from the available sources
+        6. Uncited claims will be considered incomplete and must be fixed
+
         DENOISING INSTRUCTIONS:
         1. Identify where the new information fills gaps marked with [NEEDS RESEARCH] or [SOURCE NEEDED]
-        2. Replace placeholder content with specific, detailed information
-        3. Add proper citations for new information using [1], [2], etc.
+        2. Replace placeholder content with specific, detailed information from the retrieved content
+        3. Add proper citations for ALL new information using the citation numbers shown above
         4. Resolve any conflicts between new and existing information
         5. Maintain the overall structure and coherence of the draft
         6. Enhance depth and accuracy without losing existing valuable insights
         7. Mark any remaining research needs with [NEEDS RESEARCH]
-        
-        Return the improved draft with integrated information.
+        8. Review the draft and add missing citations to any uncited factual claims
+
+        QUALITY CHECK: Before returning, verify that the majority of substantive claims have citations.
+        Aim for at least 70% of factual statements to be properly cited.
+
+        Return the improved draft with integrated information and comprehensive citations.
         """
         
         try:
@@ -904,6 +944,10 @@ For more detailed information on specific aspects of {original_query}, additiona
     def update_component_fitness(self, quality_scores: Dict[str, float]):
         """
         Update component fitness based on performance (self-evolution)
+
+        NOTE: This method tracks fitness values but they are not yet used to modify
+        component behavior. This is placeholder code for future implementation of
+        component-wise self-evolutionary optimization as described in the TTD-DR paper.
         """
         # Update fitness based on quality improvements
         improvement = quality_scores.get('improvement', 0.0)
@@ -920,122 +964,19 @@ For more detailed information on specific aspects of {original_query}, additiona
         for key in self.component_fitness:
             self.component_fitness[key] = max(0.1, min(2.0, self.component_fitness[key]))
     
-    def generate_structured_report(self, system_prompt: str, original_query: str, synthesis: str) -> str:
-        """
-        Generate a properly structured research report with sections and citations
-        """
-        # Build citation context
-        citation_context = "\nAvailable citations:\n"
-        for num, source in self.citations.items():
-            citation_context += f"[{num}] {source.get('title', 'Untitled')}\n"
-        
-        report_prompt = f"""
-        Generate a comprehensive research report with the following structure:
-        
-        # Research Report: [Create an appropriate title based on the query]
-        
-        ## Executive Summary
-        [Provide a 2-3 paragraph summary of the key findings and conclusions]
-        
-        ## 1. Introduction
-        [Introduce the research question and its significance]
-        
-        ## 2. Background
-        [Provide necessary context and background information]
-        
-        ## 3. Key Findings
-        [Present the main findings organized by themes or categories]
-        
-        ## 4. Analysis and Discussion
-        [Analyze the findings and their implications]
-        
-        ## 5. Conclusion
-        [Summarize the research and provide final thoughts]
-        
-        ## 6. Recommendations (if applicable)
-        [Provide actionable recommendations based on findings]
-        
-        ## 7. Limitations and Future Research
-        [Acknowledge any limitations and suggest areas for future investigation]
-        
-        Original query: {original_query}
-        
-        Research synthesis with citations: {synthesis}
-        
-        {citation_context}
-        
-        IMPORTANT INSTRUCTIONS:
-        1. Use numbered citations [1], [2], etc. throughout the report to reference sources
-        2. Ensure EVERY major claim, statistic, or finding has a citation
-        3. Use markdown formatting for structure (## for main sections, ### for subsections)
-        4. Be comprehensive but concise (aim for 1500-2500 words)
-        5. Maintain academic tone and objectivity
-        6. Include specific data, statistics, and examples where available
-        7. Use direct quotes sparingly and always with citations
-        8. Group related citations together when appropriate [1,2,3]
-        9. Ensure the Executive Summary captures the essence of the entire report
-        10. Make recommendations specific and actionable
-        11. DO NOT create a References section - it will be added automatically
-        """
-        
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": report_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=3000  # Increased for comprehensive report
-            )
-            
-            report_content = response.choices[0].message.content.strip()
-            # Clean reasoning tags from final report response
-            report_content = clean_reasoning_tags(report_content)
-            self.total_tokens += response.usage.completion_tokens
-            
-            # Remove any References section the LLM might have created
-            # This prevents duplicate reference sections
-            report_content = re.sub(r'##\s*References.*?(?=##|\Z)', '', report_content, flags=re.DOTALL)
-            report_content = re.sub(r'(?m)^References\s*\n\s*(?:\[\d+\]\s*\n)+', '', report_content)
-            report_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', report_content)  # Clean up extra newlines
-            
-            # Add references section with proper formatting
-            references = "\n\n## References\n\n"
-            for num, source in sorted(self.citations.items()):
-                title = source.get('title', 'Untitled')
-                url = source['url']
-                access_date = source.get('access_date', datetime.now().strftime('%Y-%m-%d'))
-                
-                # Format reference in academic style
-                references += f"[{num}] {title}. "
-                references += f"Available at: <{url}> "
-                references += f"[Accessed: {access_date}]\n\n"
-            
-            # Add metadata footer
-            metadata = "\n---\n\n**Research Metadata:**\n"
-            metadata += f"- Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            metadata += f"- Research iterations: {self.research_state['iteration']}\n"
-            metadata += f"- Total sources consulted: {len(self.citations)}\n"
-            metadata += f"- Unique URLs accessed: {len(set(self.research_state['sources']))}\n"
-            metadata += f"- Total tokens used: {self.total_tokens}\n"
-            metadata += f"- Model: {self.model}\n"
-            metadata += f"- Plugin version: TTD-DR Implementation v1.0\n"
-            
-            return report_content + references + metadata
-            
-        except Exception as e:
-            return f"Report generation failed: {str(e)}"
-    
     def research(self, system_prompt: str, initial_query: str) -> Tuple[str, int]:
         """
         TTD-DR (Test-Time Diffusion Deep Researcher) main algorithm
-        
-        Implements the true diffusion process with:
+
+        Implements the core diffusion process with:
         1. Preliminary draft generation (initial noisy state)
-        2. Iterative denoising through draft-guided retrieval
-        3. Component-wise self evolution
-        4. Quality-guided termination
+        2. Initial research to gather external sources
+        3. Iterative denoising through draft-guided retrieval
+        4. Gap analysis to identify areas needing more research
+        5. Quality-guided termination
+
+        Note: Component-wise self-evolutionary optimization is tracked but not yet
+        used to modify behavior (future enhancement).
         """
         
         # Get or create a browser session for this research session
@@ -1063,16 +1004,12 @@ For more detailed information on specific aspects of {original_query}, additiona
                     print("  - Extracting initial sources...")
                     initial_content, initial_sources = self.extract_and_fetch_urls(initial_search_results)
                     
-                    # Register initial sources
+                    # Register initial sources for citations
                     for source in initial_sources:
                         if 'url' in source:
                             self.citation_counter += 1
                             self.citations[self.citation_counter] = source
-                    
-                    # Store initial research
-                    self.research_state["content"].append(initial_content)
-                    self.research_state["sources"].extend([s['url'] for s in initial_sources if 'url' in s])
-                    
+
                     print(f"  - Found {len(initial_sources)} initial sources")
                 else:
                     print("  - No sources found in initial search")
@@ -1146,11 +1083,7 @@ For more detailed information on specific aspects of {original_query}, additiona
                 if completeness > 0.9 or (improvement < 0.03 and completeness > 0.7):
                     print("  - Quality threshold reached, research complete")
                     break
-                
-                # Store current state for tracking
-                self.research_state["content"].append(content_with_urls)
-                self.research_state["sources"].extend([s['url'] for s in sources if 'url' in s])
-            
+
             # PHASE 3: FINALIZATION - Polish the final draft
             print("TTD-DR: Finalizing research report...")
             
@@ -1176,25 +1109,39 @@ For more detailed information on specific aspects of {original_query}, additiona
         """
         Apply final polishing to the research report
         """
+        # Build citation context
+        citation_context = "\n\n**AVAILABLE CITATIONS:**\n"
+        for num, source in self.citations.items():
+            citation_context += f"[{num}] {source.get('title', 'Untitled')}\n"
+
         finalization_prompt = f"""
         Apply final polishing to this research report. This is the last step in the TTD-DR diffusion process.
-        
+
         Original Query: {original_query}
-        
+
         Current Draft:
         {final_draft}
-        
+        {citation_context}
+
         FINALIZATION TASKS:
         1. Ensure professional academic formatting with clear sections
-        2. Verify all citations are properly formatted as [1], [2], etc.
-        3. Add a compelling title and executive summary
-        4. Ensure smooth transitions between sections
-        5. Add conclusion that directly addresses the original query
-        6. **CRITICAL**: Remove ALL [NEEDS RESEARCH], [SOURCE NEEDED], and similar placeholder tags
-        7. Replace any remaining placeholders with actual content or remove incomplete sections
-        8. Polish language and style for clarity and impact
-        
-        **CRITICAL REQUIREMENTS**: 
+        2. **CRITICAL**: Verify all citations are properly formatted as [1], [2], etc. and ADD MISSING CITATIONS
+        3. Add citations to any factual claims, statistics, or findings that lack them
+        4. Add a compelling title and executive summary
+        5. Ensure smooth transitions between sections
+        6. Add conclusion that directly addresses the original query
+        7. **CRITICAL**: Remove ALL [NEEDS RESEARCH], [SOURCE NEEDED], and similar placeholder tags
+        8. Replace any remaining placeholders with actual content or remove incomplete sections
+        9. Polish language and style for clarity and impact
+
+        **CRITICAL CITATION REQUIREMENTS**:
+        - Every major factual claim MUST have a citation
+        - Statistics, data points, and research findings MUST be cited
+        - If information came from research, it needs a citation from the available sources above
+        - Aim for at least 60-70% of substantive claims to have proper citations
+        - Remove or rephrase claims that cannot be supported with available citations
+
+        **CRITICAL QUALITY REQUIREMENTS**:
         - The final report must NOT contain ANY placeholder tags: [NEEDS RESEARCH], [SOURCE NEEDED], [Placeholder for...], etc.
         - Remove incomplete "Research Questions for Investigation" sections with unanswered questions
         - Do not include citation placeholders like "[1] [Placeholder for specific research citation]"
@@ -1202,8 +1149,8 @@ For more detailed information on specific aspects of {original_query}, additiona
         - Ensure all statements are backed by available evidence or are clearly marked as preliminary findings
         - The report must be publication-ready with no incomplete elements
         - DO NOT create a References section - it will be added automatically
-        
-        Return the final polished research report.
+
+        Return the final polished research report with comprehensive citations.
         """
         
         try:
@@ -1237,30 +1184,47 @@ For more detailed information on specific aspects of {original_query}, additiona
                 print("✅ Report validation passed - report is complete")
             
             self.total_tokens += response.usage.completion_tokens
-            
+
             # Remove any References section the LLM might have created
             polished_report = re.sub(r'##\s*References.*?(?=##|\Z)', '', polished_report, flags=re.DOTALL)
             polished_report = re.sub(r'(?m)^References\s*\n\s*(?:\[\d+\]\s*\n)+', '', polished_report)
             polished_report = re.sub(r'\n\s*\n\s*\n+', '\n\n', polished_report)  # Clean up extra newlines
-            
-            # Add references section
+
+            # Validate citation usage before adding references
+            citation_validation = validate_citation_usage(polished_report, len(self.citations))
+            print(f"📊 Citation Statistics:")
+            print(f"   - Used citations: {citation_validation['citations_used']}/{citation_validation['citations_total']}")
+            print(f"   - Usage percentage: {citation_validation['usage_percentage']:.1f}%")
+
+            if "warning" in citation_validation:
+                print(f"⚠️  {citation_validation['warning']}")
+                if len(citation_validation['unused_citations']) > 0:
+                    print(f"   - Unused citations: {citation_validation['unused_citations'][:10]}" +
+                          (f"... and {len(citation_validation['unused_citations']) - 10} more"
+                           if len(citation_validation['unused_citations']) > 10 else ""))
+
+            # Add references section (only for citations that are actually used)
             references = "\n\n## References\n\n"
+            used_citations = set(citation_validation['used_citations'])
+
             for num, source in sorted(self.citations.items()):
-                title = source.get('title', 'Untitled')
-                url = source['url']
-                access_date = source.get('access_date', datetime.now().strftime('%Y-%m-%d'))
-                references += f"[{num}] {title}. Available at: <{url}> [Accessed: {access_date}]\n\n"
+                # Only include citations that are actually used in the text
+                if num in used_citations:
+                    title = source.get('title', 'Untitled')
+                    url = source['url']
+                    access_date = source.get('access_date', datetime.now().strftime('%Y-%m-%d'))
+                    references += f"[{num}] {title}. Available at: <{url}> [Accessed: {access_date}]\n\n"
             
             # Add TTD-DR metadata
             metadata = "\n---\n\n**TTD-DR Research Metadata:**\n"
             metadata += f"- Algorithm: Test-Time Diffusion Deep Researcher\n"
             metadata += f"- Denoising iterations: {len(self.draft_history) - 1}\n"
             metadata += f"- Total gaps addressed: {sum(len(gaps) for gaps in self.gap_analysis_history)}\n"
-            metadata += f"- Component fitness: {self.component_fitness}\n"
             metadata += f"- Total sources consulted: {len(self.citations)}\n"
+            metadata += f"- Citations used in text: {citation_validation['citations_used']} ({citation_validation['usage_percentage']:.1f}%)\n"
             metadata += f"- Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             metadata += f"- Total tokens used: {self.total_tokens}\n"
-            
+
             return polished_report + references + metadata
             
         except Exception as e:
