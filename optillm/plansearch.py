@@ -35,12 +35,21 @@ Please provide {num_observations} observations."""
         }
         
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call if conversation logging is enabled
         if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Observations response truncated or empty, returning empty list")
+            return []
+
         observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in observations if obs.strip()]
 
@@ -70,12 +79,21 @@ Please provide {num_new_observations} new observations derived from the existing
         }
         
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call if conversation logging is enabled
         if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Derived observations response truncated or empty, returning empty list")
+            return []
+
         new_observations = response.choices[0].message.content.strip().split('\n')
         return [obs.strip() for obs in new_observations if obs.strip()]
 
@@ -101,14 +119,23 @@ IS CRUCIAL."""
                 {"role": "user", "content": prompt}
             ]
         }
-        
+
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call if conversation logging is enabled
         if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.error("Solution generation response truncated or empty. Consider increasing max_tokens.")
+            return "Error: Response was truncated due to token limit. Please increase max_tokens or max_completion_tokens."
+
         return response.choices[0].message.content.strip()
 
     def implement_solution(self, problem: str, solution: str) -> str:
@@ -134,14 +161,23 @@ Please implement the solution in Python."""
                 {"role": "user", "content": prompt}
             ]
         }
-        
+
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call if conversation logging is enabled
         if hasattr(optillm, 'conversation_logger') and optillm.conversation_logger and self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             optillm.conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
         self.plansearch_completion_tokens += response.usage.completion_tokens
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.error("Implementation response truncated or empty. Consider increasing max_tokens.")
+            return "Error: Response was truncated due to token limit. Please increase max_tokens or max_completion_tokens."
+
         return response.choices[0].message.content.strip()
 
     def solve(self, problem: str, num_initial_observations: int = 3, num_derived_observations: int = 2) -> Tuple[str, str]:

@@ -25,18 +25,26 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         }
         
         response = client.chat.completions.create(**provider_request)
-        
+
         # Convert response to dict for logging
         response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-        
+
         # Log provider call if conversation logging is enabled
         if request_id:
             conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-        
-        completions = [choice.message.content for choice in response.choices]
+
+        # Check for valid response with None-checking
+        if response is None or not response.choices:
+            raise Exception("Response is None or has no choices")
+
+        completions = [choice.message.content for choice in response.choices if choice.message.content is not None]
         moa_completion_tokens += response.usage.completion_tokens
         logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
-        
+
+        # Check if any valid completions were generated
+        if not completions:
+            raise Exception("No valid completions generated (all were None)")
+
     except Exception as e:
         logger.warning(f"n parameter not supported by provider: {str(e)}")
         logger.info("Falling back to generating 3 completions one by one")
@@ -56,14 +64,22 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
                 }
                 
                 response = client.chat.completions.create(**provider_request)
-                
+
                 # Convert response to dict for logging
                 response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
-                
+
                 # Log provider call if conversation logging is enabled
                 if request_id:
                     conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-                
+
+                # Check for valid response with None-checking
+                if (response is None or
+                    not response.choices or
+                    response.choices[0].message.content is None or
+                    response.choices[0].finish_reason == "length"):
+                    logger.warning(f"Completion {i+1}/3 truncated or empty, skipping")
+                    continue
+
                 completions.append(response.choices[0].message.content)
                 moa_completion_tokens += response.usage.completion_tokens
                 logger.debug(f"Generated completion {i+1}/3")
@@ -77,7 +93,12 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
             return "Error: Could not generate any completions", 0
         
         logger.info(f"Generated {len(completions)} completions using fallback method. Total tokens used: {moa_completion_tokens}")
-    
+
+    # Double-check we have at least one completion
+    if not completions:
+        logger.error("No completions available for processing")
+        return "Error: Could not generate any completions", moa_completion_tokens
+
     # Handle case where fewer than 3 completions were generated
     if len(completions) < 3:
         original_count = len(completions)
@@ -118,15 +139,24 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
     }
     
     critique_response = client.chat.completions.create(**provider_request)
-    
+
     # Convert response to dict for logging
     response_dict = critique_response.model_dump() if hasattr(critique_response, 'model_dump') else critique_response
-    
+
     # Log provider call if conversation logging is enabled
     if request_id:
         conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-    
-    critiques = critique_response.choices[0].message.content
+
+    # Check for valid response with None-checking
+    if (critique_response is None or
+        not critique_response.choices or
+        critique_response.choices[0].message.content is None or
+        critique_response.choices[0].finish_reason == "length"):
+        logger.warning("Critique response truncated or empty, using generic critique")
+        critiques = "All candidates show reasonable approaches to the problem."
+    else:
+        critiques = critique_response.choices[0].message.content
+
     moa_completion_tokens += critique_response.usage.completion_tokens
     logger.info(f"Generated critiques. Tokens used: {critique_response.usage.completion_tokens}")
     
@@ -165,16 +195,27 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
     }
     
     final_response = client.chat.completions.create(**provider_request)
-    
+
     # Convert response to dict for logging
     response_dict = final_response.model_dump() if hasattr(final_response, 'model_dump') else final_response
-    
+
     # Log provider call if conversation logging is enabled
     if request_id:
         conversation_logger.log_provider_call(request_id, provider_request, response_dict)
-    
+
     moa_completion_tokens += final_response.usage.completion_tokens
     logger.info(f"Generated final response. Tokens used: {final_response.usage.completion_tokens}")
-    
+
+    # Check for valid response with None-checking
+    if (final_response is None or
+        not final_response.choices or
+        final_response.choices[0].message.content is None or
+        final_response.choices[0].finish_reason == "length"):
+        logger.error("Final response truncated or empty. Consider increasing max_tokens.")
+        # Return best completion if final response failed
+        result = completions[0] if completions else "Error: Response was truncated due to token limit. Please increase max_tokens or max_completion_tokens."
+    else:
+        result = final_response.choices[0].message.content
+
     logger.info(f"Total completion tokens used: {moa_completion_tokens}")
-    return final_response.choices[0].message.content, moa_completion_tokens
+    return result, moa_completion_tokens

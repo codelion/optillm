@@ -46,13 +46,15 @@ def run(
     self_discover = SelfDiscover(
         client=client,
         model=model,
-        max_tokens=config["max_tokens"]
+        max_tokens=config["max_tokens"],
+        request_config=request_config
     )
-    
+
     uncertainty_cot = UncertaintyRoutedCoT(
         client=client,
         model=model,
-        max_tokens=config["max_tokens"]
+        max_tokens=config["max_tokens"],
+        request_config=request_config
     )
     
     total_tokens = 0
@@ -82,7 +84,7 @@ def run(
     
     # Stage 2: Uncertainty-routed generation
     logger.info("Generating response with uncertainty routing")
-    
+
     generation_result = uncertainty_cot.generate_with_uncertainty_routing(
         prompt=enhanced_prompt,
         num_samples=config["deepthink_samples"],
@@ -90,14 +92,20 @@ def run(
         temperature=config["temperature"],
         top_p=config["top_p"]
     )
-    
+
     total_tokens += generation_result["completion_tokens"]
-    
+
     # Log routing decision
     logger.info(f"Routing decision: {generation_result['routing_decision']} "
                f"(confidence: {generation_result['confidence_score']:.3f})")
-    
+
     final_response = generation_result["final_response"]
+
+    # Check if response is an error message or empty
+    if not final_response or final_response.startswith("Error:"):
+        logger.error("Deep Think generation failed or was truncated")
+        if not final_response:
+            final_response = "Error: Failed to generate a response. The model may have exceeded token limits."
     
     # Clean up the response if needed
     final_response = _clean_response(final_response)
@@ -108,7 +116,7 @@ def run(
 
 def _parse_config(request_config: Dict[str, Any]) -> Dict[str, Any]:
     """Parse and validate configuration parameters."""
-    
+
     default_config = {
         "deepthink_samples": 3,
         "confidence_threshold": 0.7,
@@ -118,11 +126,17 @@ def _parse_config(request_config: Dict[str, Any]) -> Dict[str, Any]:
         "enable_self_discover": True,
         "reasoning_modules_limit": 7
     }
-    
+
     # Override with request config values
     for key, value in request_config.items():
         if key in default_config:
             default_config[key] = value
+
+    # Handle max_completion_tokens (preferred) or max_tokens (deprecated)
+    if 'max_completion_tokens' in request_config:
+        default_config['max_tokens'] = request_config['max_completion_tokens']
+    elif 'max_tokens' in request_config:
+        default_config['max_tokens'] = request_config['max_tokens']
     
     # Validate ranges
     default_config["deepthink_samples"] = max(1, min(10, default_config["deepthink_samples"]))

@@ -17,17 +17,21 @@ logger = logging.getLogger(__name__)
 class UncertaintyRoutedCoT:
     """
     Implements uncertainty-routed chain-of-thought reasoning.
-    
+
     The approach:
     1. Generate k chain-of-thought samples
     2. Evaluate confidence through consistency analysis
     3. Route to majority vote (high confidence) or greedy sample (low confidence)
     """
-    
-    def __init__(self, client, model: str, max_tokens: int = 16382):
+
+    def __init__(self, client, model: str, max_tokens: int = 16382, request_config: Dict[str, Any] = None):
         self.client = client
         self.model = model
-        self.max_tokens = max_tokens
+        # Read max_completion_tokens (preferred) or max_tokens (deprecated) from request_config
+        if request_config:
+            self.max_tokens = request_config.get('max_completion_tokens') or request_config.get('max_tokens', max_tokens)
+        else:
+            self.max_tokens = max_tokens
         self.completion_tokens = 0
     
     def generate_with_uncertainty_routing(
@@ -127,9 +131,18 @@ class UncertaintyRoutedCoT:
                 temperature=temperature,
                 top_p=top_p
             )
-            
+
             self.completion_tokens += response.usage.completion_tokens
-            samples.append(response.choices[0].message.content.strip())
+
+            # Check for truncated or empty response
+            if (response is None or
+                not response.choices or
+                response.choices[0].message.content is None or
+                response.choices[0].finish_reason == "length"):
+                logger.warning(f"Sample {i+1}/{num_samples} truncated or empty, using empty string")
+                samples.append("")
+            else:
+                samples.append(response.choices[0].message.content.strip())
         
         return samples
     
@@ -143,9 +156,17 @@ class UncertaintyRoutedCoT:
             max_tokens=self.max_tokens,
             temperature=0.0  # Greedy decoding
         )
-        
+
         self.completion_tokens += response.usage.completion_tokens
-        
+
+        # Check for truncated or empty response
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.error("Greedy sample truncated or empty. Consider increasing max_tokens.")
+            return "Error: Response was truncated due to token limit. Please increase max_tokens or max_completion_tokens."
+
         return response.choices[0].message.content.strip()
     
     def _extract_thinking(self, response: str) -> str:
