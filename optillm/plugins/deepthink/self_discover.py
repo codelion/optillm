@@ -16,16 +16,20 @@ logger = logging.getLogger(__name__)
 class SelfDiscover:
     """
     Implementation of the SELF-DISCOVER framework.
-    
+
     The framework operates in two stages:
     1. Stage 1: Discover task-specific reasoning structure (SELECT, ADAPT, IMPLEMENT)
     2. Stage 2: Use discovered structure to solve problem instances
     """
-    
-    def __init__(self, client, model: str, max_tokens: int = 16382):
+
+    def __init__(self, client, model: str, max_tokens: int = 16382, request_config: Dict[str, Any] = None):
         self.client = client
         self.model = model
-        self.max_tokens = max_tokens
+        # Read max_completion_tokens (preferred) or max_tokens (deprecated) from request_config
+        if request_config:
+            self.max_tokens = request_config.get('max_completion_tokens') or request_config.get('max_tokens', max_tokens)
+        else:
+            self.max_tokens = max_tokens
         self.reasoning_modules = get_all_modules()
         self.completion_tokens = 0
         
@@ -95,10 +99,18 @@ Selected modules (JSON array only):"""
             max_tokens=1024,
             temperature=0.3
         )
-        
+
         self.completion_tokens += response.usage.completion_tokens
-        
+
         try:
+            # Check for truncated or empty response
+            if (response is None or
+                not response.choices or
+                response.choices[0].message.content is None or
+                response.choices[0].finish_reason == "length"):
+                logger.warning("Response truncated or empty in module selection, using fallback modules")
+                return self.reasoning_modules[:5]
+
             # Extract JSON from response
             response_text = response.choices[0].message.content.strip()
             # Look for JSON array in the response
@@ -153,9 +165,18 @@ Provide the adapted modules as a numbered list:"""
             max_tokens=2048,
             temperature=0.3
         )
-        
+
         self.completion_tokens += response.usage.completion_tokens
-        
+
+        # Check for truncated or empty response
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Response truncated or empty in module adaptation, using generic descriptions")
+            # Return generic adapted versions of the selected modules
+            return [module.get('description', 'Apply reasoning to solve the problem') for module in selected_modules]
+
         response_text = response.choices[0].message.content.strip()
         
         # Extract adapted modules from numbered list
@@ -221,9 +242,24 @@ Valid JSON reasoning structure:"""
             max_tokens=2048,
             temperature=0.3
         )
-        
+
         self.completion_tokens += response.usage.completion_tokens
-        
+
+        # Check for truncated or empty response
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Response truncated or empty in structure implementation, using fallback structure")
+            # Return the fallback structure directly
+            return {
+                "problem_understanding": "Analyze and understand the problem requirements",
+                "solution_approach": "Determine the best approach based on problem characteristics",
+                "step_by_step_reasoning": "Work through the problem systematically",
+                "verification": "Verify the solution is correct and complete",
+                "final_answer": "State the final answer clearly"
+            }
+
         response_text = response.choices[0].message.content.strip()
         
         # Extract and parse JSON from response with improved error handling
@@ -386,7 +422,15 @@ Based on my systematic analysis using the reasoning structure, the answer is:"""
             max_tokens=self.max_tokens,
             temperature=0.7
         )
-        
+
         self.completion_tokens += response.usage.completion_tokens
-        
+
+        # Check for truncated or empty response
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.error("Response truncated or empty when solving with structure. Consider increasing max_tokens.")
+            return "Error: Response was truncated due to token limit. Please increase max_tokens or max_completion_tokens."
+
         return response.choices[0].message.content.strip()

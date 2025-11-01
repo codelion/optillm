@@ -122,13 +122,18 @@ class MCTS:
             "temperature": 1
         }
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call
         if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
-        
-        completions = [choice.message.content.strip() for choice in response.choices]
+
+        # Check for valid response with None-checking
+        if response is None or not response.choices:
+            logger.error("Failed to get valid completions from the model")
+            return []
+
+        completions = [choice.message.content.strip() for choice in response.choices if choice.message.content is not None]
         self.completion_tokens += response.usage.completion_tokens
         logger.info(f"Received {len(completions)} completions from the model")
         return completions
@@ -151,13 +156,22 @@ class MCTS:
             "temperature": 1
         }
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call
         if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
-        
-        next_query = response.choices[0].message.content
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Next query response truncated or empty, using default")
+            next_query = "Please continue."
+        else:
+            next_query = response.choices[0].message.content
+
         self.completion_tokens += response.usage.completion_tokens
         logger.info(f"Generated next user query: {next_query}")
         return DialogueState(state.system_prompt, new_history, next_query)
@@ -181,13 +195,22 @@ class MCTS:
             "temperature": 0.1
         }
         response = self.client.chat.completions.create(**provider_request)
-        
+
         # Log provider call
         if self.request_id:
             response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
             conversation_logger.log_provider_call(self.request_id, provider_request, response_dict)
-        
+
         self.completion_tokens += response.usage.completion_tokens
+
+        # Check for valid response with None-checking
+        if (response is None or
+            not response.choices or
+            response.choices[0].message.content is None or
+            response.choices[0].finish_reason == "length"):
+            logger.warning("Evaluation response truncated or empty. Using default value 0.5")
+            return 0.5
+
         try:
             score = float(response.choices[0].message.content.strip())
             score = max(0, min(score, 1))  # Ensure the score is between 0 and 1

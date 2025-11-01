@@ -699,8 +699,13 @@ def proxy():
     # Extract response_format if present
     response_format = data.get("response_format", None)
 
+    # Handle max_completion_tokens (preferred) and max_tokens (deprecated but supported)
+    # Priority: max_completion_tokens > max_tokens
+    max_completion_tokens = data.get('max_completion_tokens')
+    max_tokens = data.get('max_tokens')
+
     # Explicit keys that we are already handling
-    explicit_keys = {'stream', 'messages', 'model', 'n', 'response_format'}
+    explicit_keys = {'stream', 'messages', 'model', 'n', 'response_format', 'max_completion_tokens', 'max_tokens'}
 
     # Copy the rest into request_config
     request_config = {k: v for k, v in data.items() if k not in explicit_keys}
@@ -711,6 +716,13 @@ def proxy():
         "n": n,
         "response_format": response_format,  # Add response_format to config
     })
+
+    # Add token limits to request_config with proper priority
+    if max_completion_tokens is not None:
+        request_config['max_completion_tokens'] = max_completion_tokens
+        request_config['max_tokens'] = max_completion_tokens  # For backward compatibility with approaches that read max_tokens
+    elif max_tokens is not None:
+        request_config['max_tokens'] = max_tokens
 
     optillm_approach = data.get('optillm_approach', server_config['approach'])
     logger.debug(data)
