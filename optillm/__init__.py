@@ -1,5 +1,5 @@
 # Version information
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 
 # Import from server module
 from .server import (
