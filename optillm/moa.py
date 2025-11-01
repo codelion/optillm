@@ -40,7 +40,11 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
         completions = [choice.message.content for choice in response.choices if choice.message.content is not None]
         moa_completion_tokens += response.usage.completion_tokens
         logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
-        
+
+        # Check if any valid completions were generated
+        if not completions:
+            raise Exception("No valid completions generated (all were None)")
+
     except Exception as e:
         logger.warning(f"n parameter not supported by provider: {str(e)}")
         logger.info("Falling back to generating 3 completions one by one")
@@ -89,7 +93,12 @@ def mixture_of_agents(system_prompt: str, initial_query: str, client, model: str
             return "Error: Could not generate any completions", 0
         
         logger.info(f"Generated {len(completions)} completions using fallback method. Total tokens used: {moa_completion_tokens}")
-    
+
+    # Double-check we have at least one completion
+    if not completions:
+        logger.error("No completions available for processing")
+        return "Error: Could not generate any completions", moa_completion_tokens
+
     # Handle case where fewer than 3 completions were generated
     if len(completions) < 3:
         original_count = len(completions)

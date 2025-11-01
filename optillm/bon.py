@@ -35,7 +35,11 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
         completions = [choice.message.content for choice in response.choices if choice.message.content is not None]
         logger.info(f"Generated {len(completions)} initial completions using n parameter. Tokens used: {response.usage.completion_tokens}")
         bon_completion_tokens += response.usage.completion_tokens
-        
+
+        # Check if any valid completions were generated
+        if not completions:
+            raise Exception("No valid completions generated (all were None)")
+
     except Exception as e:
         logger.warning(f"n parameter not supported by provider: {str(e)}")
         logger.info(f"Falling back to generating {n} completions one by one")
@@ -77,11 +81,16 @@ def best_of_n_sampling(system_prompt: str, initial_query: str, client, model: st
             return "Error: Could not generate any completions", 0
         
         logger.info(f"Generated {len(completions)} completions using fallback method. Total tokens used: {bon_completion_tokens}")
-    
+
+    # Double-check we have completions before rating
+    if not completions:
+        logger.error("No completions available for rating")
+        return "Error: Could not generate any completions", bon_completion_tokens
+
     # Rate the completions
     rating_messages = messages.copy()
     rating_messages.append({"role": "system", "content": "Rate the following responses on a scale from 0 to 10, where 0 is poor and 10 is excellent. Consider factors such as relevance, coherence, and helpfulness. Respond with only a number."})
-    
+
     ratings = []
     for completion in completions:
         rating_messages.append({"role": "assistant", "content": completion})
